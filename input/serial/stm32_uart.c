@@ -20,13 +20,12 @@ static void serial_capture(Image *img)
     uint32_t i = 0, _blockCount = 0;
 
     uint16_t sizear[3] = {img->width, img->height, img->format};
-    int size = 480 * 270;
 
-    if (size < 65536)
-        _blocksize = size;
+    if (img->size < 65536)
+        _blocksize = img->size;
 
-    _blockCount = size / _blocksize;
-    _lastblocksize = (uint16_t)(size % _blocksize);
+    _blockCount = img->size / _blocksize;
+    _lastblocksize = (uint16_t)(img->size % _blocksize);
 
     HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);
     HAL_Delay(1);
@@ -75,7 +74,6 @@ static void serial_send(const Image *img)
     if (_lastblocksize)
         HAL_UART_Transmit(&huart1, img->pixels_u8 + (i * _blocksize),
                           _lastblocksize, HAL_MAX_DELAY);
-    HAL_Delay(200);
 }
 
 int _write(int file, char *ptr, int len)

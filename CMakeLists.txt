@@ -24,7 +24,8 @@ include_directories(
 # Core image processing
 target_sources(embedDIP PRIVATE
     dip/core/image.c
-    dip/core/common.c
+    dip/core/stm32_common.c
+    dip/core/memory_manager.c
     dip/imgproc/color.c
     dip/imgproc/pixel.c
     dip/imgproc/filter.c

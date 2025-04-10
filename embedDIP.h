@@ -25,10 +25,10 @@ extern "C"
 // Core Modules
 // =============================
 #include "dip.h"
-#include "common.c"
+#include "common.h"
 #include "image.h"
 #include "pixel.h"
-
+#include "color.h"
 // =============================
 // Input Modules
 // =============================

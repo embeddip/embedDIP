@@ -1,7 +1,7 @@
 #include "image.h"
 #include <stdlib.h>
 #include <string.h>
-
+#include <common.h>
 uint32_t allocatedSize = 0;
 
 /**
@@ -17,7 +17,7 @@ Image *createImage(uint8_t size, uint8_t format)
     // Declare a pointer to an Image structure and assign it to a memory address in SDRAM
     // SDRAM_BANK_ADDR and WRITE_READ_ADDR are predefined constants, likely pointing to the starting address of memory
     // allocatedSize keeps track of the current memory offset for storing new data
-    Image *image = SDRAM_BANK_ADDR + 0 + allocatedSize;
+    Image *image = (Image *)memory_alloc(sizeof(Image));
 
     // Update the allocated size to account for the new Image structure
     allocatedSize += sizeof(Image);
@@ -62,7 +62,6 @@ Image *createImage(uint8_t size, uint8_t format)
     }
     }
 
-    printf("%d \n", image->width);
     // Set the image size and format based on the format argument
     switch (format)
     {
@@ -86,7 +85,7 @@ Image *createImage(uint8_t size, uint8_t format)
     }
 
     // Assign the pointer to the pixel data, allocating memory for it after the Image structure
-    image->pixels_u8 = SDRAM_BANK_ADDR + 0 + allocatedSize;
+    image->pixels_u8 = (uint8_t *)memory_alloc(image->size);
 
     // Update allocatedSize to account for the memory needed to store the image pixel data
     allocatedSize += image->size;

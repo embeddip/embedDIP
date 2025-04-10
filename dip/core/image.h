@@ -30,7 +30,6 @@
 /**
  * @brief SDRAM base address.
  */
-#define SDRAM_BANK_ADDR ((uint32_t)0xC0000000)
 
 /**
  * @brief Base address for read/write operations.
