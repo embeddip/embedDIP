@@ -1,6 +1,7 @@
 #include "image.h"
 #include "math.h"
 #include "color.h"
+#include "assert.h"
 
 void cvtColor(const Image *inImg, Image *outImg, int code)
 {
@@ -45,62 +46,87 @@ void cvtColor(const Image *inImg, Image *outImg, int code)
     }
 }
 
-static void rgb565_to_grayscale(const Image *inImg, Image *outImg)
+void rgb888_to_grayscale_inplace(Image *inImg)
 {
-    const uint16_t *inData = (uint16_t *)inImg->pixels_u8;
-    uint8_t *outData = outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_RGB888);
 
-    for (int i = 0; i < inImg->size / 2; ++i)
+    // Create a temporary output image
+    Image *outImg = createImage(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE); 
+
+    const uint8_t *in = (const uint8_t *)inImg->pixels;
+    uint8_t *out = (uint8_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
-        uint16_t pixel = inData[i];
-        uint8_t r = ((pixel >> 11) & 0x1F) << 3;
-        uint8_t g = ((pixel >> 5) & 0x3F) << 2;
-        uint8_t b = (pixel & 0x1F) << 3;
-        outData[i] = (uint8_t)((r * 0.299f) + (g * 0.587f) + (b * 0.114f));
+        uint8_t r = in[i * 3];
+        uint8_t g = in[i * 3 + 1];
+        uint8_t b = in[i * 3 + 2];
+        out[i] = (uint8_t)(0.299f * r + 0.587f * g + 0.114f * b);
     }
+
+    // Update inImg metadata to reflect the grayscale image
+    inImg->depth = IMAGE_DEPTH_U8;
+    inImg->format = IMAGE_FORMAT_GRAYSCALE;
+    // inImg->size remains unchanged
 }
 
-static void rgb_to_yuv(const Image *inImg, Image *outImg)
+void rgb888_to_yuv(const Image *inImg, Image *outImg)
 {
-    const uint8_t *inData = inImg->pixels_u8;
-    uint8_t *outData = outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_RGB888);
+    assert(outImg->depth == IMAGE_DEPTH_U8);
+    assert(outImg->format == IMAGE_FORMAT_YUV);
 
-    for (int i = 0; i < inImg->size * 3; i += 3)
+    const uint8_t *in = (const uint8_t *)inImg->pixels;
+    uint8_t *out = (uint8_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
-        uint8_t r = inData[i];
-        uint8_t g = inData[i + 1];
-        uint8_t b = inData[i + 2];
+        uint8_t r = in[i * 3];
+        uint8_t g = in[i * 3 + 1];
+        uint8_t b = in[i * 3 + 2];
 
         uint8_t y = (uint8_t)(0.299 * r + 0.587 * g + 0.114 * b);
         uint8_t u = (uint8_t)(-0.14713 * r - 0.28886 * g + 0.436 * b + 128);
         uint8_t v = (uint8_t)(0.615 * r - 0.51499 * g - 0.10001 * b + 128);
 
-        outData[i] = y;
-        outData[i + 1] = u;
-        outData[i + 2] = v;
+        out[i * 3] = y;
+        out[i * 3 + 1] = u;
+        out[i * 3 + 2] = v;
     }
 }
 
-static void grayscale_to_rgb(const Image *inImg, Image *outImg)
+void grayscale_to_rgb(const Image *inImg, Image *outImg)
 {
-    const uint8_t *inData = inImg->pixels_u8;
-    uint8_t *outData = outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_GRAYSCALE);
+    assert(outImg->depth == IMAGE_DEPTH_U8);
+    assert(outImg->format == IMAGE_FORMAT_RGB888);
 
-    for (int i = 0; i < inImg->size; ++i)
+    const uint8_t *in = (const uint8_t *)inImg->pixels;
+    uint8_t *out = (uint8_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
-        uint8_t gray = inData[i];
-        outData[i * 3] = gray;
-        outData[i * 3 + 1] = gray;
-        outData[i * 3 + 2] = gray;
+        uint8_t gray = in[i];
+        out[i * 3] = gray;
+        out[i * 3 + 1] = gray;
+        out[i * 3 + 2] = gray;
     }
 }
 
-static void rgb888_to_rgb565(const Image *inImg, Image *outImg)
+void rgb888_to_rgb565(const Image *inImg, Image *outImg)
 {
-    const uint8_t *in = inImg->pixels_u8;
-    uint16_t *out = (uint16_t *)outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_RGB888);
+    assert(outImg->depth == IMAGE_DEPTH_U8);
+    assert(outImg->format == IMAGE_FORMAT_RGB565);
 
-    for (int i = 0; i < inImg->size; ++i)
+    const uint8_t *in = (const uint8_t *)inImg->pixels;
+    uint16_t *out = (uint16_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
         uint8_t r = in[i * 3];
         uint8_t g = in[i * 3 + 1];
@@ -109,47 +135,17 @@ static void rgb888_to_rgb565(const Image *inImg, Image *outImg)
     }
 }
 
-static void rgb_to_grayscale(const Image *inImg, Image *outImg)
+void yuv_to_rgb888(const Image *inImg, Image *outImg)
 {
-    const uint8_t *in = inImg->pixels_u8;
-    uint8_t *out = outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_YUV);
+    assert(outImg->depth == IMAGE_DEPTH_U8);
+    assert(outImg->format == IMAGE_FORMAT_RGB888);
 
-    for (int i = 0; i < inImg->size; ++i)
-    {
-        uint8_t r = in[i * 3];
-        uint8_t g = in[i * 3 + 1];
-        uint8_t b = in[i * 3 + 2];
-        out[i] = (uint8_t)(0.299f * r + 0.587f * g + 0.114f * b);
-    }
-}
+    const uint8_t *in = (const uint8_t *)inImg->pixels;
+    uint8_t *out = (uint8_t *)outImg->pixels;
 
-static void rgb888_to_yuv(const Image *inImg, Image *outImg)
-{
-    const uint8_t *in = inImg->pixels_u8;
-    uint8_t *out = outImg->pixels_u8;
-
-    for (int i = 0; i < inImg->size; ++i)
-    {
-        uint8_t r = in[i * 3];
-        uint8_t g = in[i * 3 + 1];
-        uint8_t b = in[i * 3 + 2];
-
-        uint8_t y = (uint8_t)(0.299 * r + 0.587 * g + 0.114 * b);
-        uint8_t u = (uint8_t)(-0.169 * r - 0.331 * g + 0.5 * b + 128);
-        uint8_t v = (uint8_t)(0.5 * r - 0.419 * g - 0.081 * b + 128);
-
-        out[i * 3] = y;
-        out[i * 3 + 1] = u;
-        out[i * 3 + 2] = v;
-    }
-}
-
-static void yuv_to_rgb888(const Image *inImg, Image *outImg)
-{
-    const uint8_t *in = inImg->pixels_u8;
-    uint8_t *out = outImg->pixels_u8;
-
-    for (int i = 0; i < inImg->size; ++i)
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
         int y = in[i * 3];
         int u = in[i * 3 + 1] - 128;
@@ -165,12 +161,17 @@ static void yuv_to_rgb888(const Image *inImg, Image *outImg)
     }
 }
 
-static void rgb_to_hsv(const Image *inImg, Image *outImg)
+void rgb888_to_hsv(const Image *inImg, Image *outImg)
 {
-    const uint8_t *in = inImg->pixels_u8;
-    uint8_t *out = outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_RGB888);
+    assert(outImg->depth == IMAGE_DEPTH_U8);
+    assert(outImg->format == IMAGE_FORMAT_HSV);
 
-    for (int i = 0; i < inImg->size; ++i)
+    const uint8_t *in = (const uint8_t *)inImg->pixels;
+    uint8_t *out = (uint8_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
         float r = in[i * 3] / 255.0f;
         float g = in[i * 3 + 1] / 255.0f;
@@ -201,12 +202,17 @@ static void rgb_to_hsv(const Image *inImg, Image *outImg)
     }
 }
 
-static void hsv_to_rgb(const Image *inImg, Image *outImg)
+void hsv_to_rgb888(const Image *inImg, Image *outImg)
 {
-    const uint8_t *in = inImg->pixels_u8;
-    uint8_t *out = outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_HSV);
+    assert(outImg->depth == IMAGE_DEPTH_U8);
+    assert(outImg->format == IMAGE_FORMAT_RGB888);
 
-    for (int i = 0; i < inImg->size; ++i)
+    const uint8_t *in = (const uint8_t *)inImg->pixels;
+    uint8_t *out = (uint8_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
         float h = in[i * 3] / 255.0f * 360.0f;
         float s = in[i * 3 + 1] / 255.0f;
@@ -260,12 +266,17 @@ static void hsv_to_rgb(const Image *inImg, Image *outImg)
     }
 }
 
-static void rgb565_to_hsv(const Image *inImg, Image *outImg)
+void rgb565_to_hsv(const Image *inImg, Image *outImg)
 {
-    const uint16_t *in = (uint16_t *)inImg->pixels_u8;
-    uint8_t *out = outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_RGB565);
+    assert(outImg->depth == IMAGE_DEPTH_U8);
+    assert(outImg->format == IMAGE_FORMAT_HSV);
 
-    for (int i = 0; i < inImg->size; ++i)
+    const uint16_t *in = (const uint16_t *)inImg->pixels;
+    uint8_t *out = (uint8_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
         uint8_t r, g, b;
         RGB565_TO_RGB888(in[i], r, g, b);
@@ -293,18 +304,23 @@ static void rgb565_to_hsv(const Image *inImg, Image *outImg)
             h += 360.0f;
         s = (max == 0) ? 0 : (delta / max);
 
-        out[i * 3] = (uint8_t)(h / 360.0f * 255.0f); // H
-        out[i * 3 + 1] = (uint8_t)(s * 255.0f);      // S
-        out[i * 3 + 2] = (uint8_t)(v * 255.0f);      // V
+        out[i * 3] = (uint8_t)(h / 360.0f * 255.0f);
+        out[i * 3 + 1] = (uint8_t)(s * 255.0f);
+        out[i * 3 + 2] = (uint8_t)(v * 255.0f);
     }
 }
 
-static void hsv_to_rgb565(const Image *inImg, Image *outImg)
+void hsv_to_rgb565(const Image *inImg, Image *outImg)
 {
-    const uint8_t *in = inImg->pixels_u8;
-    uint16_t *out = (uint16_t *)outImg->pixels_u8;
+    assert(inImg->depth == IMAGE_DEPTH_U8);
+    assert(inImg->format == IMAGE_FORMAT_HSV);
+    assert(outImg->depth == IMAGE_DEPTH_U8);
+    assert(outImg->format == IMAGE_FORMAT_RGB565);
 
-    for (int i = 0; i < inImg->size; ++i)
+    const uint8_t *in = (const uint8_t *)inImg->pixels;
+    uint16_t *out = (uint16_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
         float h = in[i * 3] / 255.0f * 360.0f;
         float s = in[i * 3 + 1] / 255.0f;

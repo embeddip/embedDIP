@@ -16,10 +16,10 @@ extern "C"
         SINGLE = 1
     } capture_mode_t;
 
-#define CAMERA_R160x120 0x00 /* QQVGA Resolution                     */
-#define CAMERA_R320x240 0x01 /* QVGA Resolution                      */
-#define CAMERA_R480x272 0x02 /* 480x272 Resolution                   */
-#define CAMERA_R640x480 0x03 /* VGA Resolution                       */
+#define CAMERA_R160x120 IMAGE_RES_QQVGA /* QQVGA Resolution                     */
+#define CAMERA_R320x240 IMAGE_RES_QVGA  /* QVGA Resolution                      */
+#define CAMERA_R480x272 IMAGE_RES_WQVGA /* 480x272 Resolution                   */
+#define CAMERA_R640x480 IMAGE_RES_VGA   /* VGA Resolution                       */
 
 #define CAMERA_CONTRAST_BRIGHTNESS 0x00 /* Camera contrast brightness features  */
 #define CAMERA_BLACK_WHITE 0x01         /* Camera black white feature           */
@@ -50,9 +50,10 @@ extern "C"
 
     typedef struct camera_interface
     {
-        int (*init)(void);
+        int (*init)(image_resolution_t resolution);
         int (*capture)(capture_mode_t mode, Image *inImg);
         int (*stop)(void);
+        int (*setRes)(image_resolution_t resolution);
     } camera_t;
 
     // External declaration of STM32 implementation

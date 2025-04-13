@@ -1,5 +1,5 @@
-#ifndef DIP_H
-#define DIP_H
+#ifndef COMMON_H
+#define COMMON_H
 
 #include "image.h"
 
@@ -8,10 +8,10 @@ extern "C"
 {
 #endif
 
-    Image *createImage(uint8_t size, uint8_t format);
+    Image *createImage(image_resolution_t resolution, ImageFormat format);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // DIP_H
+#endif // COMMON_H

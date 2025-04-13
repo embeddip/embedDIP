@@ -15,7 +15,6 @@ extern LTDC_HandleTypeDef hltdc;
 
 static void display_init(void)
 {
-    __HAL_DCMI_DISABLE_IT(&hdcmi, DCMI_IT_LINE | DCMI_IT_VSYNC);
     HAL_LTDC_SetAddress(&hltdc, FRAME_BUFFER + 0x100000,
                         LTDC_LAYER_1);
     HAL_LTDC_Reload(&hltdc, LTDC_RELOAD_IMMEDIATE);
@@ -52,6 +51,11 @@ static void display_show(Image *inImg)
 
     switch (inImg->format)
     {
+    case IMAGE_FORMAT_RGB888:
+    {
+        HAL_LTDC_SetPixelFormat(&hltdc, LTDC_PIXEL_FORMAT_RGB888, LTDC_LAYER_1);
+        break;
+    }
     case IMAGE_FORMAT_RGB565:
     {
         HAL_LTDC_SetPixelFormat(&hltdc, LTDC_PIXEL_FORMAT_RGB565, LTDC_LAYER_1);
@@ -69,7 +73,7 @@ static void display_show(Image *inImg)
     }
     }
 
-    HAL_LTDC_SetAddress(&hltdc, inImg->pixels_u8,
+    HAL_LTDC_SetAddress(&hltdc, inImg->pixels,
                         LTDC_LAYER_1);
     HAL_LTDC_Reload(&hltdc, LTDC_RELOAD_IMMEDIATE);
 }

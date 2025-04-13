@@ -31,11 +31,11 @@ target_sources(embedDIP PRIVATE
     dip/imgproc/filter.c
     dip/imgproc/histogram.c
     input/serial/stm32_uart.c
-    hdl/ov5640/font8.c
-    hdl/ov5640/font12.c
-    hdl/ov5640/font16.c
-    hdl/ov5640/font20.c
-    hdl/ov5640/font24.c
+    output/display//font8.c
+    output/display//font12.c
+    output/display//font16.c
+    output/display//font20.c
+    output/display//font24.c
     hdl/ov5640/ov5640.c
     input/camera/stm32_ov5640.c
     input/camera/stm32746g_discovery.c
