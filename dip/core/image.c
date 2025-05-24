@@ -3,6 +3,183 @@
 #include <assert.h>
 #include "image.h" // Your Image and channels_t definitions
 
+/**
+ * @brief Resizes a single-channel image to a square output using nearest-neighbor interpolation.
+ *
+ * @param[in]  inImg        Pointer to the input image.
+ * @param[out] outImg       Pointer to the output image. It must already be allocated to (fourier_size × fourier_size).
+ * @param[in]  size Desired width and height of the output image.
+ */
+void resize(Image *inImg, Image *outImg, int size)
+{
+
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, outImg->depth);
+        outImg->is_chals = 1;
+    }
+
+    float width_ratio = (float)inImg->width / size;
+    float height_ratio = (float)inImg->height / size;
+
+    // Clear output buffer to white (0xFF)
+    for (int y = 0; y < outImg->width * outImg->height; y++)
+        ((float *)outImg->chals->ch[0])[y] = 255.0f;
+
+    // Resize using nearest neighbor
+    for (int y = 0; y < size; y++)
+    {
+        for (int x = 0; x < size; x++)
+        {
+            int nearest_x = (int)(x * width_ratio);
+            int nearest_y = (int)(y * height_ratio);
+
+            if (nearest_x >= inImg->width)
+                nearest_x = inImg->width - 1;
+            if (nearest_y >= inImg->height)
+                nearest_y = inImg->height - 1;
+
+            outImg->chals->ch[0][y * size + x] =
+                (float)((uint8_t *)inImg->pixels)[nearest_y * inImg->width + nearest_x];
+        }
+    }
+
+    outImg->width = size;
+    outImg->height = size;
+}
+
+/**
+ * @brief Performs pixel-wise addition of two float-valued grayscale images.
+ *
+ * This function adds the corresponding float values from `img1` and `img2`, and stores
+ * the result in `outImg->chals->ch[0][i]`.
+ *
+ * Assumes all images have the same resolution and float output channel allocated.
+ *
+ * @param[in]  img1   Pointer to the first image (float channel expected).
+ * @param[in]  img2   Pointer to the second image (float channel expected).
+ * @param[out] outImg Pointer to the output image (float channel).
+ */
+void add(const Image *img1, const Image *img2, Image *outImg)
+{
+
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, outImg->depth);
+        outImg->is_chals = 1;
+    }
+
+    if (isChalsEmpty(img1) && isChalsEmpty(img2))
+    {
+        int totalPixels = img1->width * img1->height;
+
+        uint8_t *data1 = img1->chals->ch[0];
+        uint8_t *data2 = img2->chals->ch[0];
+        float *outData = outImg->chals->ch[0];
+
+        for (int i = 0; i < totalPixels; ++i)
+        {
+            outData[i] = data1[i] + data2[i];
+        }
+    }
+    else if (isChalsEmpty(img1) && !isChalsEmpty(img2))
+    {
+        int totalPixels = img1->width * img1->height;
+
+        uint8_t *data1 = img1->chals->ch[0];
+        float *data2 = img2->chals->ch[0];
+        float *outData = outImg->chals->ch[0];
+
+        for (int i = 0; i < totalPixels; ++i)
+        {
+            outData[i] = data1[i] + data2[i];
+        }
+    }
+    else if (!isChalsEmpty(img1) && isChalsEmpty(img2))
+    {
+        int totalPixels = img1->width * img1->height;
+
+        float *data1 = img1->chals->ch[0];
+        uint8_t *data2 = img2->chals->ch[0];
+        float *outData = outImg->chals->ch[0];
+
+        for (int i = 0; i < totalPixels; ++i)
+        {
+            outData[i] = data1[i] + data2[i];
+        }
+    }
+    else
+    {
+        int totalPixels = img1->width * img1->height;
+
+        float *data1 = img1->chals->ch[0];
+        float *data2 = img2->chals->ch[0];
+        float *outData = outImg->chals->ch[0];
+
+        for (int i = 0; i < totalPixels; ++i)
+        {
+            outData[i] = data1[i] + data2[i];
+        }
+    }
+}
+
+void dist(const Image *inImg, Image *outImg, uint8_t R_ref, uint8_t G_ref, uint8_t B_ref)
+/**
+ * @brief Computes the color distance of each pixel in an RGB
+ * image to a given reference color.
+ *
+ * @param[in] inImg Pointer to the input RGB image (3 channels, interleaved as RGBRGB...).
+ * @param[out] outImg Pointer to the output grayscale image (1 channel, same width and height as input).
+ * @param[in] R_ref Reference Red channel value (0–255).
+ * @param[in] G_ref Reference Green channel value (0–255).
+ * @param[in] B_ref Reference Blue channel value (0–255).
+ */
+{
+    int totalPixels = inImg->width * inImg->height;
+
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, outImg->depth);
+        outImg->is_chals = 1;
+    }
+
+    if (isChalsEmpty(inImg))
+    {
+        // Raw byte access
+        uint8_t *inData = (uint8_t *)inImg->pixels;
+
+        for (int i = 0; i < totalPixels; ++i)
+        {
+            int idx = i * 3;
+            uint8_t R = inData[idx];
+            uint8_t G = inData[idx + 1];
+            uint8_t B = inData[idx + 2];
+
+            float d = sqrtf((R - R_ref) * (R - R_ref) +
+                            (G - G_ref) * (G - G_ref) +
+                            (B - B_ref) * (B - B_ref));
+
+            outImg->chals->ch[0][i] = d;
+        }
+    }
+    else
+    {
+        // Channel access (float-based)
+        float *R_ch = inImg->chals->ch[0];
+        float *G_ch = inImg->chals->ch[1];
+        float *B_ch = inImg->chals->ch[2];
+
+        for (int i = 0; i < totalPixels; ++i)
+        {
+            float d = sqrtf((R_ch[i] - R_ref) * (R_ch[i] - R_ref) +
+                            (G_ch[i] - G_ref) * (G_ch[i] - G_ref) +
+                            (B_ch[i] - B_ref) * (B_ch[i] - B_ref));
+
+            outImg->chals->ch[0][i] = d;
+        }
+    }
+}
+
 static inline uint8_t normalize_to_u8(float val, float min, float max)
 {
     if (max - min < 1e-5f) // avoid divide by zero
@@ -14,10 +191,26 @@ static inline uint8_t normalize_to_u8(float val, float min, float max)
         norm = 1.0f;
     return (uint8_t)(norm * 255.0f);
 }
+void normalize(Image *inImg)
+{
+    float *data = (float *)inImg->chals->ch[0];
 
+    float min = FLT_MAX, max = -FLT_MAX;
+    for (int i = 0; i < inImg->size; i++)
+    {
+        float v = inImg->chals->ch[0][i];
+        if (v < min)
+            min = v;
+        if (v > max)
+            max = v;
+    }
+    for (int i = 0; i < inImg->size; i++)
+    {
+        data[i] = normalize_to_u8(inImg->chals->ch[0][i], min, max);
+    }
+}
 void convertTo(Image *inImg)
 {
-    assert(inImg && inImg->pixels && inImg->chals && inImg->is_chals);
 
     uint8_t *data = (uint8_t *)inImg->pixels;
 
@@ -25,6 +218,7 @@ void convertTo(Image *inImg)
     {
     case IMAGE_FORMAT_GRAYSCALE:
     {
+        /*
         float min = FLT_MAX, max = -FLT_MAX;
         for (int i = 0; i < inImg->size; i++)
         {
@@ -36,7 +230,12 @@ void convertTo(Image *inImg)
         }
         for (int i = 0; i < inImg->size; i++)
         {
-            data[i] = normalize_to_u8(inImg->chals->ch[0][i], min, max);
+            data[i] = normalize_to_u8(inImg->chals->ch[0][i]
+        }*/
+
+        for (int i = 0; i < inImg->size; i++)
+        {
+            data[i] = (uint8_t)(inImg->chals->ch[0][i] > 255.0 ? 255.0 : (inImg->chals->ch[0][i] < 0.0 ? 0 : inImg->chals->ch[0][i]));
         }
         break;
     }

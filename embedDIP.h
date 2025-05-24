@@ -30,6 +30,8 @@ extern "C"
 #include "pixel.h"
 #include "filter.h"
 #include "color.h"
+#include "histogram.h"
+#include "fft.h"
 // =============================
 // Input Modules
 // =============================

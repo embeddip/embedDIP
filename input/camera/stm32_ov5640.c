@@ -116,7 +116,7 @@ static void test_ConvertLineRGB565ToARGB8888()
     }
 }
 
-static void camera_init(image_resolution_t resolution)
+static void camera_init(ImageResolution resolution)
 {
 
 #define IMAGE_RES_QQVGA 0
@@ -125,7 +125,7 @@ static void camera_init(image_resolution_t resolution)
 #define IMAGE_RES_VGA 3
 
     CAMERA_PwrDown();
-    hal_status = BSP_SDRAM_Init();
+    // hal_status = BSP_SDRAM_Init();
 
     CAMERA_PwrUp();
     HAL_Delay(1000);
@@ -151,7 +151,7 @@ static void camera_init(image_resolution_t resolution)
     __HAL_DCMI_DISABLE_IT(&hdcmi, DCMI_IT_LINE | DCMI_IT_VSYNC);
 }
 
-static void camera_capture(capture_mode_t mode, Image *inImg)
+static void camera_capture(captureMode mode, Image *inImg)
 {
 
     CAMERA_PwrDown();
@@ -160,20 +160,16 @@ static void camera_capture(capture_mode_t mode, Image *inImg)
     switch (inImg->format)
     {
     case IMAGE_FORMAT_GRAYSCALE:
-        // Give Error
-        while (1)
-        {
-            ;
-        }
+        break;
     case IMAGE_FORMAT_RGB565:
         break;
     default:
         break;
     }
 
-    //TODO
-    
-    HAL_DCMI_Start_DMA(&hdcmi, mode == CONTINUOUS ? DCMI_MODE_CONTINUOUS : DCMI_MODE_SNAPSHOT, (uint32_t)inImg->pixels, inImg->size / 4);
+    // TODO
+
+    HAL_DCMI_Start_DMA(&hdcmi, mode == CONTINUOUS ? DCMI_MODE_CONTINUOUS : DCMI_MODE_SNAPSHOT, (uint32_t)inImg->pixels, inImg->size / 2);
 }
 
 static void camera_stop(void)
@@ -181,7 +177,35 @@ static void camera_stop(void)
     HAL_DCMI_Stop(&hdcmi);
 }
 
+static void camera_setRes(ImageResolution resolution)
+{
+
+    CAMERA_PwrDown();
+    CAMERA_PwrUp();
+
+    uint8_t status = CAMERA_ERROR;
+    /* Read ID of Camera module via I2C */
+    if (ov5640_ReadID(CAMERA_I2C_ADDRESS) == OV5640_ID)
+    {
+        camera_driv = &ov5640_drv;
+        /* Initialize the camera driver structure */
+        camera_driv->Init(CAMERA_I2C_ADDRESS, resolution);
+        HAL_DCMI_DisableCROP(&hdcmi);
+        HAL_Delay(500);
+
+        status = CAMERA_OK; /* Return CAMERA_OK status */
+    }
+    else
+    {
+        status = CAMERA_NOT_SUPPORTED; /* Return CAMERA_NOT_SUPPORTED status */
+    }
+
+    HAL_Delay(1000); // Delay for the camera to output correct data
+    __HAL_DCMI_DISABLE_IT(&hdcmi, DCMI_IT_LINE | DCMI_IT_VSYNC);
+}
+
 camera_t stm32_ov5640 = {
     .init = camera_init,
     .capture = camera_capture,
-    .stop = camera_stop};
+    .stop = camera_stop,
+    .setRes = camera_setRes};

@@ -14,7 +14,7 @@ extern "C"
     {
         CONTINUOUS = 0,
         SINGLE = 1
-    } capture_mode_t;
+    } captureMode;
 
 #define CAMERA_R160x120 IMAGE_RES_QQVGA /* QQVGA Resolution                     */
 #define CAMERA_R320x240 IMAGE_RES_QVGA  /* QVGA Resolution                      */
@@ -50,10 +50,10 @@ extern "C"
 
     typedef struct camera_interface
     {
-        int (*init)(image_resolution_t resolution);
-        int (*capture)(capture_mode_t mode, Image *inImg);
+        int (*init)(ImageResolution resolution);
+        int (*capture)(captureMode mode, Image *inImg);
         int (*stop)(void);
-        int (*setRes)(image_resolution_t resolution);
+        int (*setRes)(ImageResolution resolution);
     } camera_t;
 
     // External declaration of STM32 implementation

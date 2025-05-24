@@ -3,46 +3,66 @@
 #include "color.h"
 #include "assert.h"
 
-void cvtColor(const Image *inImg, Image *outImg, int code)
+void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 {
     switch (code)
     {
-    case CVT_RGB5652GRAY:
-        rgb565_to_grayscale(inImg, outImg);
+    case CVT_RGB565_TO_GRAY:
+        //rgb565_to_grayscale(inImg, outImg);
         break;
-    case CVT_RGB2YUV:
-        rgb_to_yuv(inImg, outImg);
+    case CVT_RGB_TO_YUV:
+        //rgb_to_yuv(inImg, outImg);
         break;
-    case CVT_RGB2HSV:
-        rgb_to_hsv(inImg, outImg);
+    case CVT_RGB_TO_HSV:
+        //rgb_to_hsv(inImg, outImg);
         break;
-    case CVT_GRAY2RGB:
-        grayscale_to_rgb(inImg, outImg);
+    case CVT_GRAY_TO_RGB:
+        //grayscale_to_rgb(inImg, outImg);
         break;
-    case CVT_RGB2GRAY:
-        rgb_to_grayscale(inImg, outImg);
+    case CVT_RGB_TO_GRAY:
+        //rgb_to_grayscale(inImg, outImg);
         break;
-    case CVT_RGB2RGB565:
-        rgb888_to_rgb565(inImg, outImg);
+    case CVT_RGB_TO_RGB565:
+        //rgb888_to_rgb565(inImg, outImg);
         break;
-    case CVT_RGB5652HSV:
-        rgb565_to_hsv(inImg, outImg);
+    case CVT_RGB565_TO_HSV:
+        //rgb565_to_hsv(inImg, outImg);
         break;
-    case CVT_HSV2RGB:
-        hsv_to_rgb(inImg, outImg);
+    case CVT_HSV_TO_RGB:
+        //hsv_to_rgb(inImg, outImg);
         break;
-    case CVT_HSV2RGB565:
-        hsv_to_rgb565(inImg, outImg);
+    case CVT_HSV_TO_RGB565:
+        //hsv_to_rgb565(inImg, outImg);
         break;
-    case CVT_RGB2YUV_ALT:
-        rgb888_to_yuv(inImg, outImg);
+    case CVT_RGB_TO_YUV_ALT:
+        //rgb888_to_yuv(inImg, outImg);
         break;
-    case CVT_YUV2RGB:
-        yuv_to_rgb888(inImg, outImg);
+    case CVT_YUV_TO_RGB:
+        //yuv_to_rgb888(inImg, outImg);
+        break;
+    case CVT_RGB565_TO_RGB:
+        convert_rgb565_to_rgb888(inImg, outImg);
         break;
     default:
         // Unsupported conversion
         break;
+    }
+}
+
+void convert_rgb565_to_rgb888(Image *inImg, Image *outImg)
+{
+
+    const uint8_t *in_rgb565 = (const uint8_t *)inImg->pixels;
+    uint8_t *out_rgb888 = (uint8_t *)outImg->pixels;
+
+    for (uint32_t i = 0; i < inImg->size; i++)
+    {
+        uint16_t pixel = ((uint16_t *)in_rgb565)[i];
+
+        // Avoid << 3 where possible, extend bits via duplication
+        out_rgb888[i * 3 + 0] = ((pixel >> 8) & 0xF8) | ((pixel >> 13) & 0x07); // R
+        out_rgb888[i * 3 + 1] = ((pixel >> 3) & 0xFC) | ((pixel >> 9) & 0x03);  // G
+        out_rgb888[i * 3 + 2] = ((pixel << 3) & 0xF8) | ((pixel >> 2) & 0x07);  // B
     }
 }
 
@@ -52,7 +72,7 @@ void rgb888_to_grayscale_inplace(Image *inImg)
     assert(inImg->format == IMAGE_FORMAT_RGB888);
 
     // Create a temporary output image
-    Image *outImg = createImage(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE); 
+    Image *outImg = createImage(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;

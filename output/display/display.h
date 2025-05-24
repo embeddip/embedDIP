@@ -36,7 +36,7 @@ extern "C"
         DISPLAY_COLOR_LIME = 0x07E0,       // R=0,   G=63,  B=0
         DISPLAY_COLOR_MAROON = 0x8000,     // R=16,  G=0,   B=0
         DISPLAY_COLOR_OLIVE = 0x8400,      // R=16,  G=32,  B=0
-    } display_rgb565_color_t;
+    } displayColor;
 
     /**
      * @brief Standard color formats for display pixel buffers.
@@ -108,37 +108,16 @@ extern "C"
 
     typedef struct display_interface
     {
-        /**
-         * @brief Initialize the display hardware and internal state.
-         */
         void (*init)(void);
-
-        /**
-         * @brief Deinitialize the display and release resources.
-         */
         void (*deinit)(void);
-
-        /**
-         * @brief Reset the display (hardware or software).
-         */
         void (*reset)(void);
-
-        /**
-         * @brief Clear the entire display to a solid color.
-         * @param color RGB565 format.
-         */
-        void (*clear)(display_rgb565_color_t color);
-
-        /**
-         * @brief Draw a full image on the screen.
-         * @param image Pointer to image structure.
-         */
+        void (*clear)(displayColor color);
         void (*show)(const Image *image);
 
     } display_t;
 
     // External declaration of STM32 implementation
-    extern display_t stm32_rk043fn48h;
+    extern display_t stm32_ota5180a;
 
 #ifdef __cplusplus
 }

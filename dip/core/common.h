@@ -8,7 +8,11 @@ extern "C"
 {
 #endif
 
-    Image *createImage(image_resolution_t resolution, ImageFormat format);
+    Image *createImage(ImageResolution resolution, ImageFormat format);
+
+    bool isChalsEmpty(const Image *inImg);
+
+    void createChals(Image *inImg, uint8_t numChals);
 
 #ifdef __cplusplus
 }

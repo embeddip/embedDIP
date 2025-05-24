@@ -366,9 +366,9 @@ const uint16_t OV5640_480x272[][2] =
         {0x3809, 0xE0},
         {0x380a, 0x01},
         {0x380b, 0x10},
-        {0x4300, 0x6F},
+        {0x4300, 0x10},
         {0x4740, 0x22},
-        {0x501f, 0x01},
+        {0x501f, 0x00},
 };
 
 const uint16_t OV5640_QVGA[][2] =
@@ -875,7 +875,7 @@ void OV5640_SetContrast(uint16_t DeviceAddr, uint8_t Level)
  */
 void OV5640_SetPixelFormat(uint16_t DeviceAddr, uint8_t Level)
 {
-  //TODO
+  // TODO
 }
 
 /**

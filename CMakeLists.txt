@@ -1,5 +1,19 @@
 add_library(embedDIP)
 
+target_compile_definitions(embedDIP PUBLIC
+    USE_EMBED_DIP
+    ARM_MATH_CM7
+    __FPU_PRESENT=1
+)
+
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/STM32F7xx_HAL_Driver/Inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Device/ST/STM32F7xx/Include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Core/Inc
+)
+
 # Include paths
 target_include_directories(embedDIP PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/
@@ -14,13 +28,6 @@ target_include_directories(embedDIP PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/hdl/stm32f7g46
 )
 
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/STM32F7xx_HAL_Driver/Inc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Device/ST/STM32F7xx/Include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Core/Inc
-)
-
 # Core image processing
 target_sources(embedDIP PRIVATE
     dip/core/image.c
@@ -30,6 +37,7 @@ target_sources(embedDIP PRIVATE
     dip/imgproc/pixel.c
     dip/imgproc/filter.c
     dip/imgproc/histogram.c
+    dip/imgproc/fft.c
     input/serial/stm32_uart.c
     output/display//font8.c
     output/display//font12.c
@@ -44,4 +52,17 @@ target_sources(embedDIP PRIVATE
     output/display/stm32_rk043fn48h.c
 )
 
+# Add CMSIS-DSP source files
+file(GLOB_RECURSE CMSIS_DSP_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Source/*.c
+)
+
+file(GLOB_RECURSE CMSIS_DSP_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Source/**/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Source/**/*.S
+)
+
+
+target_sources(embedDIP PRIVATE ${CMSIS_DSP_SRCS})
+ 
 target_compile_definitions(embedDIP PUBLIC USE_EMBED_DIP)

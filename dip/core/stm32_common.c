@@ -4,8 +4,6 @@
 #include <common.h>
 #include <memory_manager.h>
 
-uint32_t allocatedSize = 0;
-
 /**
  * @brief Creates an image with a specified size and format.
  *
@@ -13,16 +11,13 @@ uint32_t allocatedSize = 0;
  * @param format Format of the image (e.g., grayscale, RGB).
  * @return Pointer to the created Image.
  */
-Image *createImage(image_resolution_t resolution, ImageFormat format)
+Image *createImage(ImageResolution resolution, ImageFormat format)
 {
 
     // Declare a pointer to an Image structure and assign it to a memory address in SDRAM
     // SDRAM_BANK_ADDR and WRITE_READ_ADDR are predefined constants, likely pointing to the starting address of memory
     // allocatedSize keeps track of the current memory offset for storing new data
     Image *image = (Image *)memory_alloc(sizeof(Image));
-
-    // Update the allocated size to account for the new Image structure
-    allocatedSize += sizeof(Image);
 
     // Check if the image pointer is NULL, which would mean memory allocation failed
     if (image == NULL)
@@ -61,10 +56,47 @@ Image *createImage(image_resolution_t resolution, ImageFormat format)
     image->pixels = (uint8_t *)memory_alloc(image->height * image->width * BYTES_PER_PIXEL);
     image->is_chals = 0x00;
     image->chals = NULL;
-    image->chals->ch[0] = NULL;
-    image->chals->ch[1] = NULL;
-    image->chals->ch[2] = NULL;
-    image->chals->ch[3] = NULL;
     // Return the pointer to the newly created Image structure
     return image;
+}
+
+void deleteImage(Image *image)
+{
+    if (!image)
+        return;
+
+    if (image->pixels)
+    {
+        memory_free(image->pixels);
+    }
+
+    if (image->is_chals && image->chals)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            if (image->chals->ch[i])
+            {
+                memory_free(image->chals->ch[i]);
+            }
+        }
+        memory_free(image->chals);
+    }
+
+    memory_free(image);
+}
+
+bool isChalsEmpty(const Image *inImg)
+{
+    return !(inImg->is_chals);
+}
+void createChals(Image *inImg, uint8_t numChals)
+{
+    if (inImg->chals == NULL)
+    {
+        inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+    }
+    for (int i = 0; i < numChals; i++)
+    {
+        inImg->chals->ch[i] = (float *)memory_alloc(inImg->height * inImg->width * 4);
+    }
 }

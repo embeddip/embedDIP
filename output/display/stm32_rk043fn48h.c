@@ -22,7 +22,7 @@ static void display_init(void)
 
 static void display_deinit(void)
 {
-    HAL_LTDC_DeInit(&hdcmi);
+    HAL_LTDC_DeInit(&hltdc);
 }
 
 static void display_reset(void)
@@ -34,7 +34,7 @@ static void display_reset(void)
 #define LCD_WIDTH 480
 #define LCD_HEIGHT 272
 
-static void display_clear(display_rgb565_color_t color)
+static void display_clear(displayColor color)
 {
     for (uint32_t i = 0; i < (LCD_WIDTH * LCD_HEIGHT); i++)
     {
@@ -73,12 +73,13 @@ static void display_show(Image *inImg)
     }
     }
 
+    HAL_LTDC_SetWindowSize(&hltdc, inImg->width, inImg->height, LTDC_LAYER_1);
     HAL_LTDC_SetAddress(&hltdc, inImg->pixels,
                         LTDC_LAYER_1);
     HAL_LTDC_Reload(&hltdc, LTDC_RELOAD_IMMEDIATE);
 }
 
-display_t stm32_rk043fn48h = {
+display_t stm32_ota5180a = {
     .init = display_init,
     .show = display_show,
     .clear = display_clear,

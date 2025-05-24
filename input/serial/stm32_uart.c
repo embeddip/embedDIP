@@ -12,101 +12,111 @@ static void serial_init(void)
     // Optional reinitialization
 }
 
-/*
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+static void serial_flush(void)
 {
-    COUNT++;
-    if (COUNT > _blockCount)
-    {
-        HAL_UART_DMAStop(&huart1);
-        return;
-    }
-
-    if (COUNT < _blockCount)
-    {
-        HAL_UART_Transmit_DMA(&huart1, base_addr + (uint8_t)(COUNT * _blocksize), _blocksize);
-    }
-    else
-    {
-        HAL_UART_Transmit_DMA(&huart1, base_addr + (uint8_t)(COUNT * _blocksize),
-                              _lastblocksize);
-    }
+    __HAL_UART_SEND_REQ(&huart1, UART_RXDATA_FLUSH_REQUEST);
 }
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-    COUNT++;
-    if (COUNT > _blockCount)
-    {
-        HAL_UART_DMAStop(&huart1);
-        return;
-    }
-
-    if (COUNT < _blockCount)
-    {
-        HAL_UART_Receive_DMA(&huart1, base_addr + (uint8_t)(COUNT * _blocksize), _blocksize);
-    }
-    else
-    {
-        HAL_UART_Receive_DMA(&huart1, base_addr + (uint8_t)(COUNT * _blocksize),
-                             _lastblocksize);
-    }
-}
-
-static void serial_capture_dma(Image *img)
-{
-    COUNT = 0;
-    base_addr = img->pixels_u8;
-    uint8_t request_start_sequence[3] = "STR";
-
-    if (img->size < 65536)
-        _blocksize = img->size;
-
-    _blockCount = img->size / _blocksize;
-    _lastblocksize = (uint16_t)(img->size % _blocksize);
-
-    HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);
-    HAL_Delay(1);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->width), sizeof(uint16_t), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->height), sizeof(uint16_t),
-                      HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->format), sizeof(uint8_t),
-                      HAL_MAX_DELAY);
-    HAL_Delay(200);
-
-    int ret = HAL_UART_Receive_DMA(&huart1, img->pixels_u8, _blocksize);
-
-    ret = ret + 1;
-}
-
-static void serial_send_dma(Image *img)
-{
-    COUNT = 0;
-    base_addr = img->pixels_u8;
-    uint8_t request_start_sequence[3] = "STW";
-
-    if (img->size < 65536)
-        _blocksize = img->size;
-
-    _blockCount = img->size / _blocksize;
-    _lastblocksize = (uint16_t)(img->size % _blocksize);
-
-    HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);
-    HAL_Delay(1);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->width), sizeof(uint16_t), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->height), sizeof(uint16_t),
-                      HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->format), sizeof(uint8_t),
-                      HAL_MAX_DELAY);
-
-    HAL_UART_Transmit_DMA(&huart1, img->pixels_u8, _blocksize);
-}
-
-*/
 
 #define UART_BLOCK_SIZE_MAX 65535
 #define UART_CMD_CAPTURE "STR"
 #define UART_CMD_SEND "STW"
+
+volatile bool tx_flag, rx_flag = false;
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    tx_flag = true;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    rx_flag = true;
+}
+
+static void serial_capture_dma(Image *img)
+{
+    uint8_t request_start_sequence[3] = "STR";
+    assert(img != NULL);
+    assert(img->pixels != NULL);
+
+    // Calculate block parameters
+    uint16_t blockSize = ((img->size * img->depth) < UART_BLOCK_SIZE_MAX) ? (img->size * img->depth) : UART_BLOCK_SIZE_MAX;
+    uint32_t blockCount = (img->size * img->depth) / blockSize;
+    uint16_t lastBlockSize = (img->size * img->depth) % blockSize;
+
+    // Send capture request header
+    HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);
+    HAL_Delay(1); // Optional small delay
+
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->width), sizeof(img->width), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->height), sizeof(img->height), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->format), sizeof(img->format), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->depth), sizeof(img->depth), HAL_MAX_DELAY);
+
+    // Step 3: Send image pixel data in blocks
+    const uint8_t *pixelPtr = img->pixels;
+    for (uint32_t i = 0; i < blockCount; i++)
+    {
+        HAL_UART_Receive_DMA(&huart1, pixelPtr, blockSize);
+        pixelPtr += blockSize;
+        while (!rx_flag)
+            ;
+        rx_flag = false;
+    }
+
+    // Step 4: Send any remaining bytes
+    if (lastBlockSize > 0)
+    {
+        HAL_UART_Receive_DMA(&huart1, pixelPtr, lastBlockSize);
+        while (!rx_flag)
+            ;
+        rx_flag = false;
+    }
+}
+
+static void serial_send_dma(Image *img)
+{
+    assert(img != NULL);
+    assert(img->pixels != NULL);
+    uint8_t request_start_sequence[3] = "STW";
+    // Calculate block transmission parameters
+    uint16_t blockSize = ((img->size * img->depth) < UART_BLOCK_SIZE_MAX) ? (img->size * img->depth) : UART_BLOCK_SIZE_MAX;
+    uint32_t blockCount = (img->size * img->depth) / blockSize;
+    uint16_t lastBlockSize = (img->size * img->depth) % blockSize;
+
+    // Step 1: Send command header
+    HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);
+    HAL_Delay(1); // Give receiver time to prepare
+
+    // Step 2: Send image metadata
+
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->width), sizeof(img->width), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->height), sizeof(img->height), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->format), sizeof(img->format), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->depth), sizeof(img->depth), HAL_MAX_DELAY);
+    HAL_Delay(200); // Allow receiver to process metadata
+
+    // Step 3: Send image pixel data in blocks
+    const uint8_t *pixelPtr = img->pixels;
+    uint8_t testarr[] = "ozan durgut ses ver";
+    for (uint32_t i = 0; i < blockCount; i++)
+    {
+        HAL_UART_Transmit_DMA(&huart1, pixelPtr, blockSize);
+        pixelPtr += blockSize;
+        while (!tx_flag)
+            ;
+        tx_flag = false;
+    }
+
+    // Step 4: Send any remaining bytes
+    if (lastBlockSize > 0)
+    {
+        HAL_UART_Transmit_DMA(&huart1, pixelPtr, lastBlockSize);
+        while (!tx_flag)
+            ;
+        tx_flag = false;
+    }
+}
 
 static void serial_capture(Image *img)
 {
@@ -163,7 +173,7 @@ static void serial_send(const Image *img)
     HAL_UART_Transmit(&huart1, (uint8_t *)(&img->height), sizeof(img->height), HAL_MAX_DELAY);
     HAL_UART_Transmit(&huart1, (uint8_t *)(&img->format), sizeof(img->format), HAL_MAX_DELAY);
     HAL_UART_Transmit(&huart1, (uint8_t *)(&img->depth), sizeof(img->depth), HAL_MAX_DELAY);
-    HAL_Delay(200); // Allow receiver to process metadata
+    HAL_Delay(2); // Allow receiver to process metadata
 
     // Step 3: Send image pixel data in blocks
     const uint8_t *pixelPtr = img->pixels;
@@ -179,6 +189,59 @@ static void serial_send(const Image *img)
     {
         HAL_UART_Transmit(&huart1, pixelPtr, lastBlockSize, HAL_MAX_DELAY);
         HAL_Delay(1); // <-- 1-2ms delay between blocks
+    }
+}
+
+static void serial_send_jpeg(const Image *img)
+{
+    assert(img && img->pixels);
+
+    const uint8_t header[3] = "STJ";
+    HAL_UART_Transmit(&huart1, (uint8_t *)header, sizeof(header), HAL_MAX_DELAY);
+
+    // Send JPEG size (uint32_t)
+    HAL_UART_Transmit(&huart1, (uint8_t *)&img->size, sizeof(img->size), HAL_MAX_DELAY);
+
+    // Send JPEG data
+    const uint8_t *ptr = img->pixels;
+    uint32_t remaining = img->size;
+
+    while (remaining > 0)
+    {
+        uint16_t chunk = (remaining > UART_BLOCK_SIZE_MAX) ? UART_BLOCK_SIZE_MAX : remaining;
+        HAL_UART_Transmit(&huart1, ptr, chunk, HAL_MAX_DELAY);
+        ptr += chunk;
+        remaining -= chunk;
+
+        HAL_Delay(1); // Delay is fine for UART pacing, or use DMA for better performance
+    }
+}
+
+static void serial_send_1d(const void *data, uint8_t elem_size, uint32_t length, Serial1DDataType type)
+{
+    assert(data != NULL);
+    assert(elem_size > 0);
+    assert(length > 0);
+
+    char header[3] = {'S', 'T', '0' + (char)type}; // e.g., ST1 for histogram
+    HAL_UART_Transmit(&huart1, (uint8_t *)header, sizeof(header), HAL_MAX_DELAY);
+
+    // Send metadata: element count and size
+    HAL_UART_Transmit(&huart1, (uint8_t *)&length, sizeof(length), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, &elem_size, sizeof(elem_size), HAL_MAX_DELAY);
+    HAL_Delay(1);
+
+    // Send data in chunks
+    const uint8_t *ptr = (const uint8_t *)data;
+    uint32_t remaining = elem_size * length;
+
+    while (remaining > 0)
+    {
+        uint16_t chunk = (remaining > UART_BLOCK_SIZE_MAX) ? UART_BLOCK_SIZE_MAX : remaining;
+        HAL_UART_Transmit(&huart1, ptr, chunk, HAL_MAX_DELAY);
+        ptr += chunk;
+        remaining -= chunk;
+        HAL_Delay(1);
     }
 }
 
@@ -263,4 +326,8 @@ int _write(int file, char *ptr, int len)
 serial_t stm32_uart = {
     .init = serial_init,
     .capture = serial_capture,
-    .send = serial_send};
+    .send = serial_send,
+    .sendJPEG = serial_send_jpeg,
+    .send1D = serial_send_1d,
+    .flush = serial_flush,
+};

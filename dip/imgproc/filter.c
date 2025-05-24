@@ -1,4 +1,5 @@
 #include "filter.h"
+#include "float.h"
 #include <memory_manager.h>
 
 // Internal helper — filters only one channel
@@ -11,81 +12,6 @@ uint8_t channel_mask[] = {
 
 void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
 {
-
-#ifdef ARM_CMSIS_DSP // TODO check if it is working or not
-
-    Filter2DContext *context = (Filter2DContext *)ctx;
-    const int size = context->size;
-    const int half = size / 2;
-    const int width = inImg->width;
-    const int height = inImg->height;
-    const int padded_width = width + 2 * half;
-    const int padded_height = height + 2 * half;
-    const int padded_size = padded_width * padded_height;
-
-    // Prepare input channel
-    if (!inImg->chals)
-    {
-        inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-        memset(inImg->chals, 0, sizeof(channels_t));
-    }
-
-    if (!(inImg->is_chals & channel_mask[ch_idx]))
-    {
-        inImg->chals->ch[ch_idx] = (float *)memory_alloc(sizeof(float) * width * height);
-        float *inCh = inImg->chals->ch[ch_idx];
-        const uint8_t *raw = (const uint8_t *)inImg->pixels;
-
-        if (inImg->format == IMAGE_FORMAT_GRAYSCALE)
-        {
-            for (int i = 0; i < width * height; ++i)
-                inCh[i] = (float)raw[i];
-        }
-        else if (inImg->format == IMAGE_FORMAT_RGB888)
-        {
-            for (int i = 0; i < width * height; ++i)
-                inCh[i] = (float)raw[i * 3 + ch_idx - 1];
-        }
-
-        inImg->is_chals |= channel_mask[ch_idx];
-    }
-
-    float *inCh = inImg->chals->ch[ch_idx];
-
-    // Pad the input image
-    float *padded = (float *)memory_alloc(sizeof(float) * padded_size);
-    memset(padded, 0, sizeof(float) * padded_size);
-    for (int y = 0; y < height; ++y)
-        for (int x = 0; x < width; ++x)
-            padded[(y + half) * padded_width + (x + half)] = inCh[y * width + x];
-
-    // Prepare output channel
-    if (!outImg->chals)
-    {
-        outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-        memset(outImg->chals, 0, sizeof(channels_t));
-    }
-
-    if (!(outImg->is_chals & channel_mask[ch_idx]))
-    {
-        outImg->chals->ch[ch_idx] = (float *)memory_alloc(sizeof(float) * width * height);
-        outImg->is_chals |= channel_mask[ch_idx];
-    }
-
-    float *outCh = outImg->chals->ch[ch_idx];
-
-    // Prepare CMSIS matrices
-    arm_matrix_instance_f32 input_mat, kernel_mat, output_mat;
-    arm_mat_init_f32(&input_mat, padded_height, padded_width, padded);
-    arm_mat_init_f32(&kernel_mat, size, size, (float *)context->kernel);
-    arm_mat_init_f32(&output_mat, height, width, outCh);
-
-    // Perform 2D convolution
-    arm_conv2d_f32(&input_mat, &kernel_mat, &output_mat, PADDING_VALID);
-
-    return;
-
-#endif
 
     Filter2DContext *context = (Filter2DContext *)ctx;
     int size = context->size;
@@ -180,73 +106,101 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
     }
 }
 
-// TODO will continue from there
-
-void DIP_sepFilter2D(const Image *inImg, Image *outImg, int kernelSizeX, float kernelX[kernelSizeX],
-                     int kernelSizeY, float kernelY[kernelSizeY], double delta)
+void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
 {
+    int size = sizeX;
+    int half = sizeX / 2;
 
-    // Temporary image to store the result after the first pass (horizontal filtering)
-    Image *tempImg = (Image *)createImage(IMAGE_RES_WQVGA,
-                                          inImg->format);
+    int width = inImg->width;
+    int height = inImg->height;
 
-    // First pass: filter rows with kernelX (horizontal filtering)
-    for (int y = 0; y < inImg->height; y++)
+    // Prepare input channel
+    float *inCh = NULL;
+
+    if (!inImg->chals)
     {
-        for (int x = 0; x < inImg->width; x++)
+        inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(inImg->chals, 0, sizeof(channels_t));
+    }
+
+    if (inImg->is_chals & ~(channel_mask[0]))
+    {
+        inCh = inImg->chals->ch[0];
+    }
+    else
+    {
+        inCh = (float *)memory_alloc(height * width * sizeof(float));
+        inImg->chals->ch[0] = inCh;
+        inImg->is_chals |= ~(channel_mask[0]);
+
+        const uint8_t *raw = (const uint8_t *)inImg->pixels;
+        if (inImg->format == IMAGE_FORMAT_GRAYSCALE)
         {
-            float sum = 0.0;
-            for (int fx = -kernelSizeX / 2; fx <= kernelSizeX / 2; ++fx)
-            {
-                int pixelValue = 0;
-                int xIndex = x + fx;
-
-                // Handle borders by ignoring pixels outside bounds (border handling)
-                if (xIndex < 0 || xIndex >= inImg->width)
-                {
-                    pixelValue = 0;
-                }
-                else
-                {
-                    // pixelValue = inImg->pixels[y * inImg->width + xIndex];
-                }
-
-                sum += ((float)pixelValue * kernelX[fx + kernelSizeX / 2]);
-            }
-
-            sum = sum + delta;                           // Add delta after the filter operation
-            sum = sum < 0 ? 0 : (sum > 255 ? 255 : sum); // Normalize to [0, 255]
-            // tempImg->pixels[y * tempImg->width + x] = (uint8_t)sum;
+            for (int i = 0; i < (int)inImg->size; ++i)
+                inCh[i] = (float)raw[i];
+        }
+        else if (inImg->format == IMAGE_FORMAT_RGB888)
+        {
+            for (int i = 0; i < (int)inImg->size; ++i)
+                inCh[i] = (float)raw[i * 3 + 0 - 1];
         }
     }
 
-    // Second pass: filter columns with kernelY (vertical filtering)
-    for (int y = 0; y < outImg->height; y++)
+    // Temp buffer after vertical pass
+    float *temp = (float *)memory_alloc(width * height * sizeof(float));
+
+    // Horizontal kernel output
+    float *outCh = NULL;
+
+    if (!outImg->chals)
     {
-        for (int x = 0; x < outImg->width; x++)
+        outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(outImg->chals, 0, sizeof(channels_t));
+    }
+
+    if (outImg->is_chals & ~(channel_mask[0]))
+    {
+        outCh = outImg->chals->ch[0];
+    }
+    else
+    {
+        outCh = (float *)memory_alloc(height * width * sizeof(float));
+        outImg->chals->ch[0] = outCh;
+        outImg->is_chals |= ~(channel_mask[0]);
+    }
+
+    // Vertical pass
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
         {
-            float sum = 0.0;
-            for (int fy = -kernelSizeY / 2; fy <= kernelSizeY / 2; ++fy)
+            float sum = 0.0f;
+            for (int ky = -half; ky <= half; ++ky)
             {
-                int pixelValue = 0;
-                int yIndex = y + fy;
+                int iy = y + ky;
+                if (iy >= 0 && iy < height)
+                    sum += inCh[iy * width + x] * kernelY[ky + half];
+            }
+            temp[y * width + x] = sum;
+        }
+    }
 
-                // Handle borders by ignoring pixels outside bounds (border handling)
-                if (yIndex < 0 || yIndex >= tempImg->height)
-                {
-                    pixelValue = 0;
-                }
-                else
-                {
-                    // pixelValue = tempImg->pixels[yIndex * tempImg->width + x];
-                }
-
-                sum += ((float)pixelValue * kernelY[fy + kernelSizeY / 2]);
+    // Horizontal pass
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            float sum = 0.0f;
+            for (int kx = -half; kx <= half; ++kx)
+            {
+                int ix = x + kx;
+                if (ix >= 0 && ix < width)
+                    sum += temp[y * width + ix] * kernelX[kx + half];
             }
 
-            sum = sum + delta;                           // Add delta after the filter operation
-            sum = sum < 0 ? 0 : (sum > 255 ? 255 : sum); // Normalize to [0, 255]
-            // outImg->pixels[y * outImg->width + x] = (uint8_t)sum;
+            sum = (float)(sum * delta); // Uncomment if delta is a normalization factor
+
+            outCh[y * width + x] = sum;
         }
     }
 }
@@ -291,3 +245,247 @@ void wrapper(ImageOpFunc func, Image *inImg, Image *outImg, void *context)
     }
 }
     */
+
+/**
+ * @brief Applies a min filter (non-linear) to the image using a square window.
+ *
+ * @param inImg Input image.
+ * @param outImg Output image after min filtering.
+ * @param kernelSize Size of the square window (must be odd).
+ */
+
+void minFilter(const Image *inImg, Image *outImg, int kernelSize)
+{
+    int kernelRadius = kernelSize / 2;
+
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, outImg->depth);
+        outImg->is_chals = 1;
+    }
+
+    if (isChalsEmpty(inImg))
+    {
+
+        for (int y = 0; y < inImg->height; ++y)
+        {
+            for (int x = 0; x < inImg->width; ++x)
+            {
+                uint8_t minPixelValue = MAX_INTENSITY;
+
+                for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
+                {
+                    for (int kx = -kernelRadius; kx <= kernelRadius; ++kx)
+                    {
+                        int offsetX = x + kx;
+                        int offsetY = y + ky;
+
+                        if (offsetX >= 0 && offsetX < inImg->width &&
+                            offsetY >= 0 && offsetY < inImg->height)
+                        {
+                            uint8_t pixelValue = (uint8_t)((uint8_t *)inImg->pixels)[offsetY * inImg->width + offsetX];
+                            if (pixelValue < minPixelValue)
+                            {
+                                minPixelValue = pixelValue;
+                            }
+                        }
+                    }
+                }
+
+                outImg->chals->ch[0][y * inImg->width + x] = minPixelValue;
+            }
+        }
+    }
+    else
+    {
+
+        for (int y = 0; y < inImg->height; ++y)
+        {
+            for (int x = 0; x < inImg->width; ++x)
+            {
+                float minPixelValue = FLT_MAX;
+
+                for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
+                {
+                    for (int kx = -kernelRadius; kx <= kernelRadius; ++kx)
+                    {
+                        int offsetX = x + kx;
+                        int offsetY = y + ky;
+
+                        if (offsetX >= 0 && offsetX < inImg->width &&
+                            offsetY >= 0 && offsetY < inImg->height)
+                        {
+                            float pixelValue = inImg->chals->ch[0][offsetY * inImg->width + offsetX];
+                            if (pixelValue < minPixelValue)
+                            {
+                                minPixelValue = pixelValue;
+                            }
+                        }
+                    }
+                }
+
+                outImg->chals->ch[0][y * inImg->width + x] = minPixelValue;
+            }
+        }
+    }
+}
+
+/**
+ * @brief Applies a max filter (non-linear) to the image using a square window.
+ *
+ * @param inImg Input image.
+ * @param outImg Output image after max filtering.
+ * @param kernelSize Size of the square window (must be odd).
+ */
+
+void maxFilter(const Image *inImg, Image *outImg, int kernelSize)
+{
+    int kernelRadius = kernelSize / 2;
+
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, outImg->depth);
+        outImg->is_chals = 1;
+    }
+
+    if (isChalsEmpty(inImg))
+    {
+        for (int y = 0; y < inImg->height; ++y)
+        {
+            for (int x = 0; x < inImg->width; ++x)
+            {
+                uint8_t maxPixelValue = 0;
+
+                for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
+                {
+                    for (int kx = -kernelRadius; kx <= kernelRadius; ++kx)
+                    {
+                        int offsetX = x + kx;
+                        int offsetY = y + ky;
+
+                        if (offsetX >= 0 && offsetX < inImg->width &&
+                            offsetY >= 0 && offsetY < inImg->height)
+                        {
+                            uint8_t pixelValue = (uint8_t)((uint8_t *)inImg->pixels)[offsetY * inImg->width + offsetX];
+                            if (pixelValue > maxPixelValue)
+                            {
+                                maxPixelValue = pixelValue;
+                            }
+                        }
+                    }
+                }
+
+                outImg->chals->ch[0][y * inImg->width + x] = maxPixelValue;
+            }
+        }
+    }
+    else
+    {
+        for (int y = 0; y < inImg->height; ++y)
+        {
+            for (int x = 0; x < inImg->width; ++x)
+            {
+                uint8_t maxPixelValue = 0;
+
+                for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
+                {
+                    for (int kx = -kernelRadius; kx <= kernelRadius; ++kx)
+                    {
+                        int offsetX = x + kx;
+                        int offsetY = y + ky;
+
+                        if (offsetX >= 0 && offsetX < inImg->width &&
+                            offsetY >= 0 && offsetY < inImg->height)
+                        {
+                            float pixelValue = (float)inImg->chals->ch[0][offsetY * inImg->width + offsetX];
+                            if (pixelValue > maxPixelValue)
+                            {
+                                maxPixelValue = pixelValue;
+                            }
+                        }
+                    }
+                }
+
+                outImg->chals->ch[0][y * inImg->width + x] = maxPixelValue;
+            }
+        }
+    }
+}
+
+#include <stdlib.h>
+
+/**
+ * @brief Applies a median filter (non-linear) to the image using a square window.
+ *
+ * @param inImg Input image.
+ * @param outImg Output image after median filtering.
+ * @param kernelSize Size of the square window (must be odd).
+ */
+void medianFilter(const Image *inImg, Image *outImg, int kernelSize)
+{
+    int kernelRadius = kernelSize / 2;
+    int windowArea = kernelSize * kernelSize;
+
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, outImg->depth);
+        outImg->is_chals = 1;
+    }
+
+    // Temporary buffer to store window values
+    float *window = (float *)memory_alloc(sizeof(float) * windowArea);
+
+    for (int y = 0; y < inImg->height; ++y)
+    {
+        for (int x = 0; x < inImg->width; ++x)
+        {
+            int count = 0;
+
+            for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
+            {
+                for (int kx = -kernelRadius; kx <= kernelRadius; ++kx)
+                {
+                    int offsetX = x + kx;
+                    int offsetY = y + ky;
+
+                    if (offsetX >= 0 && offsetX < inImg->width &&
+                        offsetY >= 0 && offsetY < inImg->height)
+                    {
+                        float val;
+                        if (isChalsEmpty(inImg))
+                        {
+                            val = (float)((uint8_t *)inImg->pixels)[offsetY * inImg->width + offsetX];
+                        }
+                        else
+                        {
+                            val = inImg->chals->ch[0][offsetY * inImg->width + offsetX];
+                        }
+                        window[count++] = val;
+                    }
+                }
+            }
+
+            // Sort the window and take the median
+            for (int i = 0; i < count - 1; ++i)
+            {
+                for (int j = i + 1; j < count; ++j)
+                {
+                    if (window[i] > window[j])
+                    {
+                        float tmp = window[i];
+                        window[i] = window[j];
+                        window[j] = tmp;
+                    }
+                }
+            }
+
+            float median;
+            if (count % 2 == 1)
+                median = window[count / 2];
+            else
+                median = (window[count / 2 - 1] + window[count / 2]) / 2.0f;
+
+            outImg->chals->ch[0][y * inImg->width + x] = median;
+        }
+    }
+}
