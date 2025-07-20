@@ -34,6 +34,10 @@ extern "C"
 
     void phase(const Image *inImg, Image *outImg);
 
+    void logImage(Image *img);
+
+    void addScalar(Image *img, float value);
+
     void fftShift(float *data, int width, int height);
 
     void fourierInv(const Image *inImg, Image *outImg);
@@ -44,6 +48,15 @@ extern "C"
 
     void getMask(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2);
 
+    /// test
+
+    static bool isValidFFTSize(int w, int h);
+    int fft(const Image *inImg, Image *outImg);
+    int ifft(const Image *inImg, Image *outImg);
+    void _abs(const Image *fftImg, Image *magImg);
+    void _phase(const Image *fftImg, Image *phaseImg);
+    void fftshift(float *data, int width, int height);
+    void getFilter(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2);
 #ifdef __cplusplus
 }
 #endif

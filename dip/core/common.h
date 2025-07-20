@@ -9,6 +9,9 @@ extern "C"
 #endif
 
     Image *createImage(ImageResolution resolution, ImageFormat format);
+    Image *createImageWH(int width, int height, ImageFormat format);
+
+    void deleteImage(Image *image);
 
     bool isChalsEmpty(const Image *inImg);
 

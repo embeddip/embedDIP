@@ -46,6 +46,7 @@ void resize(Image *inImg, Image *outImg, int size)
 
     outImg->width = size;
     outImg->height = size;
+    outImg->size = size * size * inImg->depth;
 }
 
 /**
@@ -179,7 +180,7 @@ void dist(const Image *inImg, Image *outImg, uint8_t R_ref, uint8_t G_ref, uint8
         }
     }
 }
-
+/*
 static inline uint8_t normalize_to_u8(float val, float min, float max)
 {
     if (max - min < 1e-5f) // avoid divide by zero
@@ -191,6 +192,7 @@ static inline uint8_t normalize_to_u8(float val, float min, float max)
         norm = 1.0f;
     return (uint8_t)(norm * 255.0f);
 }
+
 void normalize(Image *inImg)
 {
     float *data = (float *)inImg->chals->ch[0];
@@ -209,6 +211,39 @@ void normalize(Image *inImg)
         data[i] = normalize_to_u8(inImg->chals->ch[0][i], min, max);
     }
 }
+*/
+
+static inline uint8_t normalize_to_u8(uint8_t val, uint8_t min, uint8_t max)
+{
+    if (max - min < 1e-5f) // avoid divide by zero
+        return 0;
+    float norm = ((float)val - (float)min) / ((float)max - (float)min);
+    if (norm < 0.0f)
+        norm = 0.0f;
+    if (norm > 1.0f)
+        norm = 1.0f;
+    return (uint8_t)(norm * 255.0f);
+}
+
+void normalize(Image *inImg)
+{
+    uint8_t *data = (uint8_t *)inImg->pixels;
+
+    uint8_t min = 255, max = 0;
+    for (int i = 0; i < inImg->size; i++)
+    {
+        uint8_t v = (uint8_t)data[i];
+        if (v < min)
+            min = v;
+        if (v > max)
+            max = v;
+    }
+    for (int i = 0; i < inImg->size; i++)
+    {
+        data[i] = normalize_to_u8(data[i], min, max);
+    }
+}
+
 void convertTo(Image *inImg)
 {
 
@@ -218,8 +253,9 @@ void convertTo(Image *inImg)
     {
     case IMAGE_FORMAT_GRAYSCALE:
     {
-        /*
         float min = FLT_MAX, max = -FLT_MAX;
+
+        // Step 1: Find min and max
         for (int i = 0; i < inImg->size; i++)
         {
             float v = inImg->chals->ch[0][i];
@@ -228,15 +264,22 @@ void convertTo(Image *inImg)
             if (v > max)
                 max = v;
         }
-        for (int i = 0; i < inImg->size; i++)
-        {
-            data[i] = normalize_to_u8(inImg->chals->ch[0][i]
-        }*/
 
-        for (int i = 0; i < inImg->size; i++)
+        // Step 2: Normalize to [0, 255] and clamp
+        if (max != min)
         {
-            data[i] = (uint8_t)(inImg->chals->ch[0][i] > 255.0 ? 255.0 : (inImg->chals->ch[0][i] < 0.0 ? 0 : inImg->chals->ch[0][i]));
+            for (int i = 0; i < inImg->size; i++)
+            {
+                float norm = (inImg->chals->ch[0][i] - min) / (max - min);
+                data[i] = (uint8_t)(norm * 255.0f + 0.5f); // +0.5 for rounding
+            }
         }
+        else
+        {
+            // All values are the same, map to 0 or 255
+            memset(data, 0, inImg->size); // Or use 255
+        }
+
         break;
     }
 

@@ -40,6 +40,9 @@ extern "C"
 #include "ov5640.h"
 #include "fonts.h"
 
+
+#include "memory_manager.h"
+
 // =============================
 // Output Modules
 // =============================
@@ -88,6 +91,10 @@ extern "C"
         }
     }
 
+
+/*
+
+
     // Static inline function interfaces
     void filter2D(Image *inImg, Image *outImg, int size, float kernel[][size])
     {
@@ -96,6 +103,9 @@ extern "C"
         ctx.kernel = &kernel[0];
         wrapper(filter2D_single_channel, inImg, outImg, &ctx);
     }
+
+
+*/
 
     // TODO Fix this.
     /*

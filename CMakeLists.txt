@@ -6,6 +6,11 @@ target_compile_definitions(embedDIP PUBLIC
     __FPU_PRESENT=1
 )
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+enable_language(C CXX)
+
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/STM32F7xx_HAL_Driver/Inc
     ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Device/ST/STM32F7xx/Include
@@ -26,6 +31,7 @@ target_include_directories(embedDIP PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/hdl/ov5640
     ${CMAKE_CURRENT_SOURCE_DIR}/hdl/rk043fn48h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdl/stm32f7g46
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp
 )
 
 # Core image processing
@@ -50,6 +56,11 @@ target_sources(embedDIP PRIVATE
     input/camera/stm32746g_discovery_sdram.c
     output/serial/serial.c
     output/display/stm32_rk043fn48h.c
+    cpp/ImageWrapper.cpp
+    cpp/CameraWrapper.cpp
+    cpp/DisplayWrapper.cpp
+    cpp/MemoryManager.cpp
+    cpp/SerialWrapper.cpp
 )
 
 # Add CMSIS-DSP source files

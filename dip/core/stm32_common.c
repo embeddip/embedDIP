@@ -60,6 +60,41 @@ Image *createImage(ImageResolution resolution, ImageFormat format)
     return image;
 }
 
+Image *createImageWH(int width, int height, ImageFormat format)
+{
+    Image *image = (Image *)memory_alloc(sizeof(Image));
+    if (image == NULL)
+        return NULL;
+
+    image->width = width;
+    image->height = height;
+    image->size = width * height;
+    image->format = format;
+
+    uint32_t bytes_per_pixel;
+    switch (format)
+    {
+    case IMAGE_FORMAT_GRAYSCALE:
+        image->depth = IMAGE_DEPTH_U8;
+        bytes_per_pixel = BYTES_U8;
+        break;
+    case IMAGE_FORMAT_RGB565:
+        image->depth = IMAGE_DEPTH_U16;
+        bytes_per_pixel = BYTES_U16;
+        break;
+    default:
+        image->depth = IMAGE_DEPTH_U24;
+        bytes_per_pixel = BYTES_U24;
+        break;
+    }
+
+    image->pixels = (uint8_t *)memory_alloc(image->size * BYTES_PER_PIXEL); // always 4B (float)
+    image->is_chals = 0;
+    image->chals = NULL;
+
+    return image;
+}
+
 void deleteImage(Image *image)
 {
     if (!image)
