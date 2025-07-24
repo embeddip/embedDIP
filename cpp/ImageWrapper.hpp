@@ -35,6 +35,12 @@ namespace embedDIP
         // Raw access
         ::Image *raw() noexcept;
         ::Image *raw() const noexcept;
+        inline void *pixels() const noexcept { return image_->pixels; }
+        inline uint32_t size() const noexcept { return image_->size; }
+        inline uint32_t width() const noexcept { return image_->width; }
+        inline uint32_t height() const noexcept { return image_->height; }
+        inline ImageFormat format() const noexcept { return image_->format; }
+        inline ImageDepth depth() const noexcept { return image_->depth; }
 
         // Channel operations
         void createChals(uint8_t numChals) noexcept;
@@ -129,6 +135,8 @@ namespace embedDIP
         void getFilter(FrequencyFilterType type, float cutoff1, float cutoff2 = 0.0f);
 
         void multiply(const Image &img2, Image &outImg) const;
+
+        void cvtColor(Image &out, ColorConversionCode code) const;
 
     private:
         ::Image *image_;

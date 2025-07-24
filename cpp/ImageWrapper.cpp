@@ -311,4 +311,9 @@ namespace embedDIP
         ::multiply(raw(), img2.raw(), outImg.raw());
     }
 
+    void Image::cvtColor(Image &out, ColorConversionCode code) const
+    {
+        ::cvtColor(raw(), out.raw(), code);
+    }
+
 } // namespace embedDIP

@@ -2,10 +2,10 @@
 
 extern "C"
 {
-#include "serial.h" // C API: serial_t
+#include "serial.h"
 }
 
-#include "ImageWrapper.hpp" // embedDIP::Image
+#include "ImageWrapper.hpp"
 #include <cstdint>
 
 namespace embedDIP
