@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package schemaVersion="1.0.0">
+  <vendor>OzanDurgut</vendor>
+  <name>embedDIP</name>
+  <description>Embedded Digital Image Processing Library for MCUs</description>
+  <url>https://github.com/EmbedDIP/embedDIP</url>
+
+  <releases>
+    <release version="1.0.0" date="2025-07-27">Initial release of embedDIP as CMSIS-Pack</release>
+  </releases>
+
+  <components>
+    <component Cclass="DIP" Cgroup="Core">
+      <description>embedDIP core, wrappers, and drivers</description>
+      <files>
+        <!-- C++ Wrappers -->
+        <file category="source" name="cpp/CameraWrapper.cpp" />
+        <file category="source" name="cpp/DisplayWrapper.cpp" />
+        <file category="source" name="cpp/ImageWrapper.cpp" />
+        <file category="source" name="cpp/MemoryManager.cpp" />
+        <file category="source" name="cpp/SerialWrapper.cpp" />
+
+        <!-- Core DIP -->
+        <file category="header" name="dip/core/common.h" />
+        <file category="header" name="dip/core/dip.h" />
+        <file category="source" name="dip/core/image.c" />
+        <file category="header" name="dip/core/image.h" />
+        <file category="source" name="dip/core/memory_manager.c" />
+        <file category="header" name="dip/core/memory_manager.h" />
+        <file category="source" name="dip/core/stm32_common.c" />
+
+        <!-- Image Processing -->
+        <file category="source" name="dip/imgproc/color.c" />
+        <file category="header" name="dip/imgproc/color.h" />
+        <file category="source" name="dip/imgproc/fft.c" />
+        <file category="header" name="dip/imgproc/fft.h" />
+        <file category="source" name="dip/imgproc/filter.c" />
+        <file category="header" name="dip/imgproc/filter.h" />
+        <file category="source" name="dip/imgproc/histogram.c" />
+        <file category="header" name="dip/imgproc/histogram.h" />
+        <file category="source" name="dip/imgproc/pixel.c" />
+        <file category="header" name="dip/imgproc/pixel.h" />
+
+        <!-- Hardware Abstraction -->
+        <file category="source" name="hdl/ov5640/ov5640.c" />
+        <file category="header" name="hdl/ov5640/ov5640.h" />
+        <file category="header" name="hdl/rk043fn48h/rk043fn48h.h" />
+        <file category="header" name="hdl/stm32f7g46/configs.h" />
+
+        <!-- Input (Camera, Serial) -->
+        <file category="header" name="input/camera/camera.h" />
+        <file category="source" name="input/camera/stm32746g_discovery.c" />
+        <file category="header" name="input/camera/stm32746g_discovery.h" />
+        <file category="source" name="input/camera/stm32746g_discovery_sdram.c" />
+        <file category="header" name="input/camera/stm32746g_discovery_sdram.h" />
+        <file category="source" name="input/camera/stm32_ov5640.c" />
+        <file category="header" name="input/serial/serial.h" />
+        <file category="source" name="input/serial/stm32_uart.c" />
+
+        <!-- Output (Display, Serial) -->
+        <file category="header" name="output/display/display.h" />
+        <file category="source" name="output/display/font8.c" />
+        <file category="source" name="output/display/font12.c" />
+        <file category="source" name="output/display/font16.c" />
+        <file category="source" name="output/display/font20.c" />
+        <file category="source" name="output/display/font24.c" />
+        <file category="header" name="output/display/fonts.h" />
+        <file category="source" name="output/display/stm32_rk043fn48h.c" />
+        <file category="source" name="output/serial/serial.c" />
+
+        <!-- Root -->
+        <file category="header" name="embedDIP.h" />
+      </files>
+    </component>
+  </components>
+</package>
