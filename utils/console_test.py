@@ -11,7 +11,7 @@ IMAGE_FORMAT_GRAYSCALE = 0
 IMAGE_FORMAT_RGB888 = 1
 IMAGE_FORMAT_RGB565 = 2
 IMAGE_FORMAT_YUV = 3
-IMAGE_FORMAT_HSV = 4
+IMAGE_FORMAT_HSI = 4
 
 # UART commands
 UART_CMD_SEND_IMAGE = b"STR"
@@ -70,7 +70,7 @@ def send_image_data(ser, sendImg, width, height, imageFormat):
         yuv = cv2.cvtColor(im, cv2.COLOR_BGR2YUV).astype(np.uint8)
         total_bytes = width * height * 3
         img_data = yuv.reshape((total_bytes,))
-    elif imageFormat == IMAGE_FORMAT_HSV:
+    elif imageFormat == IMAGE_FORMAT_HSI:
         hsv = cv2.cvtColor(im, cv2.COLOR_BGR2HSV).astype(np.uint8)
         total_bytes = width * height * 3
         img_data = hsv.reshape((total_bytes,))

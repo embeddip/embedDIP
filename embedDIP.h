@@ -6,6 +6,8 @@ extern "C"
 {
 #endif
 
+#include "embedDIP_configs.h"
+
 // =============================
 // Project Version
 // =============================
@@ -21,116 +23,37 @@ extern "C"
 #define ENABLE_CAMERA_INPUT 1
 #define ENABLE_DISPLAY_OUTPUT 1
 
-// =============================
-// Core Modules
-// =============================
-#include "dip.h"
-#include "common.h"
-#include "image.h"
-#include "pixel.h"
-#include "filter.h"
-#include "color.h"
-#include "histogram.h"
-#include "fft.h"
-// =============================
-// Input Modules
-// =============================
-#include "serial.h"
-#include "camera.h"
-#include "ov5640.h"
-#include "fonts.h"
+#define STM32F7xx 1
 
+// Core APIs
+#include "core/image.h"
+#include "core/filter.h"
+#include "core/histogram.h"
+#include "core/memory_manager.h"
+#include "imgproc/color.h"
+#include "imgproc/fft.h"
+#include "board/common.h"
 
-#include "memory_manager.h"
+// C++ Wrappers
+#include "wrapper/ImageWrapper.hpp"
+#include "wrapper/CameraWrapper.hpp"
+#include "wrapper/DisplayWrapper.hpp"
+
+// Device drivers
+#include "device/camera/ov5640.h"
+#include "device/display/display.h"
 
 // =============================
-// Output Modules
+// Board-specific C code
 // =============================
-#include "display.h"
-#include "rk043fn48h.h"
+#ifdef ARDUINO_ARCH_ESP32
+#include "board/esp32/esp32_common.c"
+#endif
 
-    // Generic image operation function pointer type
-    typedef void (*ImageOpFunc)(const Image *inImg, Image *outImg, int ch_idx, void *context);
+#ifdef STM32F7xx
+#include "board/stm32f7/stm32_common.c"
+#endif
 
-    // Generic per-channel image operation wrapper
-    void wrapper(ImageOpFunc func, Image *inImg, Image *outImg, void *context);
-
-    void wrapper(ImageOpFunc func, Image *inImg, Image *outImg, void *context)
-    {
-        assert(func && inImg && outImg);
-        assert(inImg->format == outImg->format);
-
-        if (!inImg->is_chals)
-        {
-            inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-            inImg->is_chals = 0x00;
-            for (int i = 0; i < 4; ++i)
-                inImg->chals->ch[i] = NULL;
-        }
-
-        if (!outImg->is_chals)
-        {
-            outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-            outImg->is_chals = 0x00;
-            for (int i = 0; i < 4; ++i)
-                outImg->chals->ch[i] = NULL;
-        }
-
-        if (inImg->format == IMAGE_FORMAT_GRAYSCALE)
-        {
-            func(inImg, outImg, 0, context);
-        }
-        else if (inImg->format == IMAGE_FORMAT_RGB888)
-        {
-            for (int ch = 1; ch <= 3; ++ch)
-                func(inImg, outImg, ch, context);
-        }
-        else
-        {
-            assert(false && "Unsupported format in wrapper");
-        }
-    }
-
-
-/*
-
-
-    // Static inline function interfaces
-    void filter2D(Image *inImg, Image *outImg, int size, float kernel[][size])
-    {
-        static Filter2DContext ctx;
-        ctx.size = size;
-        ctx.kernel = &kernel[0];
-        wrapper(filter2D_single_channel, inImg, outImg, &ctx);
-    }
-
-
-*/
-
-    // TODO Fix this.
-    /*
-    static void sepFilter2D_wrapper(Image *inImg, Image *outImg, int ch_idx, void *ctx)
-    {
-        SepFilter2DContext *context = (SepFilter2DContext *)ctx;
-        sepFilter2D_single_channel(inImg, outImg, ch_idx,
-                                   context->kernelX, context->sizeX,
-                                   context->kernelY, context->sizeY,
-                                   context->delta);
-    }
-
-    static inline void sepFilter2D(Image *inImg, Image *outImg,
-                                   int sizeX, float kernelX[], int sizeY, float kernelY[], float delta)
-    {
-        static SepFilter2DContext ctx;
-        ctx.sizeX = sizeX;
-        ctx.kernelX = kernelX;
-        ctx.sizeY = sizeY;
-        ctx.kernelY = kernelY;
-        ctx.delta = delta;
-        wrapper(sepFilter2D_wrapper, inImg, outImg, &ctx);
-    }
-
-    */
 
 #ifdef __cplusplus
 }
