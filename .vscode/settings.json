@@ -1,0 +1,22 @@
+{
+    "files.associations": {
+        "memory_manager.h": "c",
+        "image.h": "c",
+        "complex.h": "c",
+        "esp32_common.c": "cpp",
+        "stm32_common.c": "cpp",
+        "assert.h": "c",
+        "common.h": "c",
+        "math.h": "c",
+        "serial.h": "c",
+        "stdbool.h": "c",
+        "xiosbase": "c",
+        "initializer_list": "c",
+        "utility": "c",
+        "vector": "c",
+        "xstring": "c",
+        "xutility": "c",
+        "stdio.h": "c",
+        "display.h": "c"
+    }
+}
