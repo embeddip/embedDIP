@@ -1,3 +1,6 @@
+#ifndef EMBED_DIP_COLOR_H
+#define EMBED_DIP_COLOR_H
+
 #include "core/image.h"
 #include "math.h"
 #include "board/common.h"
@@ -50,3 +53,5 @@ typedef enum
 void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code);
 
 void hueThreshold(const Image *input, Image *output, float minHue, float maxHue);
+
+#endif // EMBED_DIP_COLOR_H

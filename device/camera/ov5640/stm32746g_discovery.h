@@ -1,3 +1,6 @@
+#include <embedDIP_configs.h>
+
+#ifdef DEVICE_OV5640
 /**
   ******************************************************************************
   * @file    stm32746g_discovery.h
@@ -320,3 +323,4 @@ void      BSP_COM_DeInit(COM_TypeDef COM, UART_HandleTypeDef *huart);
 
 #endif /* __STM32746G_DISCOVERY_H */
 
+#endif

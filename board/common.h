@@ -1,7 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include "image.h"
+#include "core/image.h"
 
 #ifdef __cplusplus
 extern "C"

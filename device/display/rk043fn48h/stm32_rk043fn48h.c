@@ -1,3 +1,7 @@
+#include <embedDIP_configs.h>
+
+#ifdef DEVICE_RK043FN48H
+
 #include "device/serial/serial.h"
 #include "stm32f7xx_hal.h"
 #include <stdio.h>
@@ -82,3 +86,5 @@ display_t stm32_ota5180a = {
     .show = display_show,
     .clear = display_clear,
 };
+
+#endif

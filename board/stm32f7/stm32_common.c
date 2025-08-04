@@ -1,3 +1,7 @@
+#include <embedDIP_configs.h>
+
+#ifdef TARGET_BOARD_STM32F7
+
 #include "core/image.h"
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +59,7 @@ Image *createImage(ImageResolution resolution, ImageFormat format)
     }
 
     // Assign always 4 bytes per pixel. -> float usage.
-    image->pixels = (uint8_t *)memory_alloc(image->height * image->width * BYTES_PER_PIXEL);
+    image->pixels = (uint8_t *)memory_alloc(image->height * image->width * bytes_per_pixel);
     image->is_chals = 0x00;
     image->chals = NULL;
     // Return the pointer to the newly created Image structure
@@ -111,7 +115,7 @@ Image *createImageWH(int width, int height, ImageFormat format)
         break;
     }
 
-    image->pixels = (uint8_t *)memory_alloc(image->size * BYTES_PER_PIXEL); // always 4B (float)
+    image->pixels = (uint8_t *)memory_alloc(image->size * bytes_per_pixel); // always 4B (float)
     image->is_chals = 0;
     image->chals = NULL;
 
@@ -175,3 +179,5 @@ uint32_t Tok()
     DWT->CTRL &= 0xFFFFFFFE; // disable the counter
     return DWT->CYCCNT;      // Return elapsed cycles
 }
+
+#endif

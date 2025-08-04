@@ -3,6 +3,8 @@
 
 #include "core/image.h"
 #include <core/memory_manager.h>
+#include <board/common.h>
+#include <math.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -12,7 +14,7 @@ extern "C"
     typedef struct
     {
         int size;
-        float (*kernel)[];
+        float *kernel; // Flat array: size x size
         int chal;
     } Filter2DContext;
 
@@ -42,7 +44,7 @@ extern "C"
     void dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2);
 
     void logFilter(const Image *inImg, Image *outImg, float sigma);
-    
+
 #ifdef __cplusplus
 }
 #endif

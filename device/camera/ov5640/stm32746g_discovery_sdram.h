@@ -1,3 +1,6 @@
+#include <embedDIP_configs.h>
+
+#ifdef DEVICE_OV5640
 /**
   ******************************************************************************
   * @file    stm32746g_discovery_sdram.h
@@ -142,3 +145,4 @@ void    BSP_SDRAM_MspDeInit(SDRAM_HandleTypeDef  *hsdram, void *Params);
 
 #endif /* __STM32746G_DISCOVERY_SDRAM_H */
 
+#endif

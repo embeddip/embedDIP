@@ -1,8 +1,29 @@
+#include <embedDIP_configs.h>
+
+#ifdef TARGET_BOARD_ESP32
+
+#ifndef ESP32_COMMON_H
+#define ESP32_COMMON_H
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+#include <limits.h>
+#include <float.h>
+#include "esp_log.h"
+
+#include "esp_dsp.h"
+#include <math.h>
+
+#include "dsps_fft2r.h"
 #include "core/image.h"
 #include <stdlib.h>
 #include <string.h>
 #include <board/common.h>
 #include <core/memory_manager.h>
+#include <esp32/rom/rtc.h>
+#include "esp_heap_caps.h"
 
 /**
  * @brief Creates an image with a specified size and format.
@@ -17,7 +38,7 @@ Image *createImage(ImageResolution resolution, ImageFormat format)
     // Declare a pointer to an Image structure and assign it to a memory address in SDRAM
     // SDRAM_BANK_ADDR and WRITE_READ_ADDR are predefined constants, likely pointing to the starting address of memory
     // allocatedSize keeps track of the current memory offset for storing new data
-    Image *image = (Image *)malloc(sizeof(Image));
+    Image *image = (Image *)memory_alloc(sizeof(Image));
 
     // Check if the image pointer is NULL, which would mean memory allocation failed
     if (image == NULL)
@@ -36,25 +57,25 @@ Image *createImage(ImageResolution resolution, ImageFormat format)
 
     // TODO -> need to adjust create image with alwyas 3 bytes per pixel
     // TODO -> need also delete image
-    uint32_t bytes_per_pixel;
+    // uint32_t bytes_per_pixel;
     switch (format)
     {
     case IMAGE_FORMAT_GRAYSCALE:
         image->depth = IMAGE_DEPTH_U8;
-        bytes_per_pixel = BYTES_U8;
+        // bytes_per_pixel = BYTES_U8;
         break;
     case IMAGE_FORMAT_RGB565:
         image->depth = IMAGE_DEPTH_U16;
-        bytes_per_pixel = BYTES_U16;
+        // bytes_per_pixel = BYTES_U16;
         break;
     default:
         image->depth = IMAGE_DEPTH_U24;
-        bytes_per_pixel = BYTES_U24;
+        // bytes_per_pixel = BYTES_U24;
         break;
     }
 
     // Assign always 4 bytes per pixel. -> float usage.
-    image->pixels = (uint8_t *)malloc(image->height * image->width * BYTES_PER_PIXEL);
+    image->pixels = (uint8_t *)memory_alloc(image->height * image->width * BYTES_PER_PIXEL);
     image->is_chals = 0x00;
     image->chals = NULL;
     // Return the pointer to the newly created Image structure
@@ -83,7 +104,7 @@ Image *createImage(ImageResolution resolution, ImageFormat format)
  */
 Image *createImageWH(int width, int height, ImageFormat format)
 {
-    Image *image = (Image *)malloc(sizeof(Image));
+    Image *image = (Image *)memory_alloc(sizeof(Image));
     if (image == NULL)
         return NULL;
 
@@ -93,24 +114,24 @@ Image *createImageWH(int width, int height, ImageFormat format)
     image->format = format;
     image->log = IMAGE_DATA_PIXELS;
 
-    uint32_t bytes_per_pixel;
+    // uint32_t bytes_per_pixel;
     switch (format)
     {
     case IMAGE_FORMAT_GRAYSCALE:
         image->depth = IMAGE_DEPTH_U8;
-        bytes_per_pixel = BYTES_U8;
+        // bytes_per_pixel = BYTES_U8;
         break;
     case IMAGE_FORMAT_RGB565:
         image->depth = IMAGE_DEPTH_U16;
-        bytes_per_pixel = BYTES_U16;
+        // bytes_per_pixel = BYTES_U16;
         break;
     default:
         image->depth = IMAGE_DEPTH_U24;
-        bytes_per_pixel = BYTES_U24;
+        // bytes_per_pixel = BYTES_U24;
         break;
     }
 
-    image->pixels = (uint8_t *)malloc(image->size * BYTES_PER_PIXEL); // always 4B (float)
+    image->pixels = (uint8_t *)memory_alloc(image->size * BYTES_PER_PIXEL); // always 4B (float)
     image->is_chals = 0;
     image->chals = NULL;
 
@@ -150,10 +171,14 @@ void createChals(Image *inImg, uint8_t numChals)
 {
     if (inImg->chals == NULL)
     {
-        inImg->chals = (channels_t *)malloc(sizeof(channels_t));
+        inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
     }
     for (int i = 0; i < numChals; i++)
     {
-        inImg->chals->ch[i] = (float *)malloc(inImg->height * inImg->width * sizeof(float) * 2);
+        inImg->chals->ch[i] = (float *)memory_alloc(inImg->height * inImg->width * sizeof(float) * 2);
     }
 }
+
+#endif
+
+#endif

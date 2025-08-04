@@ -1,10 +1,15 @@
 #ifndef MEMORY_MANAGER_H
 #define MEMORY_MANAGER_H
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 #include <stdint.h>
 #include <stddef.h>
 
-// TODO taşınacak
+    // TODO taşınacak
 
 #define SDRAM_BANK_ADDR ((uint32_t)0xC0100000)
 
@@ -14,11 +19,15 @@
 #define BYTES_F32 4
 #define BYTES_PER_PIXEL 4 // if you're forcing float allocation
 
-// Configurable base address and size of the SRAM memory pool
+    // Configurable base address and size of the SRAM memory pool
 
-void memory_init(void);
-void *memory_alloc(size_t size);
-void memory_free(void *ptr);
-void *memory_realloc(void *ptr, size_t new_size);
+    void memory_init(void);
+    void *memory_alloc(size_t size);
+    void memory_free(void *ptr);
+    void *memory_realloc(void *ptr, size_t new_size);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // MEMORY_MANAGER_H

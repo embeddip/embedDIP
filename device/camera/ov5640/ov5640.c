@@ -1,3 +1,6 @@
+#include <embedDIP_configs.h>
+
+#ifdef DEVICE_OV5640
 /**
  ******************************************************************************
  * @file    ov5640.c
@@ -368,10 +371,10 @@ const uint16_t OV5640_480x272[][2] =
         {0x380b, 0x10},
         //{0x4300, 0x10},// 0x6F for RGB
         //{0x4300, 0x23}, //rgb 888
-        {0x4300, 0x6F}, //rgb 565
+        {0x4300, 0x6F}, // rgb 565
         {0x4740, 0x22},
         //{0x501f, 0x00},// 0x01 for RGB 0x00 for Grayscale
-        {0x501f, 0x01},// 0x01 for RGB
+        {0x501f, 0x01}, // 0x01 for RGB
 };
 
 const uint16_t OV5640_QVGA[][2] =
@@ -394,10 +397,10 @@ const uint16_t OV5640_QQVGA[][2] =
         {0x380b, 0x78},
         //{0x4300, 0x10},// 0x6F for RGB
         //{0x4300, 0x23}, //rgb 888
-        {0x4300, 0x6F}, //rgb 565
+        {0x4300, 0x6F}, // rgb 565
         {0x4740, 0x22},
         //{0x501f, 0x00},// 0x01 for RGB 0x00 for Grayscale
-        {0x501f, 0x01},// 0x01 for RGB
+        {0x501f, 0x01}, // 0x01 for RGB
 };
 
 /* OV5640 Light Mode setting */
@@ -881,7 +884,10 @@ void OV5640_SetContrast(uint16_t DeviceAddr, uint8_t Level)
  */
 void OV5640_SetPixelFormat(uint16_t DeviceAddr, uint8_t Level)
 {
-  // TODO
+  (void)DeviceAddr;
+  (void)Level;
+
+  // TODO: Implement pixel format setting
 }
 
 /**
@@ -1322,3 +1328,5 @@ static uint32_t ov5640_ConvertValue(uint32_t feature, uint32_t value)
  */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
+#endif

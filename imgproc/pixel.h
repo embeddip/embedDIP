@@ -2,6 +2,12 @@
 #define PIXEL_H
 
 #include "core/image.h"
+#include "core/memory_manager.h"
+#include <board/common.h>
+#include <math.h>
+#include <stdint.h>
+#include <float.h>
+#include <assert.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -110,6 +116,23 @@ extern "C"
      * @param[in]  k       Number of clusters.
      */
     void colorKMeans(const Image *inImg, Image *outImg, int k);
+
+    void resize(Image *inImg, Image *outImg, int size);
+
+    void dist(const Image *inImg, Image *outImg, uint8_t R_ref, uint8_t G_ref, uint8_t B_ref);
+
+    void add(const Image *img1, const Image *img2, Image *outImg);
+
+    void normalize(Image *inImg);
+
+    /**
+     * @brief Converts raw pixel data to high-precision floating-point channels.
+     *
+     * This function allocates and fills `chals` from raw `pixels` depending on format and depth.
+     *
+     * @param inImg Pointer to the image whose pixels will be converted.
+     */
+    void convertTo(Image *inImg); // TODO: Implement
 
 #ifdef __cplusplus
 }

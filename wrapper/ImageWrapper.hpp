@@ -128,15 +128,17 @@ namespace embedDIP
 
         void convertTo();
 
+#ifdef STM32F7xx
+
         void fft(Image &out) const;
 
-        void _abs(Image &out) const;
+        void _abs_(Image &out) const;
 
-        void _phase(Image &out) const;
+        void _phase_(Image &out) const;
 
-        void _log() const;
+        void _log_() const;
 
-        void _add(float value) const;
+        void _add_(float value) const;
 
         void ifft(Image &out) const;
 
@@ -144,14 +146,20 @@ namespace embedDIP
 
         void multiply(const Image &other, Image &out) const;
 
-        void createFrequencyMask(FrequencyFilterType type, float cutoff1, float cutoff2);
-
         void fftshift();
 
         void ifftshift();
 
+        void createFrequencyMask(FrequencyFilterType type, float cutoff1, float cutoff2);
+
         void getFilter(FrequencyFilterType type, float cutoff1);                // 2 args
         void getFilter(FrequencyFilterType type, float cutoff1, float cutoff2); // 3 args
+
+        void ffilter2D(const Image &filterMask, Image &out) const;
+
+        void difference(const Image &other, Image &out) const;
+
+#endif
 
         /**
          * @brief Converts this image to a different format and stores it in the provided output image.
@@ -160,10 +168,6 @@ namespace embedDIP
          * @param[in]  code Conversion code defined in the ColorConversionCode enum.
          */
         void cvtColor(Image &out, ColorConversionCode code) const;
-
-        void ffilter2D(const Image &filterMask, Image &out) const;
-
-        void difference(const Image &other, Image &out) const;
 
         void bitwiseAnd(const Image &other, Image &out) const;
         void bitwiseOr(const Image &other, Image &out) const;

@@ -9,16 +9,17 @@ uint8_t channel_mask[] = {
     0xF7,
 };
 
+// i am not sure about the kernel.
 void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
 {
 
     Filter2DContext *context = (Filter2DContext *)ctx;
     int size = context->size;
-    float(*filter)[size] = (float(*)[size])context->kernel;
+    int k = size / 2;
+    float *kernel = context->kernel;
 
     int width = inImg->width;
     int height = inImg->height;
-    int half = size / 2;
 
     float *inCh = NULL;
 
@@ -85,9 +86,9 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
         {
             float sum = 0.0f;
 
-            for (int fy = -half; fy <= half; ++fy)
+            for (int fy = -k; fy <= k; ++fy)
             {
-                for (int fx = -half; fx <= half; ++fx)
+                for (int fx = -k; fx <= k; ++fx)
                 {
                     int iy = y + fy;
                     int ix = x + fx;
@@ -96,7 +97,7 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
                     if (iy >= 0 && iy < height && ix >= 0 && ix < width)
                         val = inCh[iy * width + ix];
 
-                    sum += val * filter[fy + half][fx + half];
+                    sum += val * kernel[(fy + k) * size + (fx + k)];
                 }
             }
 
@@ -107,7 +108,8 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
 
 void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
 {
-    int size = sizeX;
+    assert(kernelY == kernelX);
+
     int half = sizeX / 2;
 
     int width = inImg->width;
@@ -266,9 +268,9 @@ void minFilter(const Image *inImg, Image *outImg, int kernelSize)
     if (isChalsEmpty(inImg))
     {
 
-        for (int y = 0; y < inImg->height; ++y)
+        for (uint32_t y = 0; y < inImg->height; ++y)
         {
-            for (int x = 0; x < inImg->width; ++x)
+            for (uint32_t x = 0; x < inImg->width; ++x)
             {
                 uint8_t minPixelValue = MAX_INTENSITY;
 
@@ -279,8 +281,8 @@ void minFilter(const Image *inImg, Image *outImg, int kernelSize)
                         int offsetX = x + kx;
                         int offsetY = y + ky;
 
-                        if (offsetX >= 0 && offsetX < inImg->width &&
-                            offsetY >= 0 && offsetY < inImg->height)
+                        if (offsetX >= 0 && offsetX < (int)inImg->width &&
+                            offsetY >= 0 && offsetY < (int)inImg->height)
                         {
                             uint8_t pixelValue = (uint8_t)((uint8_t *)inImg->pixels)[offsetY * inImg->width + offsetX];
                             if (pixelValue < minPixelValue)
@@ -298,9 +300,9 @@ void minFilter(const Image *inImg, Image *outImg, int kernelSize)
     else
     {
 
-        for (int y = 0; y < inImg->height; ++y)
+        for (uint32_t y = 0; y < inImg->height; ++y)
         {
-            for (int x = 0; x < inImg->width; ++x)
+            for (uint32_t x = 0; x < inImg->width; ++x)
             {
                 float minPixelValue = FLT_MAX;
 
@@ -311,8 +313,8 @@ void minFilter(const Image *inImg, Image *outImg, int kernelSize)
                         int offsetX = x + kx;
                         int offsetY = y + ky;
 
-                        if (offsetX >= 0 && offsetX < inImg->width &&
-                            offsetY >= 0 && offsetY < inImg->height)
+                        if (offsetX >= 0 && offsetX < (int)inImg->width &&
+                            offsetY >= 0 && offsetY < (int)inImg->height)
                         {
                             float pixelValue = inImg->chals->ch[0][offsetY * inImg->width + offsetX];
                             if (pixelValue < minPixelValue)
@@ -349,9 +351,9 @@ void maxFilter(const Image *inImg, Image *outImg, int kernelSize)
 
     if (isChalsEmpty(inImg))
     {
-        for (int y = 0; y < inImg->height; ++y)
+        for (uint32_t y = 0; y < inImg->height; ++y)
         {
-            for (int x = 0; x < inImg->width; ++x)
+            for (uint32_t x = 0; x < inImg->width; ++x)
             {
                 uint8_t maxPixelValue = 0;
 
@@ -362,8 +364,8 @@ void maxFilter(const Image *inImg, Image *outImg, int kernelSize)
                         int offsetX = x + kx;
                         int offsetY = y + ky;
 
-                        if (offsetX >= 0 && offsetX < inImg->width &&
-                            offsetY >= 0 && offsetY < inImg->height)
+                        if (offsetX >= 0 && offsetX < (int)inImg->width &&
+                            offsetY >= 0 && offsetY < (int)inImg->height)
                         {
                             uint8_t pixelValue = (uint8_t)((uint8_t *)inImg->pixels)[offsetY * inImg->width + offsetX];
                             if (pixelValue > maxPixelValue)
@@ -380,9 +382,9 @@ void maxFilter(const Image *inImg, Image *outImg, int kernelSize)
     }
     else
     {
-        for (int y = 0; y < inImg->height; ++y)
+        for (uint32_t y = 0; y < inImg->height; ++y)
         {
-            for (int x = 0; x < inImg->width; ++x)
+            for (uint32_t x = 0; x < inImg->width; ++x)
             {
                 uint8_t maxPixelValue = 0;
 
@@ -393,8 +395,8 @@ void maxFilter(const Image *inImg, Image *outImg, int kernelSize)
                         int offsetX = x + kx;
                         int offsetY = y + ky;
 
-                        if (offsetX >= 0 && offsetX < inImg->width &&
-                            offsetY >= 0 && offsetY < inImg->height)
+                        if (offsetX >= 0 && offsetX < (int)inImg->width &&
+                            offsetY >= 0 && offsetY < (int)inImg->height)
                         {
                             float pixelValue = (float)inImg->chals->ch[0][offsetY * inImg->width + offsetX];
                             if (pixelValue > maxPixelValue)
@@ -434,9 +436,9 @@ void medianFilter(const Image *inImg, Image *outImg, int kernelSize)
     // Temporary buffer to store window values
     float *window = (float *)memory_alloc(sizeof(float) * windowArea);
 
-    for (int y = 0; y < inImg->height; ++y)
+    for (uint32_t y = 0; y < inImg->height; ++y)
     {
-        for (int x = 0; x < inImg->width; ++x)
+        for (uint32_t x = 0; x < inImg->width; ++x)
         {
             int count = 0;
 
@@ -447,8 +449,8 @@ void medianFilter(const Image *inImg, Image *outImg, int kernelSize)
                     int offsetX = x + kx;
                     int offsetY = y + ky;
 
-                    if (offsetX >= 0 && offsetX < inImg->width &&
-                        offsetY >= 0 && offsetY < inImg->height)
+                    if (offsetX >= 0 && offsetX < (int)inImg->width &&
+                        offsetY >= 0 && offsetY < (int)inImg->height)
                     {
                         float val;
                         if (isChalsEmpty(inImg))
@@ -487,6 +489,8 @@ void medianFilter(const Image *inImg, Image *outImg, int kernelSize)
             outImg->chals->ch[0][y * inImg->width + x] = median;
         }
     }
+
+    outImg->log = IMAGE_DATA_CH0;
 }
 
 void rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg)
@@ -694,7 +698,10 @@ void dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2)
     outImg->log = IMAGE_DATA_CH0;
 }
 
-#define M_PI   3.14159265358979323846264338327950288
+#ifndef M_PI
+#define M_PI 3.14159265358979323846264338327950288
+#endif
+
 /**
  * @brief Applies Laplacian of Gaussian (LoG) filtering to a grayscale image.
  *

@@ -1,3 +1,5 @@
+#ifdef STM32F7xx
+
 #include <fft.h>
 
 /**
@@ -824,3 +826,5 @@ void phase(const Image *inImg, Image *outImg)
 }
 
 */
+
+#endif

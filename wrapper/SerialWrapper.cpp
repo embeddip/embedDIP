@@ -4,40 +4,40 @@
 namespace embedDIP
 {
 
-    Serial::Serial(serial_t *driver)
+    SERIAL_CLASS_NAME::SERIAL_CLASS_NAME(serial_t *driver)
         : driver_(driver) {}
 
-    void Serial::init()
+    void SERIAL_CLASS_NAME::init()
     {
         assert(driver_ && driver_->init);
         driver_->init();
     }
 
-    void Serial::flush()
+    void SERIAL_CLASS_NAME::flush()
     {
         assert(driver_ && driver_->flush);
         driver_->flush();
     }
 
-    void Serial::capture(Image &img)
+    void SERIAL_CLASS_NAME::capture(Image &img)
     {
         assert(driver_ && driver_->capture);
         driver_->capture(img.raw());
     }
 
-    void Serial::send(const Image &img)
+    void SERIAL_CLASS_NAME::send(const Image &img)
     {
         assert(driver_ && driver_->send);
         driver_->send(img.raw());
     }
 
-    void Serial::sendJPEG(const Image &img)
+    void SERIAL_CLASS_NAME::sendJPEG(const Image &img)
     {
         assert(driver_ && driver_->sendJPEG);
         driver_->sendJPEG(img.raw());
     }
 
-    void Serial::send1D(const void *data, uint8_t elem_size, uint32_t length, Serial1DDataType type)
+    void SERIAL_CLASS_NAME::send1D(const void *data, uint8_t elem_size, uint32_t length, Serial1DDataType type)
     {
         assert(driver_ && driver_->send1D);
         driver_->send1D(data, elem_size, length, type);

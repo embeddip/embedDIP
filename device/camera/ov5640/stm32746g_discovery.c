@@ -1,3 +1,6 @@
+#include <embedDIP_configs.h>
+
+#ifdef DEVICE_OV5640
 /**
   ******************************************************************************
   * @file    stm32746g_discovery.c
@@ -921,3 +924,4 @@ void TS_IO_Delay(uint32_t Delay)
   * @}
   */    
     
+#endif

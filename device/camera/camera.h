@@ -58,6 +58,7 @@ extern "C"
 
     // External declaration of STM32 implementation
     extern camera_t stm32_ov5640;
+    extern camera_t esp32_ov2640;
 
     typedef struct
     {

@@ -1,3 +1,6 @@
+#include <embedDIP_configs.h>
+
+#ifdef DEVICE_OV5640
 /**
  ******************************************************************************
  * @file    ov5640.h
@@ -201,3 +204,5 @@ extern "C"
  */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
+#endif

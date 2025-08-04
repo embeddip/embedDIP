@@ -3,7 +3,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "core/image.h" // Assume `Image*` is defined here
+#include "core/image.h"
+#include "embedDIP_configs.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -24,7 +25,7 @@ extern "C"
     typedef struct serial_interface
     {
         void (*init)(void);
-        void (*flush)(void);//not known.
+        void (*flush)(void); // not known.
         void (*capture)(Image *img);
         void (*send)(const Image *img);
         void (*sendJPEG)(const Image *img);
@@ -33,9 +34,14 @@ extern "C"
 
     int _write(int file, char *ptr, int len);
 
-    // External declaration of STM32 implementation
+// External declaration of STM32 implementation
+#ifdef TARGET_BOARD_STM32F7
     extern serial_t stm32_uart;
+#endif
+
+#ifdef TARGET_BOARD_ESP32
     extern serial_t esp32_uart;
+#endif
 
 #ifdef __cplusplus
 }

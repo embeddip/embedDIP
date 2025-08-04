@@ -55,7 +55,7 @@ int histEq(const Image *inImg, Image *outImg)
 
     if (isChalsEmpty(inImg))
     {
-        createChals(inImg, inImg->depth);
+        createChals((Image *)inImg, inImg->depth);
 
         int histogram[256] = {0};
         int totalPixels = inImg->width * inImg->height;
@@ -135,7 +135,6 @@ int histEq(const Image *inImg, Image *outImg)
 int histSpec(const Image *inImg, Image *outImg, const int *targetHistogram)
 {
 
-    int histogram[256] = {0};
     int totalPixels = inImg->width * inImg->height;
 
     if (isChalsEmpty(outImg))
@@ -146,7 +145,8 @@ int histSpec(const Image *inImg, Image *outImg, const int *targetHistogram)
 
     if (isChalsEmpty(inImg))
     {
-        createChals(inImg, inImg->depth);
+
+        createChals((Image *)inImg, inImg->depth);
 
         const int totalPixels = inImg->width * inImg->height;
         const uint8_t *inputData = (uint8_t *)inImg->pixels;

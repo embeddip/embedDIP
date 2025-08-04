@@ -227,7 +227,8 @@ namespace embedDIP
         // Create and fill Filter2DContext
         Filter2DContext context;
         context.size = size;
-        context.kernel = reinterpret_cast<float(*)[size]>(kernelFlat); // not the best solution.
+        // context.kernel = reinterpret_cast<float(*)[size]>(kernelFlat); // not the best solution.
+        context.kernel = kernelFlat; // not the best solution.
 
         // Dispatch filtering based on format
         if (raw()->format == IMAGE_FORMAT_GRAYSCALE)
@@ -353,28 +354,28 @@ namespace embedDIP
     }
 
     // Fourier Transform
-
+#ifdef STM32F7xx
     void Image::fft(Image &out) const
     {
         ::fft(raw(), out.raw());
     }
 
-    void Image::_abs(Image &out) const
+    void Image::_abs_(Image &out) const
     {
         ::_abs(raw(), out.raw());
     }
 
-    void Image::_phase(Image &out) const
+    void Image::_phase_(Image &out) const
     {
         ::_phase(raw(), out.raw());
     }
 
-    void Image::_log() const
+    void Image::_log_() const
     {
         ::logImage(raw());
     }
 
-    void Image::_add(float value) const
+    void Image::_add_(float value) const
     {
         ::addScalar(raw(), value);
     }
@@ -409,27 +410,6 @@ namespace embedDIP
         ::multiply(raw(), other.raw(), out.raw());
     }
 
-    void Image::createFrequencyMask(FrequencyFilterType type, float cutoff1, float cutoff2)
-    {
-        ::getMask(raw(), type, cutoff1, cutoff2);
-    }
-
-    void Image::getFilter(FrequencyFilterType type, float cutoff1, float cutoff2)
-    {
-        ::getFilter(raw(), type, cutoff1, cutoff2);
-    }
-
-    void Image::getFilter(FrequencyFilterType type, float cutoff1)
-    {
-        float dummyCutoff2 = 0.0f; // fallback value (won't be used for low/high-pass)
-        ::getFilter(raw(), type, cutoff1, dummyCutoff2);
-    }
-
-    void Image::cvtColor(Image &out, ColorConversionCode code) const
-    {
-        ::cvtColor(raw(), out.raw(), code);
-    }
-
     void Image::ffilter2D(const Image &filterMask, Image &out) const
     {
         ::ffilter2D(raw(), filterMask.raw(), out.raw());
@@ -446,6 +426,29 @@ namespace embedDIP
     void Image::difference(const Image &other, Image &out) const
     {
         ::difference(raw(), other.raw(), out.raw());
+    }
+
+    void Image::createFrequencyMask(FrequencyFilterType type, float cutoff1, float cutoff2)
+    {
+        ::getMask(raw(), type, cutoff1, cutoff2);
+    }
+
+    void Image::getFilter(FrequencyFilterType type, float cutoff1, float cutoff2)
+    {
+        ::getFilter(raw(), type, cutoff1, cutoff2);
+    }
+
+    void Image::getFilter(FrequencyFilterType type, float cutoff1)
+    {
+        float dummyCutoff2 = 0.0f; // fallback value (won't be used for low/high-pass)
+        ::getFilter(raw(), type, cutoff1, dummyCutoff2);
+    }
+
+#endif
+
+    void Image::cvtColor(Image &out, ColorConversionCode code) const
+    {
+        ::cvtColor(raw(), out.raw(), code);
     }
 
     /**

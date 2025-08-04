@@ -1,3 +1,7 @@
+#include <embedDIP_configs.h>
+
+#ifdef DEVICE_OV5640
+
 #include "device/serial/serial.h"
 #include "stm32f7xx_hal.h"
 #include <stdio.h>
@@ -26,24 +30,19 @@ typedef enum
 
 CAMERA_DrvTypeDef *camera_driv;
 /* Camera module I2C HW address */
-static uint32_t CameraHwAddress;
 /* Image size */
 uint32_t Im_size = 0;
-
-/* Camera resolution is QWVGA (480x272) */
-static uint32_t CameraResX = QVGA_RES_X;
-static uint32_t CameraResY = QVGA_RES_Y;
-static uint32_t LcdResX = WQVGA_RES_X; /* QWVGA landscape */
-static uint32_t LcdResY = WQVGA_RES_Y;
-
-static uint32_t offset_cam = 0;
-static uint32_t offset_lcd = 0;
 
 __IO uint16_t pBuffer[QVGA_RES_X * QVGA_RES_Y];
 HAL_StatusTypeDef hal_status = HAL_OK;
 
 uint8_t CAMERA_Init(uint32_t Resolution) /*Camera initialization*/
 {
+    (void)Resolution;
+
+    // TODO:
+
+    return 0;
 }
 
 /**
@@ -94,6 +93,7 @@ void CAMERA_PwrDown(void)
     HAL_GPIO_WritePin(GPIOH, GPIO_PIN_13, GPIO_PIN_SET);
 }
 
+/*
 static void test_ConvertLineRGB565ToARGB8888()
 {
     // white/magenta test color pattern
@@ -115,6 +115,7 @@ static void test_ConvertLineRGB565ToARGB8888()
         offset_lcd = offset_lcd + (LcdResX * sizeof(uint32_t));
     }
 }
+*/
 
 static void camera_init(ImageResolution resolution)
 {
@@ -130,7 +131,7 @@ static void camera_init(ImageResolution resolution)
     CAMERA_PwrUp();
     HAL_Delay(1000);
 
-    uint8_t status = CAMERA_ERROR;
+    // uint8_t status = CAMERA_ERROR;
     /* Read ID of Camera module via I2C */
     if (ov5640_ReadID(CAMERA_I2C_ADDRESS) == OV5640_ID)
     {
@@ -140,11 +141,11 @@ static void camera_init(ImageResolution resolution)
         HAL_DCMI_DisableCROP(&hdcmi);
         HAL_Delay(500);
 
-        status = CAMERA_OK; /* Return CAMERA_OK status */
+        // status = CAMERA_OK; /* Return CAMERA_OK status */
     }
     else
     {
-        status = CAMERA_NOT_SUPPORTED; /* Return CAMERA_NOT_SUPPORTED status */
+        // status = CAMERA_NOT_SUPPORTED; /* Return CAMERA_NOT_SUPPORTED status */
     }
 
     HAL_Delay(1000); // Delay for the camera to output correct data
@@ -183,7 +184,7 @@ static void camera_setRes(ImageResolution resolution)
     CAMERA_PwrDown();
     CAMERA_PwrUp();
 
-    uint8_t status = CAMERA_ERROR;
+    // uint8_t status = CAMERA_ERROR;
     /* Read ID of Camera module via I2C */
     if (ov5640_ReadID(CAMERA_I2C_ADDRESS) == OV5640_ID)
     {
@@ -193,11 +194,11 @@ static void camera_setRes(ImageResolution resolution)
         HAL_DCMI_DisableCROP(&hdcmi);
         HAL_Delay(500);
 
-        status = CAMERA_OK; /* Return CAMERA_OK status */
+        // status = CAMERA_OK; /* Return CAMERA_OK status */
     }
     else
     {
-        status = CAMERA_NOT_SUPPORTED; /* Return CAMERA_NOT_SUPPORTED status */
+        // status = CAMERA_NOT_SUPPORTED; /* Return CAMERA_NOT_SUPPORTED status */
     }
 
     HAL_Delay(1000); // Delay for the camera to output correct data
@@ -209,3 +210,5 @@ camera_t stm32_ov5640 = {
     .capture = camera_capture,
     .stop = camera_stop,
     .setRes = camera_setRes};
+
+#endif

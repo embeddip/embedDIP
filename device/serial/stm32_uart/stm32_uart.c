@@ -1,3 +1,7 @@
+#include <embedDIP_configs.h>
+
+#ifdef DEVICE_STM32_UART
+
 #include "device/serial/serial.h"
 #include "stm32f7xx_hal.h"
 #include <stdio.h>
@@ -334,3 +338,5 @@ serial_t stm32_uart = {
     .send1D = serial_send_1d,
     .flush = serial_flush,
 };
+
+#endif

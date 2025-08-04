@@ -1,5 +1,11 @@
+#ifdef STM32F7xx
+
 #ifndef FFT_H
 #define FFT_H
+
+#ifndef __FPU_PRESENT
+#define __FPU_PRESENT 1
+#endif
 
 #include <stdint.h>
 #include <stdio.h>
@@ -50,7 +56,7 @@ extern "C"
 
     /// test
 
-    static bool isValidFFTSize(int w, int h);
+    // static bool isValidFFTSize(int w, int h);
     int fft(const Image *inImg, Image *outImg);
     int ifft(const Image *inImg, Image *outImg);
     void _abs(const Image *fftImg, Image *magImg);
@@ -67,3 +73,5 @@ extern "C"
 #endif
 
 #endif // FFT_H
+
+#endif

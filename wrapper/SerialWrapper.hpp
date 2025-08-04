@@ -3,18 +3,25 @@
 extern "C"
 {
 #include "device/serial/serial.h"
+#include "embedDIP_configs.h"
 }
 
 #include "ImageWrapper.hpp"
 #include <cstdint>
-
 namespace embedDIP
 {
 
-    class Serial
+// Define class name based on platform
+#if defined(ARDUINO_ARCH_ESP32)
+#define SERIAL_CLASS_NAME SerialDev
+#else
+#define SERIAL_CLASS_NAME Serial
+#endif
+
+    class SERIAL_CLASS_NAME
     {
     public:
-        explicit Serial(serial_t *driver);
+        explicit SERIAL_CLASS_NAME(serial_t *driver);
 
         void init();
         void flush();

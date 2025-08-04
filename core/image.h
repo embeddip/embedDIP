@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include "assert.h"
 #include <string.h>
+#include <math.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -22,54 +23,155 @@ extern "C"
      * @enum image_resolution_t
      * @brief Predefined image resolutions with associated indices.
      */
+    /**
+     * @enum ImageResolution
+     * @brief Predefined image resolutions with associated indices.
+     */
     typedef enum
     {
-        IMAGE_RES_QQVGA = 0, /**< 160x120 resolution */
-        IMAGE_RES_QVGA = 1,  /**< 320x240 resolution */
-        IMAGE_RES_WQVGA = 2, /**< 480x272 resolution */
-        IMAGE_RES_VGA = 3,   /**< 640x480 resolution */
-        IMAGE_RES_CUSTOM = 4
+        IMAGE_RES_96X96 = 0, /**< 96x96 resolution */
+        IMAGE_RES_QQVGA,     /**< 160x120 resolution */
+        IMAGE_RES_QCIF,      /**< 176x144 resolution */
+        IMAGE_RES_HQVGA,     /**< 240x176 resolution */
+        IMAGE_RES_240X240,   /**< 240x240 resolution */
+        IMAGE_RES_QVGA,      /**< 320x240 resolution */
+        IMAGE_RES_CIF,       /**< 352x288 resolution */
+        IMAGE_RES_HVGA,      /**< 480x320 resolution */
+        IMAGE_RES_VGA,       /**< 640x480 resolution */
+        IMAGE_RES_SVGA,      /**< 800x600 resolution */
+        IMAGE_RES_XGA,       /**< 1024x768 resolution */
+        IMAGE_RES_HD,        /**< 1280x720 resolution */
+        IMAGE_RES_SXGA,      /**< 1280x1024 resolution */
+        IMAGE_RES_UXGA,      /**< 1600x1200 resolution */
+        IMAGE_RES_FHD,       /**< 1920x1080 resolution */
+        IMAGE_RES_P_HD,      /**< 720x1280 resolution (portrait HD) */
+        IMAGE_RES_P_3MP,     /**< 864x1536 resolution (portrait 3MP) */
+        IMAGE_RES_QXGA,      /**< 2048x1536 resolution */
+        IMAGE_RES_QHD,       /**< 2560x1440 resolution */
+        IMAGE_RES_WQXGA,     /**< 2560x1600 resolution */
+        IMAGE_RES_P_FHD,     /**< 1080x1920 resolution (portrait FHD) */
+        IMAGE_RES_QSXGA,     /**< 2560x1920 resolution */
+        IMAGE_RES_INVALID,
+        IMAGE_RES_CUSTOM, /**< User-defined resolution */
+        IMAGE_RES_WQVGA   /**< 480x272 resolution (custom addition) */
     } ImageResolution;
 
 /** @name Resolution dimensions
  *  @brief Image width and height definitions for each resolution.
  *  @{
  */
+#define IMAGE_RES_96X96_Width 96
+#define IMAGE_RES_96X96_Height 96
 #define IMAGE_RES_QQVGA_Width 160
 #define IMAGE_RES_QQVGA_Height 120
+#define IMAGE_RES_QCIF_Width 176
+#define IMAGE_RES_QCIF_Height 144
+#define IMAGE_RES_HQVGA_Width 240
+#define IMAGE_RES_HQVGA_Height 176
+#define IMAGE_RES_240X240_Width 240
+#define IMAGE_RES_240X240_Height 240
 #define IMAGE_RES_QVGA_Width 320
 #define IMAGE_RES_QVGA_Height 240
+#define IMAGE_RES_CIF_Width 352
+#define IMAGE_RES_CIF_Height 288
+#define IMAGE_RES_HVGA_Width 480
+#define IMAGE_RES_HVGA_Height 320
 #define IMAGE_RES_WQVGA_Width 480
 #define IMAGE_RES_WQVGA_Height 272
 #define IMAGE_RES_VGA_Width 640
 #define IMAGE_RES_VGA_Height 480
+#define IMAGE_RES_SVGA_Width 800
+#define IMAGE_RES_SVGA_Height 600
+#define IMAGE_RES_XGA_Width 1024
+#define IMAGE_RES_XGA_Height 768
+#define IMAGE_RES_HD_Width 1280
+#define IMAGE_RES_HD_Height 720
+#define IMAGE_RES_SXGA_Width 1280
+#define IMAGE_RES_SXGA_Height 1024
+#define IMAGE_RES_UXGA_Width 1600
+#define IMAGE_RES_UXGA_Height 1200
+#define IMAGE_RES_FHD_Width 1920
+#define IMAGE_RES_FHD_Height 1080
+#define IMAGE_RES_P_HD_Width 720
+#define IMAGE_RES_P_HD_Height 1280
+#define IMAGE_RES_P_3MP_Width 864
+#define IMAGE_RES_P_3MP_Height 1536
+#define IMAGE_RES_QXGA_Width 2048
+#define IMAGE_RES_QXGA_Height 1536
+#define IMAGE_RES_QHD_Width 2560
+#define IMAGE_RES_QHD_Height 1440
+#define IMAGE_RES_WQXGA_Width 2560
+#define IMAGE_RES_WQXGA_Height 1600
+#define IMAGE_RES_P_FHD_Width 1080
+#define IMAGE_RES_P_FHD_Height 1920
+#define IMAGE_RES_QSXGA_Width 2560
+#define IMAGE_RES_QSXGA_Height 1920
+
+#define IMAGE_RES_INVALID_Width 0xFF
+#define IMAGE_RES_INVALID_Height 0xFF
+
+#define IMAGE_RES_CUSTOM_Width 0xEF
+#define IMAGE_RES_CUSTOM_Height 0xEF
+
     /** @} */
 
     /**
      * @brief Lookup table for image widths by resolution index.
      */
     static const uint16_t RES_WIDTH_LOOKUP[] = {
-        IMAGE_RES_QQVGA_Width, /**< QQVGA width */
-        IMAGE_RES_QVGA_Width,  /**< QVGA width */
-        IMAGE_RES_WQVGA_Width, /**< WQVGA width */
-        IMAGE_RES_VGA_Width    /**< VGA width */
+        IMAGE_RES_96X96_Width,
+        IMAGE_RES_QQVGA_Width,
+        IMAGE_RES_QCIF_Width,
+        IMAGE_RES_HQVGA_Width,
+        IMAGE_RES_240X240_Width,
+        IMAGE_RES_QVGA_Width,
+        IMAGE_RES_CIF_Width,
+        IMAGE_RES_HVGA_Width,
+        IMAGE_RES_VGA_Width,
+        IMAGE_RES_SVGA_Width,
+        IMAGE_RES_XGA_Width,
+        IMAGE_RES_HD_Width,
+        IMAGE_RES_SXGA_Width,
+        IMAGE_RES_UXGA_Width,
+        IMAGE_RES_FHD_Width,
+        IMAGE_RES_P_HD_Width,
+        IMAGE_RES_P_3MP_Width,
+        IMAGE_RES_QXGA_Width,
+        IMAGE_RES_QHD_Width,
+        IMAGE_RES_WQXGA_Width,
+        IMAGE_RES_P_FHD_Width,
+        IMAGE_RES_QSXGA_Width,
+        IMAGE_RES_INVALID_Width,
+        IMAGE_RES_CUSTOM_Width,
+        IMAGE_RES_WQVGA_Width,
     };
 
-    /**
-     * @brief Lookup table for image heights by resolution index.
-     */
     static const uint16_t RES_HEIGHT_LOOKUP[] = {
-        IMAGE_RES_QQVGA_Height, /**< QQVGA height */
-        IMAGE_RES_QVGA_Height,  /**< QVGA height */
-        IMAGE_RES_WQVGA_Height, /**< WQVGA height */
-        IMAGE_RES_VGA_Height    /**< VGA height */
-    };
-
-/**
- * @def WRITE_READ_ADDR
- * @brief SDRAM base address for read/write operations.
- */
-#define WRITE_READ_ADDR ((uint32_t)0x100000)
+        IMAGE_RES_96X96_Height,
+        IMAGE_RES_QQVGA_Height,
+        IMAGE_RES_QCIF_Height,
+        IMAGE_RES_HQVGA_Height,
+        IMAGE_RES_240X240_Height,
+        IMAGE_RES_QVGA_Height,
+        IMAGE_RES_CIF_Height,
+        IMAGE_RES_HVGA_Height,
+        IMAGE_RES_VGA_Height,
+        IMAGE_RES_SVGA_Height,
+        IMAGE_RES_XGA_Height,
+        IMAGE_RES_HD_Height,
+        IMAGE_RES_SXGA_Height,
+        IMAGE_RES_UXGA_Height,
+        IMAGE_RES_FHD_Height,
+        IMAGE_RES_P_HD_Height,
+        IMAGE_RES_P_3MP_Height,
+        IMAGE_RES_QXGA_Height,
+        IMAGE_RES_QHD_Height,
+        IMAGE_RES_WQXGA_Height,
+        IMAGE_RES_P_FHD_Height,
+        IMAGE_RES_QSXGA_Height,
+        IMAGE_RES_INVALID_Height,
+        IMAGE_RES_CUSTOM_Height,
+        IMAGE_RES_WQVGA_Height};
 
     /**
      * @enum ImageFormat
@@ -134,20 +236,33 @@ extern "C"
      */
     typedef struct
     {
-        union
-        {
-            float *ch[6]; /**< Array-style access: ch[0] = l/r, ch[1] = g, etc. */
 
-            struct
-            {
-                float *l;  /**< Luminance or grayscale channel (same as ch[0]) */
-                float *r;  /**< Red channel (same as ch[1]) */
-                float *g;  /**< Green channel (same as ch[2]) */
-                float *b;  /**< Blue channel (same as ch[3]) */
-                float *fx; /**< Optional horizontal FFT data */
-                float *fy; /**< Optional vertical FFT data */
-            };
-        };
+#ifdef __cplusplus
+
+        float *ch[6]; /**< Array-style access: ch[0] = l/r, ch[1] = g, etc. */
+
+        float *&l() { return ch[0]; }  /**< Luminance or grayscale channel (same as ch[0]) */
+        float *&r() { return ch[1]; }  /**< Red channel (same as ch[1]) */
+        float *&g() { return ch[2]; }  /**< Green channel (same as ch[2]) */
+        float *&b() { return ch[3]; }  /**< Blue channel (same as ch[3]) */
+        float *&fx() { return ch[4]; } /**< Optional horizontal FFT data */
+        float *&fy() { return ch[5]; } /**< Optional vertical FFT data */
+#else
+    union
+    {
+        float *ch[6]; /**< Array-style access: ch[0] = l/r, ch[1] = g, etc. */
+        struct test
+        {
+            float *l;  /**< Luminance or grayscale channel (same as ch[0]) */
+            float *r;  /**< Red channel (same as ch[1]) */
+            float *g;  /**< Green channel (same as ch[2]) */
+            float *b;  /**< Blue channel (same as ch[3]) */
+            float *fx; /**< Optional horizontal FFT data */
+            float *fy; /**< Optional vertical FFT data */
+        } test;
+    };
+#endif
+
     } channels_t;
 
     /**
@@ -168,23 +283,6 @@ extern "C"
         ImageDepth depth;   /**< Pixel depth (bit precision or float) */
         ImageDataState log; /**< Last valid or most recently updated image data */
     } Image;
-
-    void resize(Image *inImg, Image *outImg, int size);
-
-    void dist(const Image *inImg, Image *outImg, uint8_t R_ref, uint8_t G_ref, uint8_t B_ref);
-
-    void add(const Image *img1, const Image *img2, Image *outImg);
-
-    void normalize(Image *inImg);
-
-    /**
-     * @brief Converts raw pixel data to high-precision floating-point channels.
-     *
-     * This function allocates and fills `chals` from raw `pixels` depending on format and depth.
-     *
-     * @param inImg Pointer to the image whose pixels will be converted.
-     */
-    void convertTo(Image *inImg); // TODO: Implement
 
 #ifdef __cplusplus
 }
