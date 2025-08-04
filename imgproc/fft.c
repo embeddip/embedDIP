@@ -1,7 +1,8 @@
 #ifdef STM32F7xx
 
 #include <fft.h>
-
+#include "arm_math.h"
+#include "arm_const_structs.h"
 /**
  * @brief Applies natural logarithm to each pixel value in a single-channel image.
  *

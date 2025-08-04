@@ -5,7 +5,7 @@
 // Only one of these should be defined at a time
 
 // #define TARGET_BOARD_STM32F7
-#define TARGET_BOARD_STM32F7
+#define TARGET_BOARD_ESP32
 // #define TARGET_BOARD_OTHER
 
 // === Board-specific defines ===

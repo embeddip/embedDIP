@@ -1,5 +1,3 @@
-#ifdef STM32F7xx
-
 #ifndef FFT_H
 #define FFT_H
 
@@ -13,9 +11,6 @@
 #include <math.h>
 #include <float.h>
 #include <stdbool.h>
-#include <complex.h>
-#include "arm_math.h"
-#include "arm_const_structs.h"
 #include <limits.h>
 #include <core/image.h>
 
@@ -59,8 +54,8 @@ extern "C"
     // static bool isValidFFTSize(int w, int h);
     int fft(const Image *inImg, Image *outImg);
     int ifft(const Image *inImg, Image *outImg);
-    void _abs(const Image *fftImg, Image *magImg);
-    void _phase(const Image *fftImg, Image *phaseImg);
+    void _abs_(const Image *fftImg, Image *magImg);
+    void _phase_(const Image *fftImg, Image *phaseImg);
     void fftshift(float *data, int width, int height);
     void getFilter(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2);
 
@@ -73,5 +68,3 @@ extern "C"
 #endif
 
 #endif // FFT_H
-
-#endif

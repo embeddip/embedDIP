@@ -25,6 +25,11 @@
 #include <esp32/rom/rtc.h>
 #include "esp_heap_caps.h"
 
+#include "esp_dsp.h"
+#include "Arduino.h"
+#include <esp32/rom/rtc.h>
+#include "board/common.h"
+
 /**
  * @brief Creates an image with a specified size and format.
  *
@@ -172,10 +177,18 @@ void createChals(Image *inImg, uint8_t numChals)
     if (inImg->chals == NULL)
     {
         inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (inImg->chals == NULL)
+        {
+            Serial.println("[ERROR] Failed to create output channels.");
+        }
     }
     for (int i = 0; i < numChals; i++)
     {
         inImg->chals->ch[i] = (float *)memory_alloc(inImg->height * inImg->width * sizeof(float) * 2);
+        if (inImg->chals->ch[i] == NULL)
+        {
+            Serial.println("[ERROR] Failed to create output channels.");
+        }
     }
 }
 

@@ -2110,7 +2110,7 @@ void convertTo(Image *inImg)
     {
     case IMAGE_FORMAT_GRAYSCALE:
     {
-        if (inImg->log == IMAGE_DATA_CH0)
+        if (inImg->log == IMAGE_DATA_CH0 || inImg->log == IMAGE_DATA_MAGNITUDE)
         {
             float min = FLT_MAX, max = -FLT_MAX;
 

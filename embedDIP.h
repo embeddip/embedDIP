@@ -29,7 +29,6 @@ extern "C"
 #include "imgproc/histogram.h"
 #include "core/memory_manager.h"
 #include "imgproc/color.h"
-#include "imgproc/fft.h"
 #include "board/common.h"
 #include "device/serial/serial.h"
 
@@ -52,5 +51,7 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
+
+#include "imgproc/fft.h"
 
 #endif // EMBED_DIP_H
