@@ -82,23 +82,46 @@ namespace embedDIP
         ::grayscaleThresholdLocalOtsu(raw(), out.raw(), blockSize);
     }
 
-    void Image::grayscaleKMeansTo(Image &out, int k) const noexcept
+    void Image::grayscaleKMeans(Image &out, int k) const noexcept
     {
         ::grayscaleKMeans(raw(), out.raw(), k);
     }
 
     void Image::colorKMeans(Image &out, int k) const noexcept
     {
-        ::colorKMeans(raw(), out.raw(), k);
+        //::colorKMeans(raw(), out.raw(), k);
+        ::colorKMeans3(raw(), out.raw(), k);
     }
-    void Image::grayscaleRegionGrowingTo(Image &out, int seedX, int seedY, uint8_t tolerance) const noexcept
+    void Image::grayscaleRegionGrowing(Image &out,
+                                       const Point *seeds,
+                                       int numSeeds,
+                                       uint8_t tolerance) const noexcept
     {
-        ::grayscaleRegionGrowing(raw(), out.raw(), seedX, seedY, tolerance);
+        // Convert to C Point array
+        std::vector<::Point> cSeeds(numSeeds);
+        for (int i = 0; i < numSeeds; ++i)
+        {
+            cSeeds[i].x = seeds[i].x;
+            cSeeds[i].y = seeds[i].y;
+        }
+
+        ::grayscaleRegionGrowing(raw(), out.raw(), cSeeds.data(), numSeeds, tolerance);
     }
 
-    void Image::colorRegionGrowing(Image &out, int seedX, int seedY, float tolerance) const noexcept
+    void Image::colorRegionGrowing(Image &out,
+                                   const Point *seeds,
+                                   int numSeeds,
+                                   float tolerance) const noexcept
     {
-        ::colorRegionGrowing(raw(), out.raw(), seedX, seedY, tolerance);
+        // Convert to C Point array
+        std::vector<::Point> cSeeds(numSeeds);
+        for (int i = 0; i < numSeeds; ++i)
+        {
+            cSeeds[i].x = seeds[i].x;
+            cSeeds[i].y = seeds[i].y;
+        }
+
+        ::colorRegionGrowing3(raw(), out.raw(), cSeeds.data(), numSeeds, tolerance);
     }
 
     std::vector<std::vector<int>> Image::houghAccumulator(int numRho, int numTheta,
@@ -143,29 +166,68 @@ namespace embedDIP
         ::drawLineOnImage(raw(), rho, theta, color);
     }
 
-    void Image::getStructuringElement(Kernel &kernel, MorphShape shape, uint8_t size) const noexcept
-    {
-        ::getStructuringElement(&kernel, shape, size);
-    }
-
+    /**
+     * @brief Applies morphological erosion to the image.
+     *
+     * Erosion removes pixels on object boundaries. This method stores the eroded
+     * result in the provided output Image using the given structuring element.
+     *
+     * @param[out] out         Reference to the output Image that will store the eroded result.
+     * @param[in]  kernel      Reference to the Kernel defining the neighborhood for erosion.
+     * @param[in]  iterations  Number of times erosion is applied.
+     *
+     */
     void Image::erode(Image &out, const Kernel &kernel, uint8_t iterations) const noexcept
     {
-        ::erode(raw(), out.raw(), &kernel, iterations);
+        ::erode(raw(), out.raw(), kernel.raw(), iterations);
     }
 
+    /**
+     * @brief Applies morphological dilation to the image.
+     *
+     * Dilation adds pixels to object boundaries. This method stores the dilated
+     * result in the provided output Image using the given structuring element.
+     *
+     * @param[out] out         Reference to the output Image that will store the dilated result.
+     * @param[in]  kernel      Reference to the Kernel defining the neighborhood for dilation.
+     * @param[in]  iterations  Number of times dilation is applied.
+     *
+     */
     void Image::dilate(Image &out, const Kernel &kernel, uint8_t iterations) const noexcept
     {
-        ::dilate(raw(), out.raw(), &kernel, iterations);
+        ::dilate(raw(), out.raw(), kernel.raw(), iterations);
     }
 
+    /**
+     * @brief Applies morphological opening to the image.
+     *
+     * Opening is an erosion followed by a dilation using the same structuring element.
+     * It is typically used to remove small objects or noise while preserving larger shapes.
+     *
+     * @param[out] out         Reference to the output Image that will store the result.
+     * @param[in]  kernel      Reference to the Kernel defining the neighborhood for the operation.
+     * @param[in]  iterations  Number of erosion/dilation iterations.
+     *
+     */
     void Image::opening(Image &out, const Kernel &kernel, uint8_t iterations) const noexcept
     {
-        ::opening(raw(), out.raw(), &kernel, iterations);
+        ::opening(raw(), out.raw(), kernel.raw(), iterations);
     }
 
+    /**
+     * @brief Applies morphological closing to the image.
+     *
+     * Closing is a dilation followed by an erosion using the same structuring element.
+     * It is typically used to fill small holes or gaps in objects while preserving their shapes.
+     *
+     * @param[out] out         Reference to the output Image that will store the result.
+     * @param[in]  kernel      Reference to the Kernel defining the neighborhood for the operation.
+     * @param[in]  iterations  Number of dilation/erosion iterations.
+     *
+     */
     void Image::closing(Image &out, const Kernel &kernel, uint8_t iterations) const noexcept
     {
-        ::closing(raw(), out.raw(), &kernel, iterations);
+        ::closing(raw(), out.raw(), kernel.raw(), iterations);
     }
 
     void Image::powerTransform(Image &out, float gamma) const noexcept
@@ -333,9 +395,9 @@ namespace embedDIP
         ::medianFilter(raw(), out.raw(), kernelSize);
     }
 
-    void Image::resizeTo(Image &out, int size) const
+    void Image::resize(Image &out, int outWidth, int outHeight) const
     {
-        ::resize(raw(), out.raw(), size);
+        ::resize(raw(), out.raw(), outWidth, outHeight);
     }
 
     void Image::add(const Image &other, Image &out) const
@@ -354,7 +416,6 @@ namespace embedDIP
     }
 
     // Fourier Transform
-#ifdef STM32F7xx
     void Image::fft(Image &out) const
     {
         ::fft(raw(), out.raw());
@@ -362,12 +423,12 @@ namespace embedDIP
 
     void Image::_abs_(Image &out) const
     {
-        ::_abs(raw(), out.raw());
+        ::_abs_(raw(), out.raw());
     }
 
     void Image::_phase_(Image &out) const
     {
-        ::_phase(raw(), out.raw());
+        ::_phase_(raw(), out.raw());
     }
 
     void Image::_log_() const
@@ -444,8 +505,6 @@ namespace embedDIP
         ::getFilter(raw(), type, cutoff1, dummyCutoff2);
     }
 
-#endif
-
     void Image::cvtColor(Image &out, ColorConversionCode code) const
     {
         ::cvtColor(raw(), out.raw(), code);
@@ -456,15 +515,23 @@ namespace embedDIP
      */
     void Image::bitwiseAnd(const Image &other, Image &out) const
     {
-        _and(raw(), other.raw(), out.raw());
+        ::_and(raw(), other.raw(), out.raw());
     }
 
     /**
      * @brief Element-wise bitwise OR operation.
      */
-    void Image::bitwiseOr(const Image &other, Image &out) const
+    void Image::_or(const Image &other, Image &out) const
     {
-        _or(raw(), other.raw(), out.raw());
+        ::_or(raw(), other.raw(), out.raw());
+    }
+
+    /**
+     * @brief Element-wise bitwise OR operation.
+     */
+    void Image::_and(const Image &other, Image &out) const
+    {
+        ::_and(raw(), other.raw(), out.raw());
     }
 
     /**
@@ -472,7 +539,7 @@ namespace embedDIP
      */
     void Image::bitwiseXor(const Image &other, Image &out) const
     {
-        _xor(raw(), other.raw(), out.raw());
+        ::_xor(raw(), other.raw(), out.raw());
     }
 
     /**
@@ -488,16 +555,16 @@ namespace embedDIP
         ::grabCutLite_working(raw(), maskImg.raw(), iterations);
     }
 
-    void Image::grabCutLite(Image &outImg, Rect roi, int iterations) const
+    void Image::grabCutLite(Image &outImg, Rectangle roi, int iterations) const
     {
         ::grabCutLite(raw(), outImg.raw(), roi, iterations);
     }
-    void Image::grabCutLite888(Image &outImg, Rect roi, int iterations) const
+    void Image::grabCutLite888(Image &outImg, Rectangle roi, int iterations) const
     {
         ::grabCutLite888(raw(), outImg.raw(), roi, iterations);
     }
 
-    void Image::grabCutRGB(Image &outMask, Rect roi, int max_iter) const
+    void Image::grabCutRGB(Image &outMask, Rectangle roi, int max_iter) const
     {
         ::grabCutRGB(raw(), outMask.raw(), roi, max_iter);
     }
@@ -505,6 +572,43 @@ namespace embedDIP
     void Image::hueThreshold(Image &output, float minHue, float maxHue) const
     {
         ::hueThreshold(raw(), output.raw(), minHue, maxHue);
+    }
+
+    void Image::inRange(Image &mask, const uint8_t lower[3], const uint8_t upper[3]) const
+    {
+        ::inRange(raw(), mask.raw(), lower, upper);
+    }
+
+    void Image::gaussianGradients(Image &outIx, Image &outIy, float sigma) const
+    {
+        ::gaussianGradients(raw(), outIx.raw(), outIy.raw(), sigma);
+    }
+
+    void Image::gradientMagnitude(const Image &IxImg, const Image &IyImg)
+    {
+        ::gradientMagnitude(IxImg.raw(), IyImg.raw(), raw());
+    }
+
+    void Image::gradientPhase(const Image &IxImg, const Image &IyImg)
+    {
+        ::gradientPhase(IxImg.raw(), IyImg.raw(), raw());
+    }
+
+    void Image::Canny(Image &outImg,
+                      double threshold1, double threshold2,
+                      int apertureSize, bool L2gradient)
+    {
+        ::Canny(raw(), outImg.raw(), threshold1, threshold2, apertureSize, L2gradient);
+    }
+
+    void Image::connectedComponents(Image &outImg)
+    {
+        ::connectedComponents(raw(), outImg.raw());
+    }
+
+    void Image::extractComponent(Image &objImg, int targetLabel)
+    {
+        ::extractComponent(raw(), objImg.raw(), targetLabel);
     }
 
 } // namespace embedDIP

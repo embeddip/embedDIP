@@ -1,4 +1,6 @@
-#ifdef STM32F7xx
+#include <embedDIP_configs.h>
+
+#ifdef TARGET_BOARD_STM32F7
 
 #include <fft.h>
 #include "arm_math.h"
@@ -559,7 +561,7 @@ int ifft__(const Image *inImg, Image *outImg)
 /**
  * @brief Computes log-magnitude spectrum.
  */
-void _abs(const Image *fftImg, Image *magImg)
+void _abs_(const Image *fftImg, Image *magImg)
 {
     int size = fftImg->width * fftImg->height;
 
@@ -599,7 +601,7 @@ void _abs(const Image *fftImg, Image *magImg)
 /**
  * @brief Computes phase angle from FFT image.
  */
-void _phase(const Image *fftImg, Image *phaseImg)
+void _phase_(const Image *fftImg, Image *phaseImg)
 {
     int size = fftImg->width * fftImg->height;
 

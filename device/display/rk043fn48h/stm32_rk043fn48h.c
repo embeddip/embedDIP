@@ -6,8 +6,6 @@
 #include "stm32f7xx_hal.h"
 #include <stdio.h>
 #include <stdarg.h>
-#include "rk043fn48h.h"
-#include "fonts.h"
 #include "device/display/display.h"
 #include "board/stm32f7/configs.h"
 
@@ -32,7 +30,7 @@ static void display_reset(void)
     // No config
 }
 
-#define LCD_FRAMEBUFFER ((uint16_t *)FRAME_BUFFER + 0x100000)
+#define LCD_FRAMEBUFFER ((uint32_t *)(FRAME_BUFFER + 0x100000))
 #define LCD_WIDTH 480
 #define LCD_HEIGHT 272
 
@@ -76,7 +74,7 @@ static void display_show(Image *inImg)
     }
 
     HAL_LTDC_SetWindowSize(&hltdc, inImg->width, inImg->height, LTDC_LAYER_1);
-    HAL_LTDC_SetAddress(&hltdc, inImg->pixels,
+    HAL_LTDC_SetAddress(&hltdc, (uint32_t)inImg->pixels,
                         LTDC_LAYER_1);
     HAL_LTDC_Reload(&hltdc, LTDC_RELOAD_IMMEDIATE);
 }

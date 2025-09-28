@@ -10,6 +10,12 @@
 
 #define ps_malloc(size) heap_caps_malloc((size), MALLOC_CAP_SPIRAM)
 
+void memory_init(void)
+{
+    // Fill if needed
+    return;
+}
+
 void *memory_alloc(size_t size)
 {
     void *ptr = ps_malloc(size);

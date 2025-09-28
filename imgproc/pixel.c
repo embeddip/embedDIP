@@ -2,7 +2,7 @@
 #include "assert.h"
 
 #ifndef M_PI
-#define M_PI		3.14159265358979323846
+#define M_PI 3.14159265358979323846
 #endif
 /**
  * @brief Applies negative transformation to an image.
@@ -13,16 +13,16 @@
  * @param[in]  inImg   Pointer to the input image structure (source image).
  * @param[out] outImg  Pointer to the output image structure (resulting negative image).
  *
- * @note Assumes both images are of the same size and format, and `MAX_INTENSITY` is defined appropriately.
+ * @note Assumes both images are of the same size and format, and `UINT8_MAX` is defined appropriately.
  */
 void negative(const Image *inImg, Image *outImg)
 {
     uint8_t *imgData = inImg->pixels;
     uint8_t *outData = outImg->pixels;
 
-    for (int i = 0; i < inImg->size; ++i)
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
-        outData[i] = MAX_INTENSITY - imgData[i];
+        outData[i] = UINT8_MAX - imgData[i];
     }
 }
 
@@ -43,7 +43,7 @@ void grayscaleThreshold(const Image *inImg, Image *outImg, uint8_t threshold)
     uint8_t *imgData = inImg->pixels;
     uint8_t *outData = outImg->pixels;
 
-    for (int i = 0; i < inImg->size; ++i)
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
         outData[i] = (imgData[i] >= threshold) ? 255 : 0;
     }
@@ -113,7 +113,7 @@ void grayscaleOtsu(const Image *inImg, Image *outImg)
 
     uint8_t threshold = OtsuThreshold(imgData, inImg->size);
 
-    for (int i = 0; i < inImg->size; ++i)
+    for (uint32_t i = 0; i < inImg->size; ++i)
     {
         outData[i] = (imgData[i] >= threshold) ? 255 : 0;
     }
@@ -388,6 +388,258 @@ void colorKMeans(const Image *inImg, Image *outImg, int k)
     memory_free(sums);
 }
 
+/* Read pixel idx as normalized 3-vector in the *native* space.
+   HSI: [H,S,I] in [0,1]  (hue wrap handled in distance)
+   YUV: [Y,U,V] in [0,1]
+   RGB: [R,G,B] in [0,1] (RGB565 unpacked) */
+static inline void read_vec3_norm(const Image *img, int idx, float v[3])
+{
+    const uint8_t *p8 = (const uint8_t *)img->pixels;
+
+    switch (img->format)
+    {
+    case IMAGE_FORMAT_HSI:
+    {
+        int off = idx * 3;
+        v[0] = p8[off + 0] / 255.0f;
+        v[1] = p8[off + 1] / 255.0f;
+        v[2] = p8[off + 2] / 255.0f;
+    }
+    break;
+
+    case IMAGE_FORMAT_YUV:
+    {
+        int off = idx * 3;
+        v[0] = p8[off + 0] / 255.0f;
+        v[1] = p8[off + 1] / 255.0f;
+        v[2] = p8[off + 2] / 255.0f;
+    }
+    break;
+
+    case IMAGE_FORMAT_RGB888:
+    {
+        int off = idx * 3;
+        v[0] = p8[off + 0] / 255.0f;
+        v[1] = p8[off + 1] / 255.0f;
+        v[2] = p8[off + 2] / 255.0f;
+    }
+    break;
+
+    case IMAGE_FORMAT_RGB565:
+    {
+        const uint16_t *p16 = (const uint16_t *)img->pixels;
+        uint16_t px = p16[idx];
+        float r = (float)((px >> 11) & 0x1F) / 31.0f;
+        float g = (float)((px >> 5) & 0x3F) / 63.0f;
+        float b = (float)(px & 0x1F) / 31.0f;
+        v[0] = r;
+        v[1] = g;
+        v[2] = b;
+    }
+    break;
+
+    default:
+        v[0] = v[1] = v[2] = 0.0f;
+        break;
+    }
+}
+
+/* Write a normalized 3-vector (0..1) back to the image format. */
+static inline void write_vec3_norm(Image *img, int idx, const float v[3])
+{
+    uint8_t *p8 = (uint8_t *)img->pixels;
+
+    switch (img->format)
+    {
+    case IMAGE_FORMAT_HSI:
+    case IMAGE_FORMAT_YUV:
+    case IMAGE_FORMAT_RGB888:
+    {
+        int off = idx * 3;
+        p8[off + 0] = (uint8_t)CLAMP((int)lrintf(v[0] * 255.0f), 0, 255);
+        p8[off + 1] = (uint8_t)CLAMP((int)lrintf(v[1] * 255.0f), 0, 255);
+        p8[off + 2] = (uint8_t)CLAMP((int)lrintf(v[2] * 255.0f), 0, 255);
+    }
+    break;
+
+    case IMAGE_FORMAT_RGB565:
+    {
+        uint16_t *p16 = (uint16_t *)img->pixels;
+        int r5 = CLAMP((int)lrintf(v[0] * 31.0f), 0, 31);
+        int g6 = CLAMP((int)lrintf(v[1] * 63.0f), 0, 63);
+        int b5 = CLAMP((int)lrintf(v[2] * 31.0f), 0, 31);
+        uint16_t px = (uint16_t)((r5 << 11) | (g6 << 5) | (b5));
+        p16[idx] = px;
+    }
+    break;
+
+    default:
+        break;
+    }
+}
+
+/* Distance with special hue wrap for HSI; Euclidean otherwise.
+   a,b are normalized 0..1 vectors in native space. */
+static inline float vec_distance_native(const float a[3], const float b[3], ImageFormat fmt)
+{
+    if (fmt == IMAGE_FORMAT_HSI)
+    {
+        float dh_raw = fabsf(a[0] - b[0]);
+        float dh = fminf(dh_raw, 1.0f - dh_raw);
+        float ds = a[1] - b[1];
+        float di = a[2] - b[2];
+        return dh * dh + ds * ds + di * di; /* squared distance (faster) */
+    }
+    else
+    {
+        float d0 = a[0] - b[0];
+        float d1 = a[1] - b[1];
+        float d2 = a[2] - b[2];
+        return d0 * d0 + d1 * d1 + d2 * d2; /* squared distance */
+    }
+}
+
+/* Clamp/normalize center components to [0,1] after averaging. */
+static inline void center_divide(float c[3], int cnt)
+{
+    if (cnt > 0)
+    {
+        float inv = 1.0f / (float)cnt;
+        c[0] *= inv;
+        c[1] *= inv;
+        c[2] *= inv;
+        c[0] = fminf(fmaxf(c[0], 0.0f), 1.0f);
+        c[1] = fminf(fmaxf(c[1], 0.0f), 1.0f);
+        c[2] = fminf(fmaxf(c[2], 0.0f), 1.0f);
+    }
+}
+
+/* ----------------------------- K-means ------------------------------ */
+
+/**
+ * @brief Segments an image using K-means in its native color space.
+ *
+ * Supported formats: HSI (hue wrap), YUV444, RGB888, RGB565.
+ * The output image must have same dimensions and format as input.
+ * Each pixel is replaced by its cluster center color (in the same space/format).
+ *
+ * @param[in]  inImg   Input image
+ * @param[out] outImg  Output segmented image (same format as input)
+ * @param[in]  k       Number of clusters (>=1, <= number of pixels)
+ */
+void colorKMeans3(const Image *inImg, Image *outImg, int k)
+{
+    if (!inImg || !outImg || !inImg->pixels || !outImg->pixels || k <= 0)
+    {
+        printf("Invalid input\n");
+        return;
+    }
+    assert(inImg->format == outImg->format);
+    assert(inImg->width == outImg->width);
+    assert(inImg->height == outImg->height);
+    assert(inImg->size == outImg->size);
+
+    int bpp = inImg->depth;
+    assert(bpp == 2 || bpp == 3);
+
+    const int N = inImg->size;
+    if (k > N)
+        k = N;
+
+    /* Buffers */
+    int *labels = (int *)memory_alloc((size_t)N * sizeof(int));
+    int *counts = (int *)memory_alloc((size_t)k * sizeof(int));
+    float *centers = (float *)memory_alloc((size_t)k * 3 * sizeof(float)); /* k x 3 */
+    float *sums = (float *)memory_alloc((size_t)k * 3 * sizeof(float));    /* k x 3 */
+
+    if (!labels || !counts || !centers || !sums)
+    {
+        printf("Memory allocation failed\n");
+        memory_free(labels);
+        memory_free(counts);
+        memory_free(centers);
+        memory_free(sums);
+        return;
+    }
+
+    /* --- Initialization: pick k random pixels as initial centers --- */
+    for (int j = 0; j < k; ++j)
+    {
+        int rnd = rand() % N;
+        read_vec3_norm(inImg, rnd, &centers[3 * j]);
+        /* Ensure numeric sanity */
+        centers[3 * j + 0] = fminf(fmaxf(centers[3 * j + 0], 0.0f), 1.0f);
+        centers[3 * j + 1] = fminf(fmaxf(centers[3 * j + 1], 0.0f), 1.0f);
+        centers[3 * j + 2] = fminf(fmaxf(centers[3 * j + 2], 0.0f), 1.0f);
+    }
+
+    /* --- Iterations --- */
+    for (int iter = 0; iter < MAX_ITER; ++iter)
+    {
+        /* reset sums/counts */
+        for (int j = 0; j < k; ++j)
+        {
+            counts[j] = 0;
+            sums[3 * j + 0] = sums[3 * j + 1] = sums[3 * j + 2] = 0.0f;
+        }
+
+        /* assignment */
+        for (int i = 0; i < N; ++i)
+        {
+            float v[3];
+            read_vec3_norm(inImg, i, v);
+
+            float bestD = 1e30f;
+            int bestC = 0;
+            for (int j = 0; j < k; ++j)
+            {
+                float d = vec_distance_native(v, &centers[3 * j], inImg->format);
+                if (d < bestD)
+                {
+                    bestD = d;
+                    bestC = j;
+                }
+            }
+            labels[i] = bestC;
+            sums[3 * bestC + 0] += v[0];
+            sums[3 * bestC + 1] += v[1];
+            sums[3 * bestC + 2] += v[2];
+            counts[bestC] += 1;
+        }
+
+        /* update */
+        for (int j = 0; j < k; ++j)
+        {
+            if (counts[j] > 0)
+            {
+                float c[3] = {sums[3 * j + 0], sums[3 * j + 1], sums[3 * j + 2]};
+                center_divide(c, counts[j]);
+                centers[3 * j + 0] = c[0];
+                centers[3 * j + 1] = c[1];
+                centers[3 * j + 2] = c[2];
+            }
+            else
+            {
+                /* empty cluster: re-seed from a random pixel */
+                int rnd = rand() % N;
+                read_vec3_norm(inImg, rnd, &centers[3 * j]);
+            }
+        }
+    }
+
+    /* --- Write result: paint each pixel with its cluster center in SAME format --- */
+    for (int i = 0; i < N; ++i)
+    {
+        int c = CLAMP(labels[i], 0, k - 1);
+        write_vec3_norm(outImg, i, &centers[3 * c]);
+    }
+
+    memory_free(labels);
+    memory_free(counts);
+    memory_free(centers);
+    memory_free(sums);
+}
+
 // New idea. Will check
 /*
 void grayscaleKMeans(const Image *inImg, Image *outImg, int k)
@@ -483,24 +735,7 @@ void grayscaleKMeans(const Image *inImg, Image *outImg, int k)
 #define THRESHOLD 10
 #define STACK_SIZE 65536
 
-typedef struct
-{
-    int x;
-    int y;
-} Point;
-
-/**
- * @brief Segments a grayscale image using region growing.
- *
- * This function performs region growing from a seed pixel. It includes pixels
- * in the region if the absolute intensity difference from the region mean is below a threshold.
- *
- * @param[in]  inImg     Pointer to input grayscale image.
- * @param[out] outImg    Pointer to output binary image (0 for background, 255 for region).
- * @param[in]  seedX     X coordinate of the seed point.
- * @param[in]  seedY     Y coordinate of the seed point.
- * @param[in]  tolerance Intensity difference threshold for region inclusion.
- */
+/*
 void grayscaleRegionGrowing(const Image *inImg, Image *outImg, int seedX, int seedY, uint8_t tolerance)
 {
     const int width = inImg->width;
@@ -561,6 +796,106 @@ void grayscaleRegionGrowing(const Image *inImg, Image *outImg, int seedX, int se
         }
     }
 }
+    */
+
+/**
+ * @brief Segments a grayscale image using region growing with multiple seed points.
+ *
+ * This function performs region growing starting from one or more seed pixels.
+ * A pixel is included in the region if the absolute intensity difference from
+ * the seed pixel’s intensity is below the specified tolerance.
+ *
+ * @param[in]  inImg      Pointer to input grayscale image.
+ * @param[out] outImg     Pointer to output binary image (0 for background, 255 for region).
+ * @param[in]  seeds      Array of seed points.
+ * @param[in]  numSeeds   Number of seed points.
+ * @param[in]  tolerance  Intensity difference threshold for region inclusion.
+ */
+void grayscaleRegionGrowing(const Image *inImg,
+                            Image *outImg,
+                            const Point *seeds,
+                            int numSeeds,
+                            uint8_t tolerance)
+{
+    const int width = inImg->width;
+    const int height = inImg->height;
+    const uint8_t *src = inImg->pixels;
+    uint8_t *dst = outImg->pixels;
+    memset(dst, 0, inImg->size);
+
+    bool *visited = (bool *)memory_alloc(sizeof(bool) * inImg->size);
+    if (!visited)
+        return;
+    memset(visited, 0, inImg->size);
+
+    Point *stack = (Point *)memory_alloc(sizeof(Point) * STACK_SIZE);
+    if (!stack)
+    {
+        memory_free(visited);
+        return;
+    }
+
+    for (int s = 0; s < numSeeds; ++s)
+    {
+        int seedX = seeds[s].x;
+        int seedY = seeds[s].y;
+        if (seedX < 0 || seedX >= width || seedY < 0 || seedY >= height)
+            continue;
+
+        int seedIndex = seedY * width + seedX;
+        if (visited[seedIndex])
+            continue;
+
+        // Run the same region growing as single-seed
+        int top = 0;
+        stack[top++] = seeds[s];
+        visited[seedIndex] = true;
+        dst[seedIndex] = 255;
+
+        long sum = src[seedIndex];
+        int count = 1;
+
+        int dx[4] = {0, -1, 1, 0};
+        int dy[4] = {-1, 0, 0, 1};
+
+        while (top > 0)
+        {
+            Point p = stack[--top];
+            uint8_t regionMean = (uint8_t)(sum / count);
+
+            for (int i = 0; i < 4; ++i)
+            {
+                int nx = p.x + dx[i];
+                int ny = p.y + dy[i];
+                int nidx = ny * width + nx;
+
+                if (nx >= 0 && nx < width && ny >= 0 && ny < height && !visited[nidx])
+                {
+                    uint8_t neighborValue = src[nidx];
+                    if (abs((int)neighborValue - (int)regionMean) <= tolerance)
+                    {
+                        visited[nidx] = true;
+                        dst[nidx] = 255;
+                        stack[top++] = (Point){nx, ny};
+
+                        sum += neighborValue;
+                        count++;
+
+                        if (top >= STACK_SIZE)
+                        {
+                            memory_free(visited);
+                            memory_free(stack);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    memory_free(visited);
+    memory_free(stack);
+}
 
 /**
  * @brief Performs region growing on an HSI image using color similarity.
@@ -569,7 +904,7 @@ void grayscaleRegionGrowing(const Image *inImg, Image *outImg, int seedX, int se
  * Pixels within a given threshold are included in the region.
  *
  * @param[in]  inImg      Pointer to input HSI image (IMAGE_FORMAT_HSI).
- * @param[out] outMask    Pointer to output binary image (0 = background, 255 = region).
+ * @param[out] outMask    Pointer to output HSI image
  * @param[in]  seedX      X coordinate of seed point.
  * @param[in]  seedY      Y coordinate of seed point.
  * @param[in]  tolerance  Threshold on HSI distance (e.g., 0.1–0.4 typical).
@@ -665,6 +1000,163 @@ void colorRegionGrowing(const Image *inImg, Image *outImg, int seedX, int seedY,
     memory_free(stack);
 }
 
+/* Copy source pixel to destination (same format), else write black. */
+static inline void copy_pixel_samefmt(const Image *src, Image *dst, int idx)
+{
+    const int bpp = src->depth;
+    const uint8_t *s8 = (const uint8_t *)src->pixels;
+    uint8_t *d8 = (uint8_t *)dst->pixels;
+
+    if (src->format == IMAGE_FORMAT_RGB565)
+    {
+        ((uint16_t *)dst->pixels)[idx] = ((const uint16_t *)src->pixels)[idx];
+    }
+    else
+    {
+        const int off = idx * bpp;
+        d8[off + 0] = s8[off + 0];
+        d8[off + 1] = (bpp > 1) ? s8[off + 1] : 0;
+        d8[off + 2] = (bpp > 2) ? s8[off + 2] : 0;
+    }
+}
+
+/* Distance between color vectors with special hue wrap for HSI */
+static inline float color_distance(const float a[3], const float b[3], ImageFormat fmt)
+{
+    if (fmt == IMAGE_FORMAT_HSI)
+    {
+        /* Hue wrap-around on a[0]/b[0] assumed in [0,1] */
+        float dh_raw = fabsf(a[0] - b[0]);
+        float dh = fminf(dh_raw, 1.0f - dh_raw);
+        float ds = a[1] - b[1];
+        float di = a[2] - b[2];
+        return sqrtf(dh * dh + ds * ds + di * di);
+    }
+    else
+    {
+        /* Straight Euclidean in native space (already normalized 0..1) */
+        float d0 = a[0] - b[0];
+        float d1 = a[1] - b[1];
+        float d2 = a[2] - b[2];
+        return sqrtf(d0 * d0 + d1 * d1 + d2 * d2);
+    }
+}
+
+/* -------------------- Region Growing (All Formats) -------------------- */
+
+/**
+ * @brief Performs region growing using color similarity with multiple seeds.
+ *
+ * Produces a binary mask: pixels in grown regions are 255, others are 0.
+ *
+ * Works with IMAGE_FORMAT_HSI (hue wrap handled), IMAGE_FORMAT_YUV (YUV444),
+ * IMAGE_FORMAT_RGB888, and IMAGE_FORMAT_RGB565.
+ *
+ * The output image must be single-channel grayscale (IMAGE_FORMAT_GRAYSCALE, depth=1).
+ *
+ * @param[in]  inImg      Pointer to input image.
+ * @param[out] outImg     Pointer to output binary mask (1-channel).
+ * @param[in]  seeds      Array of seed points.
+ * @param[in]  numSeeds   Number of seed points.
+ * @param[in]  tolerance  Threshold on color distance.
+ */
+void colorRegionGrowing3(const Image *inImg,
+                         Image *outImg,
+                         const Point *seeds,
+                         int numSeeds,
+                         float tolerance)
+{
+    assert(inImg && outImg);
+    assert(outImg->format == IMAGE_FORMAT_GRAYSCALE);
+    assert(outImg->depth == 1);
+    assert(inImg->width == outImg->width);
+    assert(inImg->height == outImg->height);
+    assert(inImg->size == outImg->size);
+
+    const int width = inImg->width;
+    const int height = inImg->height;
+
+    uint8_t *outData = (uint8_t *)outImg->pixels;
+    /* Clear output mask */
+    memset(outImg->pixels, 0, (size_t)outImg->size);
+
+    /* Allocate visited */
+    bool *visited = (bool *)memory_alloc((size_t)inImg->size * sizeof(bool));
+    if (!visited)
+        return;
+
+    /* Allocate stack */
+    Point *stack = (Point *)memory_alloc((size_t)STACK_SIZE * sizeof(Point));
+    if (!stack)
+    {
+        memory_free(visited);
+        return;
+    }
+
+    const int dx[4] = {0, -1, 1, 0};
+    const int dy[4] = {-1, 0, 0, 1};
+
+    for (int s = 0; s < numSeeds; ++s)
+    {
+        int seedX = seeds[s].x;
+        int seedY = seeds[s].y;
+
+        if ((unsigned)seedX >= (unsigned)width || (unsigned)seedY >= (unsigned)height)
+            continue;
+
+        const int seedIndex = seedY * width + seedX;
+
+        memset(visited, 0, (size_t)inImg->size * sizeof(bool));
+
+        float seedVec[3];
+        read_vec3_norm(inImg, seedIndex, seedVec);
+
+        int top = 0;
+        stack[top++] = (Point){seedX, seedY};
+        visited[seedIndex] = true;
+        outData[seedIndex] = 255;
+
+        while (top > 0)
+        {
+            Point p = stack[--top];
+
+            for (int d = 0; d < 4; ++d)
+            {
+                int nx = p.x + dx[d];
+                int ny = p.y + dy[d];
+
+                if ((unsigned)nx >= (unsigned)width || (unsigned)ny >= (unsigned)height)
+                    continue;
+
+                int nidx = ny * width + nx;
+                if (visited[nidx])
+                    continue;
+
+                float v[3];
+                read_vec3_norm(inImg, nidx, v);
+
+                float dist = color_distance(v, seedVec, inImg->format);
+                if (dist <= tolerance)
+                {
+                    visited[nidx] = true;
+                    outData[nidx] = 255;
+
+                    if (top >= STACK_SIZE)
+                    {
+                        memory_free(visited);
+                        memory_free(stack);
+                        return;
+                    }
+                    stack[top++] = (Point){nx, ny};
+                }
+            }
+        }
+    }
+
+    memory_free(visited);
+    memory_free(stack);
+}
+
 /**
  * @brief Detects straight lines in a binary edge image using the Hough Transform.
  *
@@ -740,10 +1232,10 @@ int extractLines(int **accumulator, int numRho, int numTheta, float rhoRes, floa
  * @param[in]     y1    Ending y coordinate.
  * @param[in]     color Grayscale intensity (0–255) to draw the line.
  */
-void drawLine(Image *img, int x0, int y0, int x1, int y1, uint8_t color)
+void drawLine(Image *img, uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1, uint8_t color)
 {
-    int dx = abs(x1 - x0);
-    int dy = abs(y1 - y0);
+    int dx = abs((int64_t)x1 - (int64_t)x0);
+    int dy = abs((int64_t)y1 - (int64_t)y0);
 
     int sx = (x0 < x1) ? 1 : -1;
     int sy = (y0 < y1) ? 1 : -1;
@@ -751,7 +1243,7 @@ void drawLine(Image *img, int x0, int y0, int x1, int y1, uint8_t color)
 
     while (1)
     {
-        if (x0 >= 0 && x0 < img->width && y0 >= 0 && y0 < img->height)
+        if (x0 < img->width && y0 < img->height)
         {
             ((uint8_t *)img->pixels)[y0 * img->width + x0] = color;
         }
@@ -807,14 +1299,14 @@ void connectedComponents(const Image *inImg, Image *outImg)
                                                IMAGE_FORMAT_GRAYSCALE);
     uint8_t *equvData = equivalences->pixels;
 
-    for (int i = 0; i < inImg->size; i++)
+    for (uint32_t i = 0; i < inImg->size; i++)
         equvData[i] = 0x00;
-    for (int i = 0; i < inImg->size; i++)
+    for (uint32_t i = 0; i < inImg->size; i++)
         outData[i] = 0x00;
     // First pass
-    for (int y = 0; y < inImg->height; y++)
+    for (uint32_t y = 0; y < inImg->height; y++)
     {
-        for (int x = 0; x < inImg->width; x++)
+        for (uint32_t x = 0; x < inImg->width; x++)
         {
             int index = y * inImg->width + x;
             if (inData[index] != 0)
@@ -846,7 +1338,7 @@ void connectedComponents(const Image *inImg, Image *outImg)
     }
 
     // Second pass to resolve equivalences
-    for (int i = 0; i < inImg->width * inImg->height; i++)
+    for (uint32_t i = 0; i < inImg->width * inImg->height; i++)
     {
         if (outData[i] > 0)
         {
@@ -856,6 +1348,23 @@ void connectedComponents(const Image *inImg, Image *outImg)
                 root = equvData[root];
             }
             outData[i] = root;
+        }
+    }
+
+    // Relabel to consecutive values
+    int newLabel = 1;
+    int labelMap[256] = {0}; // assuming max 255 labels, adjust if needed
+
+    for (uint32_t i = 0; i < inImg->size; i++)
+    {
+        int lbl = outData[i];
+        if (lbl > 0)
+        {
+            if (labelMap[lbl] == 0)
+            {
+                labelMap[lbl] = newLabel++;
+            }
+            outData[i] = labelMap[lbl];
         }
     }
 }
@@ -895,6 +1404,44 @@ void getStructuringElement(Kernel *kernel, MorphShape shape, uint8_t size)
     }
 }
 
+/**
+ * @brief Extracts a specific connected component from a labeled image.
+ *
+ * @param labeledImg Input image (output of connectedComponents).
+ * @param objImg Output binary image (extracted object).
+ * @param targetLabel The label of the object to extract.
+ */
+void extractComponent(const Image *labeledImg, Image *objImg, int targetLabel)
+{
+    assert(labeledImg && objImg);
+    assert(labeledImg->width == objImg->width &&
+           labeledImg->height == objImg->height);
+
+    uint8_t *inData = labeledImg->pixels;
+    uint8_t *outData = objImg->pixels;
+
+    for (uint32_t i = 0; i < labeledImg->size; i++)
+    {
+        if (inData[i] == targetLabel)
+            outData[i] = 255; // Object pixels → white (or 1)
+        else
+            outData[i] = 0; // Background → black (or 0)
+    }
+}
+
+/**
+ * @brief Performs morphological erosion on a binary image.
+ *
+ * Erosion removes pixels on object boundaries. A pixel in the output image is set
+ * to 255 only if all corresponding pixels under the non-zero elements of the kernel
+ * are also non-zero in the input image. This process can be repeated for multiple
+ * iterations to achieve a stronger erosion effect.
+ *
+ * @param[in]  src         Pointer to the source binary image.
+ * @param[out] dst         Pointer to the destination image to store the eroded result.
+ * @param[in]  kernel      Pointer to the structuring element (Kernel) used for erosion.
+ * @param[in]  iterations  Number of times erosion is applied.
+ */
 void erode(const Image *src, Image *dst, const Kernel *kernel, uint8_t iterations)
 {
     int w = src->width, h = src->height;
@@ -945,6 +1492,19 @@ void erode(const Image *src, Image *dst, const Kernel *kernel, uint8_t iteration
     }
 }
 
+/**
+ * @brief Performs morphological dilation on a binary image.
+ *
+ * Dilation adds pixels to object boundaries. A pixel in the output image is set
+ * to 255 if at least one corresponding pixel under the non-zero elements of the kernel
+ * is non-zero in the input image. This process can be repeated for multiple
+ * iterations to achieve a stronger dilation effect.
+ *
+ * @param[in]  src         Pointer to the source binary image.
+ * @param[out] dst         Pointer to the destination image to store the dilated result.
+ * @param[in]  kernel      Pointer to the structuring element (Kernel) used for dilation.
+ * @param[in]  iterations  Number of times dilation is applied.
+ */
 void dilate(const Image *src, Image *dst, const Kernel *kernel, uint8_t iterations)
 {
     int w = src->width, h = src->height;
@@ -995,6 +1555,18 @@ void dilate(const Image *src, Image *dst, const Kernel *kernel, uint8_t iteratio
     }
 }
 
+/**
+ * @brief Performs morphological opening on a binary image.
+ *
+ * Opening is an erosion followed by a dilation using the same structuring element.
+ * It is typically used to remove small objects or noise while preserving the
+ * overall shape and size of larger objects in the image.
+ *
+ * @param[in]  inImg       Pointer to the input binary image.
+ * @param[out] outImg      Pointer to the output image to store the result of opening.
+ * @param[in]  kernel      Pointer to the structuring element (Kernel) used for the operation.
+ * @param[in]  iterations  Number of erosion/dilation iterations.
+ */
 void opening(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t iterations)
 {
     Image *temp = createImage(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE);
@@ -1003,6 +1575,18 @@ void opening(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t it
     dilate(temp, outImg, kernel, iterations);
 }
 
+/**
+ * @brief Performs morphological closing on a binary image.
+ *
+ * Closing is a dilation followed by an erosion using the same structuring element.
+ * It is typically used to fill small holes and gaps in the objects while preserving
+ * their general shape.
+ *
+ * @param[in]  inImg       Pointer to the input binary image.
+ * @param[out] outImg      Pointer to the output image to store the result of closing.
+ * @param[in]  kernel      Pointer to the structuring element (Kernel) used for the operation.
+ * @param[in]  iterations  Number of dilation/erosion iterations.
+ */
 void closing(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t iterations)
 {
     Image *temp = createImage(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE);
@@ -1078,7 +1662,7 @@ void convertScaleAbs(const Image *inImg, Image *outImg, float alpha, float beta)
 
     if (isChalsEmpty(inImg))
     {
-        createChals(inImg, inImg->depth);
+        createChals((Image *)inImg, inImg->depth);
 
         uint8_t *src = (uint8_t *)inImg->pixels;
 
@@ -1123,7 +1707,7 @@ void piecewiseTransform(const Image *inImg, Image *outImg,
 
     if (isChalsEmpty(inImg))
     {
-        createChals(inImg, inImg->depth);
+        createChals((Image *)inImg, inImg->depth);
     }
 
     if (isChalsEmpty(outImg))
@@ -1172,48 +1756,64 @@ void piecewiseTransform(const Image *inImg, Image *outImg,
 
 void _and(const Image *img1, const Image *img2, Image *outImg)
 {
-    if (!img1 || !img2 || !outImg ||
-        img1->width != img2->width || img1->height != img2->height ||
-        img1->log != IMAGE_DATA_PIXELS || img2->log != IMAGE_DATA_PIXELS)
-        return;
+    assert(img1 && img2 && outImg);
+    assert(img1->format == outImg->format && img1->size == outImg->size);
+    assert(img2->format == IMAGE_FORMAT_GRAYSCALE);
+    assert(img2->width == img1->width && img2->height == img1->height);
 
-    int size = img1->width * img1->height;
+    const uint8_t *ps = (const uint8_t *)img1->pixels;
+    const uint8_t *pm = (const uint8_t *)img2->pixels;
+    uint8_t *po = (uint8_t *)outImg->pixels;
 
-    if (outImg->pixels == NULL)
+    int channels = (img1->format == IMAGE_FORMAT_GRAYSCALE) ? 1 : 3;
+
+    for (uint32_t i = 0; i < img1->size; ++i)
     {
-        outImg->pixels = memory_alloc(size * sizeof(uint8_t));
-        outImg->log = IMAGE_DATA_PIXELS;
+        if (pm[i])
+        {
+            // copy original pixel
+            for (int c = 0; c < channels; ++c)
+            {
+                po[i * channels + c] = ps[i * channels + c];
+            }
+        }
+        else
+        {
+            // zero out pixel
+            for (int c = 0; c < channels; ++c)
+            {
+                po[i * channels + c] = 0;
+            }
+        }
     }
-
-    const uint8_t *data1 = img1->pixels;
-    const uint8_t *data2 = img2->pixels;
-    uint8_t *outData = outImg->pixels;
-
-    for (int i = 0; i < size; ++i)
-        outData[i] = data1[i] & data2[i];
 }
 
+/**
+ * @brief Element-wise bitwise OR operation on binary masks.
+ *
+ * Performs per-pixel OR between two binary images (0 or 255) and writes
+ * the result into the output mask.
+ *
+ * @param[in]  img1     First input binary mask (grayscale).
+ * @param[in]  img2     Second input binary mask (grayscale).
+ * @param[out] outImg   Output binary mask (grayscale).
+ */
 void _or(const Image *img1, const Image *img2, Image *outImg)
 {
-    if (!img1 || !img2 || !outImg ||
-        img1->width != img2->width || img1->height != img2->height ||
-        img1->log != IMAGE_DATA_PIXELS || img2->log != IMAGE_DATA_PIXELS)
-        return;
+    assert(img1 && img2 && outImg);
+    assert(img1->format == IMAGE_FORMAT_GRAYSCALE);
+    assert(img2->format == IMAGE_FORMAT_GRAYSCALE);
+    assert(outImg->format == IMAGE_FORMAT_GRAYSCALE);
+    assert(img1->size == img2->size && img2->size == outImg->size);
 
-    int size = img1->width * img1->height;
+    const uint8_t *pa = (const uint8_t *)img1->pixels;
+    const uint8_t *pb = (const uint8_t *)img2->pixels;
+    uint8_t *po = (uint8_t *)outImg->pixels;
 
-    if (outImg->pixels == NULL)
+    for (uint32_t i = 0; i < img1->size; ++i)
     {
-        outImg->pixels = memory_alloc(size * sizeof(uint8_t));
-        outImg->log = IMAGE_DATA_PIXELS;
+        po[i] = pa[i] | pb[i];
     }
-
-    const uint8_t *data1 = img1->pixels;
-    const uint8_t *data2 = img2->pixels;
-    uint8_t *outData = outImg->pixels;
-
-    for (int i = 0; i < size; ++i)
-        outData[i] = data1[i] | data2[i];
 }
 
 void _xor(const Image *img1, const Image *img2, Image *outImg)
@@ -1271,7 +1871,7 @@ void _not(const Image *inImg, Image *outImg)
 void grabCutLite_working(Image *inImg, Image *maskImg, int iterations)
 {
     const int size = inImg->width * inImg->height;
-    const uint8_t *src = inImg->pixels;
+    const uint8_t *img1 = inImg->pixels;
     uint8_t *mask = (uint8_t *)maskImg->pixels;
 
     for (int iter = 0; iter < iterations; ++iter)
@@ -1284,12 +1884,12 @@ void grabCutLite_working(Image *inImg, Image *maskImg, int iterations)
         {
             if (mask[i] == 2)
             {
-                fgSum += src[i];
+                fgSum += img1[i];
                 fgCount++;
             }
             else if (mask[i] == 0)
             {
-                bgSum += src[i];
+                bgSum += img1[i];
                 bgCount++;
             }
         }
@@ -1301,7 +1901,7 @@ void grabCutLite_working(Image *inImg, Image *maskImg, int iterations)
             {
                 if (mask[i] == 1)
                 {
-                    fgSum += src[i];
+                    fgSum += img1[i];
                     fgCount++;
                 }
             }
@@ -1321,8 +1921,8 @@ void grabCutLite_working(Image *inImg, Image *maskImg, int iterations)
         {
             if (mask[i] == 1)
             {
-                int distFg = abs((int)src[i] - (int)fgMean);
-                int distBg = abs((int)src[i] - (int)bgMean);
+                int distFg = abs((int)img1[i] - (int)fgMean);
+                int distBg = abs((int)img1[i] - (int)bgMean);
 
                 // Reclassify as closer to fg or bg
                 if (distFg < distBg)
@@ -1407,12 +2007,11 @@ void grabCutLitesd(const Image *inImg, uint8_t *mask, int iterations)
  *
  * @param[in]  inImg      Input grayscale image.
  * @param[out] outImg     Output binary image (0 = background, 255 = foreground).
- * @param[in]  roi        Rectangular region of interest.
+ * @param[in]  roi        Rectangleangular region of interest.
  * @param[in]  iterations Number of refinement iterations.
  */
-void grabCutLite(Image *inImg, Image *outImg, Rect roi, int iterations)
+void grabCutLite(Image *inImg, Image *outImg, Rectangle roi, int iterations)
 {
-
     const int width = inImg->width;
     const int height = inImg->height;
     const int size = width * height;
@@ -1427,7 +2026,7 @@ void grabCutLite(Image *inImg, Image *outImg, Rect roi, int iterations)
         return;
     }
 
-    // Initialize mask using ROI
+    // Initialize mask: ROI = probable, rest = background
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
@@ -1451,22 +2050,22 @@ void grabCutLite(Image *inImg, Image *outImg, Rect roi, int iterations)
         uint32_t fgSum = 0, fgCount = 0;
         uint32_t bgSum = 0, bgCount = 0;
 
-        // Compute means
+        // Compute FG/BG means based on confirmed pixels
         for (int i = 0; i < size; ++i)
         {
-            if (mask[i] == 2)
+            if (mask[i] == 2) // FG
             {
                 fgSum += src[i];
                 fgCount++;
             }
-            else if (mask[i] == 0)
+            else if (mask[i] == 0) // BG
             {
                 bgSum += src[i];
                 bgCount++;
             }
         }
 
-        // Bootstrap: if no fg yet, use probable
+        // Bootstrap: if no FG yet, use probable region for FG stats
         if (fgCount == 0)
         {
             for (int i = 0; i < size; ++i)
@@ -1482,10 +2081,20 @@ void grabCutLite(Image *inImg, Image *outImg, Rect roi, int iterations)
         if (fgCount == 0 || bgCount == 0)
             break;
 
-        uint8_t fgMean = fgSum / fgCount;
-        uint8_t bgMean = bgSum / bgCount;
+        uint8_t fgMean = (uint8_t)(fgSum / fgCount);
+        uint8_t bgMean = (uint8_t)(bgSum / bgCount);
 
-        // Reclassify probable pixels
+        // Reset ROI pixels back to "probable" each iteration
+        for (int y = roi.y; y < roi.y + roi.height; ++y)
+        {
+            for (int x = roi.x; x < roi.x + roi.width; ++x)
+            {
+                int idx = y * width + x;
+                mask[idx] = 1;
+            }
+        }
+
+        // Reclassify probable pixels based on updated means
         for (int i = 0; i < size; ++i)
         {
             if (mask[i] == 1)
@@ -1497,7 +2106,7 @@ void grabCutLite(Image *inImg, Image *outImg, Rect roi, int iterations)
         }
     }
 
-    // Final binary mask output
+    // Final binary output mask
     for (int i = 0; i < size; ++i)
     {
         dst[i] = (mask[i] == 2) ? 255 : 0;
@@ -1525,7 +2134,7 @@ static float gaussian_prob(float x, float mean, float var)
     return (1.0f / sqrtf(2.0f * M_PI * var)) * expf(-(diff * diff) / (2.0f * var));
 }
 
-void grabCutGrayscaleRealistic(const Image *inImg, Image *outMask, Rect roi, int max_iter)
+void grabCutGrayscaleRealistic(const Image *inImg, Image *outMask, Rectangle roi, int max_iter)
 {
     if (!inImg || !outMask || !inImg->pixels || inImg->format != IMAGE_FORMAT_GRAYSCALE)
         return;
@@ -1699,7 +2308,7 @@ float gaussian_prob_rgb(const uint8_t *pixel, const GMMComponentRGB *comp)
     return prob;
 }
 
-void grabCutRGB(const Image *inImg, Image *outMask, Rect roi, int max_iter)
+void grabCutRGB(const Image *inImg, Image *outMask, Rectangle roi, int max_iter)
 {
     if (!inImg || !outMask || !inImg->pixels || inImg->format != IMAGE_FORMAT_RGB888)
         return;
@@ -1861,49 +2470,66 @@ void grabCutRGB(const Image *inImg, Image *outMask, Rect roi, int max_iter)
 }
 
 /**
- * @brief Resizes a single-channel image to a square output using nearest-neighbor interpolation.
+ * @brief Resizes a single-channel image using nearest-neighbor interpolation.
  *
- * @param[in]  inImg        Pointer to the input image.
- * @param[out] outImg       Pointer to the output image. It must already be allocated to (fourier_size × fourier_size).
- * @param[in]  size Desired width and height of the output image.
+ * This function scales an input grayscale image into an output buffer with the
+ * specified width and height. The output image must already be allocated with
+ * matching dimensions.
+ *
+ * @param[in]  inImg      Pointer to the input image.
+ * @param[out] outImg     Pointer to the output image. Must already be allocated
+ *                        with dimensions (outWidth × outHeight).
+ * @param[in]  outWidth   Desired width of the output image.
+ * @param[in]  outHeight  Desired height of the output image.
  */
-void resize(Image *inImg, Image *outImg, int size)
+void resize(Image *inImg, Image *outImg, int outWidth, int outHeight)
 {
+    if (inImg == NULL || outImg == NULL || outWidth <= 0 || outHeight <= 0)
+    {
+        return; // invalid parameters
+    }
 
+    // Allocate channels if missing
     if (isChalsEmpty(outImg))
     {
-        createChals(outImg, outImg->depth);
+        if (!createChals(outImg, 1))
+        {           // only 1 channel for grayscale
+            return; // allocation failed
+        }
         outImg->is_chals = 1;
     }
 
-    float width_ratio = (float)inImg->width / size;
-    float height_ratio = (float)inImg->height / size;
+    float width_ratio = (float)inImg->width / (float)outWidth;
+    float height_ratio = (float)inImg->height / (float)outHeight;
 
-    // Clear output buffer to white (0xFF)
-    for (int y = 0; y < outImg->width * outImg->height; y++)
-        ((float *)outImg->chals->ch[0])[y] = 255.0f;
-
-    // Resize using nearest neighbor
-    for (int y = 0; y < size; y++)
+    // Clear output buffer (optional: here we fill with white 255.0f)
+    for (uint32_t i = 0; i < (uint32_t)(outWidth * outHeight); i++)
     {
-        for (int x = 0; x < size; x++)
+        outImg->chals->ch[0][i] = 255.0f;
+    }
+
+    // Resize using nearest-neighbor interpolation
+    for (int y = 0; y < outHeight; y++)
+    {
+        for (int x = 0; x < outWidth; x++)
         {
             int nearest_x = (int)(x * width_ratio);
             int nearest_y = (int)(y * height_ratio);
 
-            if (nearest_x >= inImg->width)
-                nearest_x = inImg->width - 1;
-            if (nearest_y >= inImg->height)
-                nearest_y = inImg->height - 1;
+            if (nearest_x >= (int)inImg->width)
+                nearest_x = (int)inImg->width - 1;
+            if (nearest_y >= (int)inImg->height)
+                nearest_y = (int)inImg->height - 1;
 
-            outImg->chals->ch[0][y * size + x] =
+            outImg->chals->ch[0][y * outWidth + x] =
                 (float)((uint8_t *)inImg->pixels)[nearest_y * inImg->width + nearest_x];
         }
     }
 
-    outImg->width = size;
-    outImg->height = size;
-    outImg->size = size * size * inImg->depth;
+    // Update output image metadata
+    outImg->width = (uint32_t)outWidth;
+    outImg->height = (uint32_t)outHeight;
+    outImg->size = (uint32_t)(outWidth * outHeight);
 }
 
 /**
@@ -2090,7 +2716,7 @@ void normalize(Image *inImg)
     uint8_t *data = (uint8_t *)inImg->pixels;
 
     uint8_t min = 255, max = 0;
-    for (int i = 0; i < inImg->size; i++)
+    for (uint32_t i = 0; i < inImg->size; i++)
     {
         uint8_t v = (uint8_t)data[i];
         if (v < min)
@@ -2098,7 +2724,7 @@ void normalize(Image *inImg)
         if (v > max)
             max = v;
     }
-    for (int i = 0; i < inImg->size; i++)
+    for (uint32_t i = 0; i < inImg->size; i++)
     {
         data[i] = normalize_to_u8(data[i], min, max);
     }
@@ -2118,7 +2744,7 @@ void convertTo(Image *inImg)
             float min = FLT_MAX, max = -FLT_MAX;
 
             // Step 1: Find min and max
-            for (int i = 0; i < inImg->size; i++)
+            for (uint32_t i = 0; i < inImg->size; i++)
             {
                 float v = inImg->chals->ch[0][i];
                 if (v < min)
@@ -2130,7 +2756,7 @@ void convertTo(Image *inImg)
             // Step 2: Normalize to [0, 255] and clamp
             if (max != min)
             {
-                for (int i = 0; i < inImg->size; i++)
+                for (uint32_t i = 0; i < inImg->size; i++)
                 {
                     float norm = (inImg->chals->ch[0][i] - min) / (max - min);
                     data[i] = (uint8_t)(norm * 255.0f + 0.5f); // +0.5 for rounding
@@ -2145,7 +2771,7 @@ void convertTo(Image *inImg)
         else if (inImg->log == IMAGE_DATA_PIXELS)
         {
             uint8_t min = 255, max = 0;
-            for (int i = 0; i < inImg->size; i++)
+            for (uint32_t i = 0; i < inImg->size; i++)
             {
                 uint8_t v = (uint8_t)data[i];
                 if (v < min)
@@ -2153,7 +2779,7 @@ void convertTo(Image *inImg)
                 if (v > max)
                     max = v;
             }
-            for (int i = 0; i < inImg->size; i++)
+            for (uint32_t i = 0; i < inImg->size; i++)
             {
                 data[i] = normalize_to_u8(data[i], min, max);
             }
@@ -2171,7 +2797,7 @@ void convertTo(Image *inImg)
         float min_g = FLT_MAX, max_g = -FLT_MAX;
         float min_b = FLT_MAX, max_b = -FLT_MAX;
 
-        for (int i = 0; i < inImg->size; i++)
+        for (uint32_t i = 0; i < inImg->size; i++)
         {
             if (inImg->chals->ch[ch_r][i] < min_r)
                 min_r = inImg->chals->ch[ch_r][i];
@@ -2187,7 +2813,7 @@ void convertTo(Image *inImg)
                 max_b = inImg->chals->ch[ch_b][i];
         }
 
-        for (int i = 0; i < inImg->size; i++)
+        for (uint32_t i = 0; i < inImg->size; i++)
         {
             data[i * 3 + 0] = normalize_to_u8(inImg->chals->ch[ch_b][i], min_b, max_b);
             data[i * 3 + 1] = normalize_to_u8(inImg->chals->ch[ch_g][i], min_g, max_g);
@@ -2202,7 +2828,7 @@ void convertTo(Image *inImg)
         float min_g = FLT_MAX, max_g = -FLT_MAX;
         float min_b = FLT_MAX, max_b = -FLT_MAX;
 
-        for (int i = 0; i < inImg->size; i++)
+        for (uint32_t i = 0; i < inImg->size; i++)
         {
             if (inImg->chals->ch[1][i] < min_r)
                 min_r = inImg->chals->ch[1][i];
@@ -2218,7 +2844,7 @@ void convertTo(Image *inImg)
                 max_b = inImg->chals->ch[3][i];
         }
 
-        for (int i = 0; i < inImg->size; i++)
+        for (uint32_t i = 0; i < inImg->size; i++)
         {
             uint8_t r = normalize_to_u8(inImg->chals->ch[1][i], min_r, max_r);
             uint8_t g = normalize_to_u8(inImg->chals->ch[2][i], min_g, max_g);

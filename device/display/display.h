@@ -112,7 +112,7 @@ extern "C"
         void (*deinit)(void);
         void (*reset)(void);
         void (*clear)(displayColor color);
-        void (*show)(const Image *image);
+        void (*show)(Image *image);
 
     } display_t;
 

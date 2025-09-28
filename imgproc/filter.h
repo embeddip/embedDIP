@@ -45,6 +45,13 @@ extern "C"
 
     void logFilter(const Image *inImg, Image *outImg, float sigma);
 
+    void gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma);
+
+    void gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag);
+
+    void gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase);
+
+    void Canny(const Image *inImg, Image *outImg, double threshold1, double threshold2, int apertureSize, bool L2gradient);
 #ifdef __cplusplus
 }
 #endif

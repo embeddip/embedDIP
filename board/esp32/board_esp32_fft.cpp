@@ -21,7 +21,7 @@ int fft(const Image *inImg, Image *outImg)
     int N = inImg->width;
     if (!isValidFFTSize(N, N))
     {
-        //Serial.println("[ERROR] Invalid FFT size. Only powers of 2 are supported.");
+        // Serial.println("[ERROR] Invalid FFT size. Only powers of 2 are supported.");
         return -1;
     }
 
@@ -31,13 +31,13 @@ int fft(const Image *inImg, Image *outImg)
         outImg->is_chals = 1;
     }
 
-    //Serial.println("[ERROR] 1pixels are null.");
+    // Serial.println("[ERROR] 1pixels are null.");
     float *buf0 = outImg->chals->ch[0];
     float *buf1 = outImg->chals->ch[1];
-    //Serial.println("[ERROR] 2or pixels are null.");
+    // Serial.println("[ERROR] 2or pixels are null.");
     if (!inImg || !inImg->pixels)
     {
-        //Serial.println("[ERROR]3 or pixels are null.");
+        // Serial.println("[ERROR]3 or pixels are null.");
         return -3;
     }
 
@@ -50,16 +50,16 @@ int fft(const Image *inImg, Image *outImg)
     // Initialize the FFT library
     dsps_fft2r_init_fc32(NULL, CONFIG_DSP_MAX_FFT_SIZE);
 
-    //Serial.println("[ERROR] 4or pixels are null.");
-    // FFT on rows
+    // Serial.println("[ERROR] 4or pixels are null.");
+    //  FFT on rows
     for (int i = 0; i < N; i++)
     {
         int offset = i * N * 2;
         dsps_fft2r_fc32(buf0 + offset, N);
         dsps_bit_rev_fc32(buf0 + offset, N);
     }
-    //Serial.println("[ERROR] 5or pixels are null.");
-    // Transpose to buf1
+    // Serial.println("[ERROR] 5or pixels are null.");
+    //  Transpose to buf1
     for (int y = 0; y < N; y++)
     {
         for (int x = 0; x < N; x++)
@@ -80,7 +80,7 @@ int fft(const Image *inImg, Image *outImg)
     }
 
     outImg->log = IMAGE_DATA_COMPLEX;
-    //Serial.println("[INFO] 2D FFT completed successfully.");
+    // Serial.println("[INFO] 2D FFT completed successfully.");
     return 0;
 }
 
@@ -196,7 +196,7 @@ void _abs_(const Image *fftImg, Image *magImg)
 
     if (!fftImg || !fftImg->chals)
     {
-        //Serial.println("[ERROR] Input FFT image or its channels are null.");
+        // Serial.println("[ERROR] Input FFT image or its channels are null.");
         return;
     }
 
@@ -206,7 +206,7 @@ void _abs_(const Image *fftImg, Image *magImg)
 
     if (!fft)
     {
-        //Serial.println("[ERROR] FFT buffer is null.");
+        // Serial.println("[ERROR] FFT buffer is null.");
         return;
     }
 
@@ -214,13 +214,13 @@ void _abs_(const Image *fftImg, Image *magImg)
     {
         createChals(magImg, 1);
         magImg->is_chals = 1;
-        //Serial.println("[INFO] Output magnitude channel created.");
+        // Serial.println("[INFO] Output magnitude channel created.");
     }
 
     float *mag = magImg->chals->ch[0];
     if (!mag)
     {
-       //Serial.println("[ERROR] Magnitude channel buffer is null.");
+        // Serial.println("[ERROR] Magnitude channel buffer is null.");
         return;
     }
 

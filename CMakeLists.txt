@@ -14,9 +14,6 @@ file(GLOB_RECURSE SERIAL_SRC serial/*.c)
 file(GLOB_RECURSE DEVICE_SRC device/**/*.c)
 file(GLOB_RECURSE WRAPPER_SRC wrapper/*.cpp)
 
-# Fix: include stm32f7 board files (like stm32_common.c)
-list(FILTER BOARD_SRC INCLUDE REGEX ".*stm32f7/.*")
-
 # === CMSIS-DSP Source Files (if not already linked in parent CMake) ===
 file(GLOB_RECURSE CMSIS_DSP_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Source/*.c
@@ -25,11 +22,11 @@ file(GLOB_RECURSE CMSIS_DSP_SRCS
 
 # === Create the static library target ===
 add_library(embedDIP STATIC
+    ${BOARD_SRC}
     ${CORE_SRC}
     ${IMGPROC_SRC}
     ${SERIAL_SRC}
     ${DEVICE_SRC}
-    ${BOARD_SRC}
     ${CMSIS_DSP_SRCS}
     ${WRAPPER_SRC}
 )

@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#define SDRAM_BANK_ADDR ((uint32_t)0xC0100000)
+
 #define MEMORY_POOL_SIZE (1024 * 1024 * 8) // 8MB
 static uint8_t *memory_pool = ((uint8_t *)SDRAM_BANK_ADDR + 0x1000);
 

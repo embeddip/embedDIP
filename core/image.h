@@ -1,63 +1,87 @@
+/* ========================================================================== */
+/*  File: image.h                                                             */
+/*  Brief: Image data structures, resolutions, formats, and channel handling  */
+/*  SPDX-License-Identifier: BSD-3-Clause                                     */
+/* ========================================================================== */
 #ifndef IMAGE_H
 #define IMAGE_H
 
+/**
+ * @file image.h
+ * @brief Core image type definitions for the EmbedDIP library.
+ *
+ * This header defines:
+ * - Predefined resolutions and lookup tables
+ * - Image formats and pixel depths
+ * - Structures for rectangular regions, GMM statistics, and channel storage
+ * - The main ::Image container
+ */
+
 #include <stdint.h>
-#include <stdio.h>
 #include <stdbool.h>
-#include "assert.h"
+#include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
+
+/**
+ * @defgroup embedDIP_image Image Structures & Formats
+ * @ingroup embedDIP_c_api
+ * @brief Data structures and constants for image representation in EmbedDIP.
+ * @{
+ */
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-/**
- * @def MAX_INTENSITY
- * @brief Maximum intensity value for 8-bit image formats.
- */
-#define MAX_INTENSITY 255
+/** @brief Maximum intensity value for 8-bit formats. */
+#ifndef UINT8_MAX
+#define UINT8_MAX 255
+#endif
 
-    /**
-     * @enum image_resolution_t
-     * @brief Predefined image resolutions with associated indices.
-     */
+    /* -------------------------------------------------------------------------- */
+    /* Resolution enumeration                                                     */
+    /* -------------------------------------------------------------------------- */
     /**
      * @enum ImageResolution
      * @brief Predefined image resolutions with associated indices.
      */
     typedef enum
     {
-        IMAGE_RES_96X96 = 0, /**< 96x96 resolution */
-        IMAGE_RES_QQVGA,     /**< 160x120 resolution */
-        IMAGE_RES_QCIF,      /**< 176x144 resolution */
-        IMAGE_RES_HQVGA,     /**< 240x176 resolution */
-        IMAGE_RES_240X240,   /**< 240x240 resolution */
-        IMAGE_RES_QVGA,      /**< 320x240 resolution */
-        IMAGE_RES_CIF,       /**< 352x288 resolution */
-        IMAGE_RES_HVGA,      /**< 480x320 resolution */
-        IMAGE_RES_VGA,       /**< 640x480 resolution */
-        IMAGE_RES_SVGA,      /**< 800x600 resolution */
-        IMAGE_RES_XGA,       /**< 1024x768 resolution */
-        IMAGE_RES_HD,        /**< 1280x720 resolution */
-        IMAGE_RES_SXGA,      /**< 1280x1024 resolution */
-        IMAGE_RES_UXGA,      /**< 1600x1200 resolution */
-        IMAGE_RES_FHD,       /**< 1920x1080 resolution */
-        IMAGE_RES_P_HD,      /**< 720x1280 resolution (portrait HD) */
-        IMAGE_RES_P_3MP,     /**< 864x1536 resolution (portrait 3MP) */
-        IMAGE_RES_QXGA,      /**< 2048x1536 resolution */
-        IMAGE_RES_QHD,       /**< 2560x1440 resolution */
-        IMAGE_RES_WQXGA,     /**< 2560x1600 resolution */
-        IMAGE_RES_P_FHD,     /**< 1080x1920 resolution (portrait FHD) */
-        IMAGE_RES_QSXGA,     /**< 2560x1920 resolution */
-        IMAGE_RES_INVALID,
-        IMAGE_RES_CUSTOM, /**< User-defined resolution */
-        IMAGE_RES_WQVGA   /**< 480x272 resolution (custom addition) */
+        IMAGE_RES_96X96 = 0, /**< 96×96 */
+        IMAGE_RES_QQVGA,     /**< 160×120 */
+        IMAGE_RES_QCIF,      /**< 176×144 */
+        IMAGE_RES_HQVGA,     /**< 240×176 */
+        IMAGE_RES_240X240,   /**< 240×240 */
+        IMAGE_RES_QVGA,      /**< 320×240 */
+        IMAGE_RES_CIF,       /**< 352×288 */
+        IMAGE_RES_HVGA,      /**< 480×320 */
+        IMAGE_RES_VGA,       /**< 640×480 */
+        IMAGE_RES_SVGA,      /**< 800×600 */
+        IMAGE_RES_XGA,       /**< 1024×768 */
+        IMAGE_RES_HD,        /**< 1280×720 */
+        IMAGE_RES_SXGA,      /**< 1280×1024 */
+        IMAGE_RES_UXGA,      /**< 1600×1200 */
+        IMAGE_RES_FHD,       /**< 1920×1080 */
+        IMAGE_RES_P_HD,      /**< 720×1280 (portrait HD) */
+        IMAGE_RES_P_3MP,     /**< 864×1536 (portrait 3MP) */
+        IMAGE_RES_QXGA,      /**< 2048×1536 */
+        IMAGE_RES_QHD,       /**< 2560×1440 */
+        IMAGE_RES_WQXGA,     /**< 2560×1600 */
+        IMAGE_RES_P_FHD,     /**< 1080×1920 (portrait FHD) */
+        IMAGE_RES_QSXGA,     /**< 2560×1920 */
+        IMAGE_RES_INVALID,   /**< Invalid resolution */
+        IMAGE_RES_CUSTOM,    /**< User-defined dimensions */
+        IMAGE_RES_WQVGA      /**< 480×272 */
     } ImageResolution;
 
+/* -------------------------------------------------------------------------- */
+/* Resolution dimension macros                                                */
+/* -------------------------------------------------------------------------- */
 /** @name Resolution dimensions
- *  @brief Image width and height definitions for each resolution.
+ *  @brief Width/height macros for each ::ImageResolution.
  *  @{
  */
 #define IMAGE_RES_96X96_Width 96
@@ -109,183 +133,162 @@ extern "C"
 
 #define IMAGE_RES_INVALID_Width 0xFF
 #define IMAGE_RES_INVALID_Height 0xFF
-
 #define IMAGE_RES_CUSTOM_Width 0xEF
 #define IMAGE_RES_CUSTOM_Height 0xEF
-
     /** @} */
 
-    /**
-     * @brief Lookup table for image widths by resolution index.
-     */
+    /* -------------------------------------------------------------------------- */
+    /* Lookup tables                                                              */
+    /* -------------------------------------------------------------------------- */
+    /** @brief Lookup table for image widths by resolution index. */
     static const uint16_t RES_WIDTH_LOOKUP[] = {
-        IMAGE_RES_96X96_Width,
-        IMAGE_RES_QQVGA_Width,
-        IMAGE_RES_QCIF_Width,
-        IMAGE_RES_HQVGA_Width,
-        IMAGE_RES_240X240_Width,
-        IMAGE_RES_QVGA_Width,
-        IMAGE_RES_CIF_Width,
-        IMAGE_RES_HVGA_Width,
-        IMAGE_RES_VGA_Width,
-        IMAGE_RES_SVGA_Width,
-        IMAGE_RES_XGA_Width,
-        IMAGE_RES_HD_Width,
-        IMAGE_RES_SXGA_Width,
-        IMAGE_RES_UXGA_Width,
-        IMAGE_RES_FHD_Width,
-        IMAGE_RES_P_HD_Width,
-        IMAGE_RES_P_3MP_Width,
-        IMAGE_RES_QXGA_Width,
-        IMAGE_RES_QHD_Width,
-        IMAGE_RES_WQXGA_Width,
-        IMAGE_RES_P_FHD_Width,
-        IMAGE_RES_QSXGA_Width,
-        IMAGE_RES_INVALID_Width,
-        IMAGE_RES_CUSTOM_Width,
-        IMAGE_RES_WQVGA_Width,
-    };
+        IMAGE_RES_96X96_Width, IMAGE_RES_QQVGA_Width, IMAGE_RES_QCIF_Width, IMAGE_RES_HQVGA_Width,
+        IMAGE_RES_240X240_Width, IMAGE_RES_QVGA_Width, IMAGE_RES_CIF_Width, IMAGE_RES_HVGA_Width,
+        IMAGE_RES_VGA_Width, IMAGE_RES_SVGA_Width, IMAGE_RES_XGA_Width, IMAGE_RES_HD_Width,
+        IMAGE_RES_SXGA_Width, IMAGE_RES_UXGA_Width, IMAGE_RES_FHD_Width, IMAGE_RES_P_HD_Width,
+        IMAGE_RES_P_3MP_Width, IMAGE_RES_QXGA_Width, IMAGE_RES_QHD_Width, IMAGE_RES_WQXGA_Width,
+        IMAGE_RES_P_FHD_Width, IMAGE_RES_QSXGA_Width, IMAGE_RES_INVALID_Width,
+        IMAGE_RES_CUSTOM_Width, IMAGE_RES_WQVGA_Width};
 
+    /** @brief Lookup table for image heights by resolution index. */
     static const uint16_t RES_HEIGHT_LOOKUP[] = {
-        IMAGE_RES_96X96_Height,
-        IMAGE_RES_QQVGA_Height,
-        IMAGE_RES_QCIF_Height,
-        IMAGE_RES_HQVGA_Height,
-        IMAGE_RES_240X240_Height,
-        IMAGE_RES_QVGA_Height,
-        IMAGE_RES_CIF_Height,
-        IMAGE_RES_HVGA_Height,
-        IMAGE_RES_VGA_Height,
-        IMAGE_RES_SVGA_Height,
-        IMAGE_RES_XGA_Height,
-        IMAGE_RES_HD_Height,
-        IMAGE_RES_SXGA_Height,
-        IMAGE_RES_UXGA_Height,
-        IMAGE_RES_FHD_Height,
-        IMAGE_RES_P_HD_Height,
-        IMAGE_RES_P_3MP_Height,
-        IMAGE_RES_QXGA_Height,
-        IMAGE_RES_QHD_Height,
-        IMAGE_RES_WQXGA_Height,
-        IMAGE_RES_P_FHD_Height,
-        IMAGE_RES_QSXGA_Height,
-        IMAGE_RES_INVALID_Height,
-        IMAGE_RES_CUSTOM_Height,
-        IMAGE_RES_WQVGA_Height};
+        IMAGE_RES_96X96_Height, IMAGE_RES_QQVGA_Height, IMAGE_RES_QCIF_Height, IMAGE_RES_HQVGA_Height,
+        IMAGE_RES_240X240_Height, IMAGE_RES_QVGA_Height, IMAGE_RES_CIF_Height, IMAGE_RES_HVGA_Height,
+        IMAGE_RES_VGA_Height, IMAGE_RES_SVGA_Height, IMAGE_RES_XGA_Height, IMAGE_RES_HD_Height,
+        IMAGE_RES_SXGA_Height, IMAGE_RES_UXGA_Height, IMAGE_RES_FHD_Height, IMAGE_RES_P_HD_Height,
+        IMAGE_RES_P_3MP_Height, IMAGE_RES_QXGA_Height, IMAGE_RES_QHD_Height, IMAGE_RES_WQXGA_Height,
+        IMAGE_RES_P_FHD_Height, IMAGE_RES_QSXGA_Height, IMAGE_RES_INVALID_Height,
+        IMAGE_RES_CUSTOM_Height, IMAGE_RES_WQVGA_Height};
 
+    /* -------------------------------------------------------------------------- */
+    /* Image format, depth, and metadata                                          */
+    /* -------------------------------------------------------------------------- */
     /**
      * @enum ImageFormat
-     * @brief Enum representing different image color formats.
+     * @brief Supported color formats for images.
      */
     typedef enum
     {
         IMAGE_FORMAT_GRAYSCALE = 0, /**< 1 channel grayscale */
-        IMAGE_FORMAT_RGB888,        /**< RGB format, 3 channels, 8-bit each */
-        IMAGE_FORMAT_RGB565,        /**< Packed RGB format, 16-bit */
-        IMAGE_FORMAT_YUV,           /**< YUV format, 3 channels */
-        IMAGE_FORMAT_HSI            /**< HSI format, usually stored as float */
+        IMAGE_FORMAT_RGB888,        /**< 3×8-bit RGB */
+        IMAGE_FORMAT_RGB565,        /**< Packed 16-bit RGB */
+        IMAGE_FORMAT_YUV,           /**< YUV (3 channels) */
+        IMAGE_FORMAT_HSI            /**< HSI color space, usually float */
     } ImageFormat;
-
-    typedef struct
-    {
-        int x;
-        int y;
-        int width;
-        int height;
-    } Rect;
-
-    typedef struct
-    {
-        float mean[3]; // RGB
-        float var[3];  // RGB diagonal covariance
-        int count;
-    } GMMStats;
 
     /**
      * @enum ImageDepth
-     * @brief Enum representing the depth (bit-precision) of image data.
+     * @brief Bit-depth or precision of pixel data.
      */
     typedef enum
     {
-        IMAGE_DEPTH_U8 = 1,  /**< Unsigned 8-bit depth */
-        IMAGE_DEPTH_U16 = 2, /**< Unsigned 16-bit depth */
-        IMAGE_DEPTH_U24 = 3, /**< Unsigned 24-bit depth (packed RGB888) */
-        IMAGE_DEPTH_F32 = 4  /**< 32-bit floating-point depth */
+        IMAGE_DEPTH_U8 = 1,  /**< Unsigned 8-bit */
+        IMAGE_DEPTH_U16 = 2, /**< Unsigned 16-bit */
+        IMAGE_DEPTH_U24 = 3, /**< Packed RGB888 */
+        IMAGE_DEPTH_F32 = 4  /**< 32-bit float */
     } ImageDepth;
 
+    /**
+     * @enum ImageDataState
+     * @brief Indicator of the most recent or valid data location within ::Image.
+     */
     typedef enum
     {
         IMAGE_DATA_INVALID = 0, /**< No valid data yet */
-        IMAGE_DATA_PIXELS,      /**< Raw pixel data in 'pixels' is the most recent */
-        IMAGE_DATA_CH0,         /**< chals->ch[0] is the most recent (e.g., grayscale or real) */
-        IMAGE_DATA_CH1,         /**< chals->ch[1] is the most recent (e.g., FFT transposed) */
-        IMAGE_DATA_CH2,         /**< chals->ch[2] is the most recent (e.g., green channel) */
-        IMAGE_DATA_CH3,         /**< chals->ch[3] is the most recent (e.g., blue channel) */
-        IMAGE_DATA_CH4,         /**< chals->ch[4] is the most recent (optional use) */
-        IMAGE_DATA_CH5,         /**< chals->ch[5] is the most recent (optional use) */
-        IMAGE_DATA_COMPLEX,     /**< Complex data stored across ch[0] and ch[1] */
-        IMAGE_DATA_MAGNITUDE,   /**< Magnitude spectrum stored in ch[0] */
-        IMAGE_DATA_PHASE        /**< Phase spectrum stored in ch[0] */
+        IMAGE_DATA_PIXELS,      /**< Raw pixel data is most recent */
+        IMAGE_DATA_CH0,         /**< ch[0] most recent */
+        IMAGE_DATA_CH1,         /**< ch[1] most recent */
+        IMAGE_DATA_CH2,         /**< ch[2] most recent */
+        IMAGE_DATA_CH3,         /**< ch[3] most recent */
+        IMAGE_DATA_CH4,         /**< ch[4] most recent */
+        IMAGE_DATA_CH5,         /**< ch[5] most recent */
+        IMAGE_DATA_COMPLEX,     /**< Complex data in ch[0] and ch[1] */
+        IMAGE_DATA_MAGNITUDE,   /**< Magnitude spectrum in ch[0] */
+        IMAGE_DATA_PHASE        /**< Phase spectrum in ch[0] */
     } ImageDataState;
 
+    /* -------------------------------------------------------------------------- */
+    /* Helper structs                                                             */
+    /* -------------------------------------------------------------------------- */
     /**
-     * @struct channels_t
-     * @brief Structure to hold floating-point representations of image channels.
-     *
-     * Allows flexible access to color components or single-channel images.
+     * @struct Rectangle
+     * @brief Axis-aligned rectangle.
      */
     typedef struct
     {
+        int x;      /**< X coordinate (top-left) */
+        int y;      /**< Y coordinate (top-left) */
+        int width;  /**< Width in pixels */
+        int height; /**< Height in pixels */
+    } Rectangle;
 
+    /**
+     * @struct GMMStats
+     * @brief Simple Gaussian mixture model statistics (per channel).
+     */
+    typedef struct
+    {
+        float mean[3]; /**< Per-channel mean (RGB) */
+        float var[3];  /**< Per-channel variance (diagonal covariance) */
+        int count;     /**< Number of samples accumulated */
+    } GMMStats;
+
+    /**
+     * @struct channels_t
+     * @brief Floating-point image channel storage (up to 6 channels).
+     */
+    typedef struct
+    {
 #ifdef __cplusplus
+        float *ch[6]; /**< Channel array: ch[0] = l, ch[1] = r, etc. */
 
-        float *ch[6]; /**< Array-style access: ch[0] = l/r, ch[1] = g, etc. */
-
-        float *&l() { return ch[0]; }  /**< Luminance or grayscale channel (same as ch[0]) */
-        float *&r() { return ch[1]; }  /**< Red channel (same as ch[1]) */
-        float *&g() { return ch[2]; }  /**< Green channel (same as ch[2]) */
-        float *&b() { return ch[3]; }  /**< Blue channel (same as ch[3]) */
+        float *&l() { return ch[0]; }  /**< Luminance/grayscale */
+        float *&r() { return ch[1]; }  /**< Red channel */
+        float *&g() { return ch[2]; }  /**< Green channel */
+        float *&b() { return ch[3]; }  /**< Blue channel */
         float *&fx() { return ch[4]; } /**< Optional horizontal FFT data */
         float *&fy() { return ch[5]; } /**< Optional vertical FFT data */
 #else
     union
     {
-        float *ch[6]; /**< Array-style access: ch[0] = l/r, ch[1] = g, etc. */
-        struct test
+        float *ch[6];
+        struct
         {
-            float *l;  /**< Luminance or grayscale channel (same as ch[0]) */
-            float *r;  /**< Red channel (same as ch[1]) */
-            float *g;  /**< Green channel (same as ch[2]) */
-            float *b;  /**< Blue channel (same as ch[3]) */
-            float *fx; /**< Optional horizontal FFT data */
-            float *fy; /**< Optional vertical FFT data */
-        } test;
+            float *l;
+            float *r;
+            float *g;
+            float *b;
+            float *fx;
+            float *fy;
+        };
     };
 #endif
-
     } channels_t;
 
+    /* -------------------------------------------------------------------------- */
+    /* Main image container                                                       */
+    /* -------------------------------------------------------------------------- */
     /**
      * @struct Image
-     * @brief Represents an image with both raw pixel data and channel-wise float representation.
-     *
-     * Includes resolution, format, depth, and optional Fourier components.
+     * @brief Represents an image with both raw pixel data and optional float channels.
      */
     typedef struct
     {
         uint32_t width;     /**< Image width in pixels */
         uint32_t height;    /**< Image height in pixels */
-        void *pixels;       /**< Raw pixel data */
-        channels_t *chals;  /**< Optional high-precision float channels */
-        bool is_chals;      /**< Flag indicating if chals is valid */
-        uint32_t size;      /**< Total number of elements = width * height * channels */
-        ImageFormat format; /**< Color format of the image */
-        ImageDepth depth;   /**< Pixel depth (bit precision or float) */
-        ImageDataState log; /**< Last valid or most recently updated image data */
+        void *pixels;       /**< Pointer to raw pixel data */
+        channels_t *chals;  /**< Pointer to channel data (optional) */
+        bool is_chals;      /**< True if chals is valid/allocated */
+        uint32_t size;      /**< Total number of elements (width × height × channels) */
+        ImageFormat format; /**< Image color format */
+        ImageDepth depth;   /**< Pixel depth */
+        ImageDataState log; /**< Most recent/valid data location */
     } Image;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // IMAGE_H
+/** @} */ /* end of embedDIP_image */
+
+#endif /* IMAGE_H */

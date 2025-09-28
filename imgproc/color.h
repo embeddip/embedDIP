@@ -54,4 +54,6 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code);
 
 void hueThreshold(const Image *input, Image *output, float minHue, float maxHue);
 
+void inRange(const Image *input, Image *mask, const uint8_t lower[3], const uint8_t upper[3]);
+
 #endif // EMBED_DIP_COLOR_H

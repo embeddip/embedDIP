@@ -20,6 +20,105 @@ extern "C"
 namespace embedDIP
 {
 
+    struct Point
+    {
+        int x;
+        int y;
+    };
+
+    // C++ wrapper
+    class Kernel
+    {
+    public:
+        // Constructors / destructor / move operations
+        Kernel() noexcept
+            : kernel_(static_cast<::Kernel *>(std::malloc(sizeof(::Kernel))))
+        {
+            if (kernel_)
+            {
+                kernel_->data = nullptr;
+                kernel_->size = 0;
+                kernel_->anchor = 0;
+            }
+        }
+
+        // Build-on-construct convenience (optional)
+        Kernel(MorphShape shape, uint8_t ksize) noexcept : Kernel()
+        {
+            if (kernel_)
+            {
+                ::getStructuringElement(kernel_, shape, ksize);
+            }
+        }
+
+        ~Kernel()
+        {
+            if (kernel_)
+            {
+                std::free(kernel_->data);
+                std::free(kernel_);
+            }
+        }
+
+        Kernel(const Kernel &) = delete;
+        Kernel &operator=(const Kernel &) = delete;
+
+        Kernel(Kernel &&other) noexcept : kernel_(other.kernel_)
+        {
+            other.kernel_ = nullptr;
+        }
+
+        Kernel &operator=(Kernel &&other) noexcept
+        {
+            if (this != &other)
+            {
+                if (kernel_)
+                {
+                    std::free(kernel_->data);
+                    std::free(kernel_);
+                }
+                kernel_ = other.kernel_;
+                other.kernel_ = nullptr;
+            }
+            return *this;
+        }
+
+        // Raw access (match Image style: returns non-const pointer even in const)
+        ::Kernel *raw() noexcept { return kernel_; }
+        ::Kernel *raw() const noexcept { return kernel_; }
+
+        // Lightweight accessors
+        inline uint8_t size() const noexcept { return kernel_ ? kernel_->size : 0; }
+        inline uint8_t anchor() const noexcept { return kernel_ ? kernel_->anchor : 0; }
+        inline uint8_t *data() const noexcept { return kernel_ ? kernel_->data : nullptr; }
+
+        /**
+         * @brief Builds or rebuilds the structuring element (kernel) used in morphological operations.
+         *
+         * @param[in] shape  The morphological shape of the structuring element.
+         * @param[in] ksize  The size of the kernel.
+         *
+         * @return Reference to the current Kernel object with the updated structuring element.
+         */
+        Kernel &getStructuringElement(MorphShape shape, uint8_t ksize) noexcept
+        {
+            if (!kernel_)
+                return *this;
+
+            // If C helper allocates, free old buffer to avoid leaks
+            std::free(kernel_->data);
+            kernel_->data = nullptr;
+            kernel_->size = 0;
+            kernel_->anchor = 0;
+
+            ::getStructuringElement(kernel_, shape, ksize);
+            return *this;
+        }
+
+    private:
+        ::Kernel *kernel_;
+    };
+
     class Image
     {
     public:
@@ -52,14 +151,19 @@ namespace embedDIP
         uint8_t OtsuThreshold() const noexcept;
         void grayscaleOtsu(Image &out) const noexcept;
         void grayscaleThresholdLocalOtsuTo(Image &out, int blockSize) const noexcept;
-        void grayscaleKMeansTo(Image &out, int k) const noexcept;
+        void grayscaleKMeans(Image &out, int k) const noexcept;
 
         void colorKMeans(Image &out, int k) const noexcept;
 
-        void grayscaleRegionGrowingTo(Image &out, int seedX, int seedY, uint8_t tolerance) const noexcept;
+        void grayscaleRegionGrowing(Image &out,
+                                    const Point *seeds,
+                                    int numSeeds,
+                                    uint8_t tolerance) const noexcept;
 
-        void colorRegionGrowing(Image &out, int seedX, int seedY, float tolerance) const noexcept;
-
+        void colorRegionGrowing(Image &out,
+                                const Point *seeds,
+                                int numSeeds,
+                                float tolerance) const noexcept;
         // Hough Transform
         std::vector<std::vector<int>> houghAccumulator(int numRho, int numTheta,
                                                        float rhoRes, float thetaRes) const;
@@ -118,7 +222,7 @@ namespace embedDIP
         void medianFilter(Image &out, int kernelSize) const;
 
         // fundamentals
-        void resizeTo(Image &out, int size) const;
+        void resize(Image &out, int outWidth, int outHeight) const;
 
         void add(const Image &other, Image &out) const;
 
@@ -127,8 +231,6 @@ namespace embedDIP
         void normalize();
 
         void convertTo();
-
-#ifdef STM32F7xx
 
         void fft(Image &out) const;
 
@@ -159,8 +261,6 @@ namespace embedDIP
 
         void difference(const Image &other, Image &out) const;
 
-#endif
-
         /**
          * @brief Converts this image to a different format and stores it in the provided output image.
          *
@@ -170,20 +270,37 @@ namespace embedDIP
         void cvtColor(Image &out, ColorConversionCode code) const;
 
         void bitwiseAnd(const Image &other, Image &out) const;
-        void bitwiseOr(const Image &other, Image &out) const;
+        void _or(const Image &other, Image &out) const;
+        void _and(const Image &other, Image &out) const;
 
         void bitwiseXor(const Image &other, Image &out) const;
         void bitwiseNot(Image &out) const;
 
         void grabCutLitesd(Image &maskImg, int iterations) const;
 
-        void grabCutLite(Image &outImg, Rect roi, int iterations) const;
+        void grabCutLite(Image &outImg, Rectangle roi, int iterations) const;
 
-        void grabCutLite888(Image &outImg, Rect roi, int iterations) const;
+        void grabCutLite888(Image &outImg, Rectangle roi, int iterations) const;
 
-        void grabCutRGB(Image &outMask, Rect roi, int max_iter) const;
+        void grabCutRGB(Image &outMask, Rectangle roi, int max_iter) const;
 
         void hueThreshold(Image &output, float minHue, float maxHue) const;
+
+        void inRange(Image &mask, const uint8_t lower[3], const uint8_t upper[3]) const;
+
+        void gaussianGradients(Image &outIx, Image &outIy, float sigma) const;
+
+        void gradientMagnitude(const Image &IxImg, const Image &IyImg);
+
+        void gradientPhase(const Image &IxImg, const Image &IyImg);
+
+        void Canny(Image &outImg,
+                   double threshold1, double threshold2,
+                   int apertureSize, bool L2gradient);
+
+        void connectedComponents(Image &outImg);
+
+        void extractComponent(Image &objImg, int targetLabel);
 
     private:
         ::Image *image_;

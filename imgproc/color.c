@@ -559,3 +559,41 @@ void hueThreshold(const Image *input, Image *output, float minHue, float maxHue)
         }
     }
 }
+
+/**
+ * @brief Band thresholding (OpenCV-style).
+ *
+ * Produces a binary mask where pixels are 255 if they lie inside the band
+ * defined by lower[] and upper[], otherwise 0.
+ *
+ * @param[in]  input   Input image (3-channel).
+ * @param[out] mask    Output binary mask (1-channel, same width/height).
+ * @param[in]  lower   Lower bound array [3].
+ * @param[in]  upper   Upper bound array [3].
+ */
+void inRange(const Image *input, Image *mask, const uint8_t lower[3], const uint8_t upper[3])
+{
+    assert(input && mask);
+    assert(mask->format == IMAGE_FORMAT_GRAYSCALE);
+
+    const uint8_t *in = (const uint8_t *)input->pixels;
+    uint8_t *out = (uint8_t *)mask->pixels;
+
+    for (uint32_t i = 0; i < input->size; ++i)
+    {
+        uint8_t c1 = in[i * 3 + 0];
+        uint8_t c2 = in[i * 3 + 1];
+        uint8_t c3 = in[i * 3 + 2];
+
+        if (c1 >= lower[0] && c1 <= upper[0] &&
+            c2 >= lower[1] && c2 <= upper[1] &&
+            c3 >= lower[2] && c3 <= upper[2])
+        {
+            out[i] = 255;
+        }
+        else
+        {
+            out[i] = 0;
+        }
+    }
+}

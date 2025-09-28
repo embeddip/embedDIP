@@ -39,7 +39,7 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
     }
     else
     {
-        inImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * BYTES_PER_PIXEL);
+        inImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * inImg->depth);
         inCh = inImg->chals->ch[ch_idx];
         inImg->is_chals = inImg->is_chals | ~(channel_mask[ch_idx]);
 
@@ -75,7 +75,7 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
     }
     else
     {
-        outImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * BYTES_PER_PIXEL);
+        outImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * inImg->depth);
         outImg->is_chals = outImg->is_chals | ~(channel_mask[ch_idx]);
         outCh = outImg->chals->ch[ch_idx];
     }
@@ -109,6 +109,7 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
 void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
 {
     assert(kernelY == kernelX);
+    assert(sizeX == sizeY);
 
     int half = sizeX / 2;
 
@@ -272,7 +273,7 @@ void minFilter(const Image *inImg, Image *outImg, int kernelSize)
         {
             for (uint32_t x = 0; x < inImg->width; ++x)
             {
-                uint8_t minPixelValue = MAX_INTENSITY;
+                uint8_t minPixelValue = UINT8_MAX;
 
                 for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
                 {
@@ -786,4 +787,433 @@ void logFilter(const Image *inImg, Image *outImg, float sigma)
     memory_free(kernel);
     memory_free(src);
     outImg->log = IMAGE_DATA_CH0;
+}
+
+/**
+ * @brief Non-maximum suppression on gradient magnitude using gradient phase.
+ * Keeps local maxima along gradient direction.
+ *
+ * @param[in]  magImg   Gradient magnitude (float ch0).
+ * @param[in]  phaseImg Gradient phase (float ch0, radians).
+ * @param[out] outImg   Suppressed output (float ch0).
+ */
+void nonMaximumSuppression(const Image *magImg, const Image *phaseImg, Image *outImg)
+{
+    assert(magImg && phaseImg && outImg);
+    uint32_t w = magImg->width, h = magImg->height;
+    assert(w == phaseImg->width && h == phaseImg->height);
+    uint32_t N = w * h;
+
+    const float *mag = magImg->chals->ch[0];
+    const float *phase = phaseImg->chals->ch[0];
+
+    if (!outImg->chals)
+    {
+        outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(outImg->chals, 0, sizeof(channels_t));
+    }
+    outImg->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    outImg->is_chals = 1;
+    float *dst = outImg->chals->ch[0];
+
+    // Iterate, skip borders
+    for (uint32_t y = 1; y < h - 1; y++)
+    {
+        for (uint32_t x = 1; x < w - 1; x++)
+        {
+            uint32_t idx = y * w + x;
+            float angle = phase[idx] * 180.0f / (float)M_PI;
+            if (angle < 0)
+                angle += 180.0f;
+
+            float m = mag[idx];
+            float m1 = 0, m2 = 0;
+
+            if ((angle >= 0 && angle < 22.5) || (angle >= 157.5 && angle <= 180))
+            {
+                m1 = mag[idx - 1];
+                m2 = mag[idx + 1]; // left-right
+            }
+            else if (angle >= 22.5 && angle < 67.5)
+            {
+                m1 = mag[idx - w - 1];
+                m2 = mag[idx + w + 1]; // diag ↘
+            }
+            else if (angle >= 67.5 && angle < 112.5)
+            {
+                m1 = mag[idx - w];
+                m2 = mag[idx + w]; // up-down
+            }
+            else if (angle >= 112.5 && angle < 157.5)
+            {
+                m1 = mag[idx - w + 1];
+                m2 = mag[idx + w - 1]; // diag ↙
+            }
+
+            dst[idx] = (m >= m1 && m >= m2) ? m : 0.0f;
+        }
+    }
+
+    outImg->log = IMAGE_DATA_CH0;
+}
+
+#define STRONG 255
+#define WEAK 50
+
+/**
+ * @brief Apply double thresholding to classify strong/weak edges.
+ * Writes to float ch0 (values: 0.0f, weakVal, strongVal).
+ */
+void doubleThreshold(const Image *inImg, Image *outImg,
+                     float lowThresh, float highThresh,
+                     float weakVal, float strongVal)
+{
+    assert(inImg && outImg);
+    uint32_t N = inImg->width * inImg->height;
+    const float *src = inImg->chals->ch[0];
+
+    if (!outImg->chals)
+    {
+        outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(outImg->chals, 0, sizeof(channels_t));
+    }
+    outImg->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    outImg->is_chals = 1;
+    float *dst = outImg->chals->ch[0];
+
+    for (uint32_t i = 0; i < N; i++)
+    {
+        if (src[i] >= highThresh)
+            dst[i] = strongVal;
+        else if (src[i] >= lowThresh)
+            dst[i] = weakVal;
+        else
+            dst[i] = 0.0f;
+    }
+}
+
+/**
+ * @brief Edge tracking by hysteresis.
+ * Promotes weak edges connected to strong edges.
+ */
+void hysteresis(const Image *inImg, Image *outImg,
+                float weakVal, float strongVal)
+{
+    assert(inImg && outImg);
+    uint32_t w = inImg->width, h = inImg->height;
+    const float *src = inImg->chals->ch[0];
+
+    if (!outImg->chals)
+    {
+        outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(outImg->chals, 0, sizeof(channels_t));
+    }
+    outImg->chals->ch[0] = (float *)memory_alloc((size_t)w * h * sizeof(float));
+    outImg->is_chals = 1;
+    float *dst = outImg->chals->ch[0];
+    memcpy(dst, src, (size_t)w * h * sizeof(float));
+
+    for (uint32_t y = 1; y < h - 1; y++)
+    {
+        for (uint32_t x = 1; x < w - 1; x++)
+        {
+            uint32_t idx = y * w + x;
+            if (dst[idx] == weakVal)
+            {
+                bool connected = false;
+                for (int j = -1; j <= 1; j++)
+                {
+                    for (int i = -1; i <= 1; i++)
+                    {
+                        if (dst[(y + j) * w + (x + i)] == strongVal)
+                        {
+                            connected = true;
+                        }
+                    }
+                }
+                dst[idx] = connected ? strongVal : 0.0f;
+            }
+        }
+    }
+    outImg->log = IMAGE_DATA_CH0;
+}
+
+static void make_gaussian_and_dgauss_1d(float sigma,
+                                        float **G, float **dG, int *ksize)
+{
+    int k = ((int)(6.f * sigma + 1.f)) | 1; // force odd
+    int r = k >> 1;
+
+    float *g = (float *)memory_alloc((size_t)k * sizeof(float));
+    float *dg = (float *)memory_alloc((size_t)k * sizeof(float));
+
+    float s2 = sigma * sigma;
+    float norm = 1.f / (sqrtf(2.f * (float)M_PI) * sigma);
+
+    float sum_g = 0.f, sum_dg = 0.f;
+
+    for (int i = -r; i <= r; ++i)
+    {
+        float x = (float)i;
+        float gx = norm * expf(-(x * x) / (2.f * s2));
+        float dgx = -(x / s2) * gx; // d/dx G(x) = -(x/sigma^2) G(x)
+        g[i + r] = gx;
+        dg[i + r] = dgx;
+        sum_g += gx;
+        sum_dg += dgx;
+    }
+
+    // normalize G to sum=1; remove tiny bias in dG so sum≈0 exactly
+    for (int i = 0; i < k; ++i)
+        g[i] /= (sum_g > 0.f ? sum_g : 1.f);
+    float bias = sum_dg / (float)k;
+    for (int i = 0; i < k; ++i)
+        dg[i] -= bias;
+
+    *G = g;
+    *dG = dg;
+    *ksize = k;
+}
+
+static void sep_conv_xy_f32(const float *src, float *dst,
+                            int width, int height,
+                            const float *kx, int kx_sz,
+                            const float *ky, int ky_sz)
+{
+    int rx = kx_sz >> 1, ry = ky_sz >> 1;
+    float *tmp = (float *)memory_alloc((size_t)width * height * sizeof(float));
+
+    // X
+    for (int y = 0; y < height; ++y)
+    {
+        const float *row = src + y * width;
+        float *trow = tmp + y * width;
+        for (int x = 0; x < width; ++x)
+        {
+            float acc = 0.f;
+            for (int i = -rx; i <= rx; ++i)
+            {
+                int xx = x + i;
+                if (xx < 0)
+                    xx = 0;
+                if (xx >= width)
+                    xx = width - 1;
+                acc += row[xx] * kx[i + rx];
+            }
+            trow[x] = acc;
+        }
+    }
+
+    // Y
+    for (int y = 0; y < height; ++y)
+    {
+        float *drow = dst + y * width;
+        for (int x = 0; x < width; ++x)
+        {
+            float acc = 0.f;
+            for (int j = -ry; j <= ry; ++j)
+            {
+                int yy = y + j;
+                if (yy < 0)
+                    yy = 0;
+                if (yy >= height)
+                    yy = height - 1;
+                acc += tmp[yy * width + x] * ky[j + ry];
+            }
+            drow[x] = acc;
+        }
+    }
+
+    memory_free(tmp);
+}
+
+/**
+ * @brief Compute Gaussian-smoothed image gradients (Ix, Iy) using ∂G/∂x, ∂G/∂y.
+ *
+ * Writes float results into outIx->chals->ch[0] and outIy->chals->ch[0],
+ * mirroring your logFilter() “float in ch0” convention.
+ */
+void gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma)
+{
+    assert(inImg && outIx && outIy);
+    assert(inImg->format == IMAGE_FORMAT_GRAYSCALE);
+    int width = inImg->width, height = inImg->height;
+    int N = width * height;
+
+    // input to float buffer
+    const uint8_t *raw = (const uint8_t *)inImg->pixels;
+    float *src = (float *)memory_alloc((size_t)N * sizeof(float));
+    for (int i = 0; i < N; ++i)
+        src[i] = (float)raw[i];
+
+    // kernels
+    float *G = NULL, *dG = NULL;
+    int ksz = 0;
+    make_gaussian_and_dgauss_1d(sigma, &G, &dG, &ksz);
+
+    // prepare outputs (float channels)
+    if (!outIx->chals)
+    {
+        outIx->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(outIx->chals, 0, sizeof(channels_t));
+    }
+    if (!outIy->chals)
+    {
+        outIy->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(outIy->chals, 0, sizeof(channels_t));
+    }
+    outIx->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    outIy->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    outIx->is_chals = 1;
+    outIy->is_chals = 1;
+    float *ix = outIx->chals->ch[0];
+    float *iy = outIy->chals->ch[0];
+
+    // Ix = (I * dG_x) * G_y
+    sep_conv_xy_f32(src, ix, width, height, dG, ksz, G, ksz);
+    // Iy = (I * G_x) * dG_y
+    sep_conv_xy_f32(src, iy, width, height, G, ksz, dG, ksz);
+
+    memory_free(G);
+    memory_free(dG);
+    memory_free(src);
+
+    // optional: mark data origin/type if you track it (similar to outImg->log = IMAGE_DATA_CH0)
+    outIx->log = IMAGE_DATA_CH0; // reuse your flag; or define IMAGE_DATA_DX if you prefer
+    outIy->log = IMAGE_DATA_CH0;
+}
+
+/**
+ * @brief Compute gradient magnitude sqrt(Ix^2 + Iy^2) from float ch0 of Ix, Iy.
+ * Writes float magnitude to outMag->chals->ch[0].
+ */
+void gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
+{
+    assert(IxImg && IyImg && outMag);
+    uint32_t width = IxImg->width, height = IxImg->height;
+    assert(width == IyImg->width && height == IyImg->height);
+    uint32_t N = width * height;
+
+    const float *ix = IxImg->chals ? IxImg->chals->ch[0] : NULL;
+    const float *iy = IyImg->chals ? IyImg->chals->ch[0] : NULL;
+    assert(ix && iy);
+
+    if (!outMag->chals)
+    {
+        outMag->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(outMag->chals, 0, sizeof(channels_t));
+    }
+    outMag->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    outMag->is_chals = 1;
+    float *mag = outMag->chals->ch[0];
+
+    for (uint32_t i = 0; i < N; ++i)
+    {
+        float gx = ix[i], gy = iy[i];
+        mag[i] = sqrtf(gx * gx + gy * gy);
+    }
+
+    outMag->log = IMAGE_DATA_CH0;
+}
+
+/**
+ * @brief Compute gradient phase atan2(Iy, Ix) from float ch0 of Ix, Iy.
+ * Writes float phase (in radians) to outPhase->chals->ch[0].
+ * Range: [-π, π].
+ */
+void gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase)
+{
+    assert(IxImg && IyImg && outPhase);
+    uint32_t width = IxImg->width, height = IyImg->height;
+    assert(width == IyImg->width && height == IyImg->height);
+    uint32_t N = width * height;
+
+    const float *ix = IxImg->chals ? IxImg->chals->ch[0] : NULL;
+    const float *iy = IyImg->chals ? IyImg->chals->ch[0] : NULL;
+    assert(ix && iy);
+
+    if (!outPhase->chals)
+    {
+        outPhase->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        memset(outPhase->chals, 0, sizeof(channels_t));
+    }
+    outPhase->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    outPhase->is_chals = 1;
+    float *phase = outPhase->chals->ch[0];
+
+    for (uint32_t i = 0; i < N; ++i)
+    {
+        float gx = ix[i], gy = iy[i];
+        phase[i] = atan2f(gy, gx); // radians, [-π, π]
+    }
+
+    outPhase->log = IMAGE_DATA_CH0;
+}
+
+void Canny(const Image *inImg, Image *outImg,
+           double threshold1, double threshold2,
+           int apertureSize, bool L2gradient)
+{
+    assert(inImg && outImg);
+
+    // --- Step 1: Gaussian smoothing + gradients ---
+    float sigma = 1.0; // 0.3 * ((apertureSize - 1) * 0.5 - 1) + 0.8; // could derive from apertureSize
+    Image *Ix = createImageWH(inImg->width, inImg->height, inImg->format);
+    Image *Iy = createImageWH(inImg->width, inImg->height, inImg->format);
+    gaussianGradients(inImg, Ix, Iy, sigma);
+
+    // --- Step 2: magnitude + phase ---
+    Image *Mag = createImageWH(inImg->width, inImg->height, inImg->format);
+    Image *Phase = createImageWH(inImg->width, inImg->height, inImg->format);
+    gradientMagnitude(Ix, Iy, Mag);
+    gradientPhase(Ix, Iy, Phase);
+
+    float *data = Mag->chals->ch[0];
+
+    float min = FLT_MAX,
+          max = -FLT_MAX;
+
+    // Step 1: Find min and max
+    for (uint32_t i = 0; i < inImg->size; i++)
+    {
+        float v = Mag->chals->ch[0][i];
+        if (v < min)
+            min = v;
+        if (v > max)
+            max = v;
+    }
+
+    // Step 2: Normalize to [0, 255] and clamp
+    if (max != min)
+    {
+        for (uint32_t i = 0; i < Mag->size; i++)
+        {
+            float norm = (Mag->chals->ch[0][i] - min) / (max - min);
+            data[i] = (float)(norm * 255.0f + 0.5f); // +0.5 for rounding
+        }
+    }
+    else
+    {
+        // All values are the same, map to 0 or 255
+        memset(data, 0, Mag->size); // Or use 255
+    }
+
+    // --- Step 3: NMS ---
+    Image *Nms = createImageWH(inImg->width, inImg->height, inImg->format);
+    nonMaximumSuppression(Mag, Phase, Nms);
+
+    // --- Step 4: Double threshold ---
+    Image *Dt = createImageWH(inImg->width, inImg->height, inImg->format);
+    doubleThreshold(Nms, Dt, (float)threshold1, (float)threshold2, 50.0f, 255.0f);
+
+    // --- Step 5: Hysteresis ---
+    hysteresis(Dt, outImg, 50.0f, 255.0f);
+
+    // free temps
+    // deleteImage(Ix);
+    // deleteImage(Iy);
+    // deleteImage(Mag);
+    // deleteImage(Phase);
+    // deleteImage(Nms);
+    // deleteImage(Dt);
 }
