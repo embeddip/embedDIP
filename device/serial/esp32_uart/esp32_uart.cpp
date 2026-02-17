@@ -5,7 +5,6 @@
 #include "Arduino.h"
 #include "device/serial/serial.h"
 #include "esp_camera.h"
-#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #define UART_BUF_SIZE 65535

@@ -6,7 +6,6 @@
 #include <stdbool.h>
 #include <core/image.h>
 #include <board/common.h>
-#include "assert.h"
 #include "math.h"
 #ifdef __cplusplus
 extern "C"

@@ -1,5 +1,16 @@
 #include "pixel.h"
-#include "assert.h"
+#include "core/error.h"
+#include <stdio.h>   /* For printf */
+
+// Validation macros to replace assert()
+#define CHECK_NULL_VOID(ptr) \
+    do { if (!(ptr)) return; } while (0)
+
+#define CHECK_FORMAT_VOID(img, expected_fmt) \
+    do { if ((img)->format != (expected_fmt)) return; } while (0)
+
+#define CHECK_CONDITION_VOID(cond) \
+    do { if (!(cond)) return; } while (0)
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -278,8 +289,8 @@ void colorKMeans(const Image *inImg, Image *outImg, int k)
         return;
     }
 
-    assert(inImg->format == IMAGE_FORMAT_HSI);
-    assert(outImg->format == IMAGE_FORMAT_HSI);
+    CHECK_FORMAT_VOID(inImg, IMAGE_FORMAT_HSI);
+    CHECK_FORMAT_VOID(outImg, IMAGE_FORMAT_HSI);
 
     int size = inImg->size;
     const uint8_t *in = (const uint8_t *)inImg->pixels;
@@ -534,13 +545,13 @@ void colorKMeans3(const Image *inImg, Image *outImg, int k)
         printf("Invalid input\n");
         return;
     }
-    assert(inImg->format == outImg->format);
-    assert(inImg->width == outImg->width);
-    assert(inImg->height == outImg->height);
-    assert(inImg->size == outImg->size);
+    CHECK_CONDITION_VOID(inImg->format == outImg->format);
+    CHECK_CONDITION_VOID(inImg->width == outImg->width);
+    CHECK_CONDITION_VOID(inImg->height == outImg->height);
+    CHECK_CONDITION_VOID(inImg->size == outImg->size);
 
     int bpp = inImg->depth;
-    assert(bpp == 2 || bpp == 3);
+    CHECK_CONDITION_VOID(bpp == 2 || bpp == 3);
 
     const int N = inImg->size;
     if (k > N)
@@ -911,10 +922,11 @@ void grayscaleRegionGrowing(const Image *inImg,
  */
 void colorRegionGrowing(const Image *inImg, Image *outImg, int seedX, int seedY, float tolerance)
 {
-    assert(inImg && outImg);
-    assert(inImg->format == IMAGE_FORMAT_HSI);
-    assert(outImg->format == IMAGE_FORMAT_HSI);
-    assert(inImg->size == outImg->size);
+    CHECK_NULL_VOID(inImg);
+    CHECK_NULL_VOID(outImg);
+    CHECK_FORMAT_VOID(inImg, IMAGE_FORMAT_HSI);
+    CHECK_FORMAT_VOID(outImg, IMAGE_FORMAT_HSI);
+    CHECK_CONDITION_VOID(inImg->size == outImg->size);
 
     const int width = inImg->width;
     const int height = inImg->height;
@@ -1066,12 +1078,13 @@ void colorRegionGrowing3(const Image *inImg,
                          int numSeeds,
                          float tolerance)
 {
-    assert(inImg && outImg);
-    assert(outImg->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(outImg->depth == 1);
-    assert(inImg->width == outImg->width);
-    assert(inImg->height == outImg->height);
-    assert(inImg->size == outImg->size);
+    CHECK_NULL_VOID(inImg);
+    CHECK_NULL_VOID(outImg);
+    CHECK_FORMAT_VOID(outImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_CONDITION_VOID(outImg->depth == 1);
+    CHECK_CONDITION_VOID(inImg->width == outImg->width);
+    CHECK_CONDITION_VOID(inImg->height == outImg->height);
+    CHECK_CONDITION_VOID(inImg->size == outImg->size);
 
     const int width = inImg->width;
     const int height = inImg->height;
@@ -1413,8 +1426,9 @@ void getStructuringElement(Kernel *kernel, MorphShape shape, uint8_t size)
  */
 void extractComponent(const Image *labeledImg, Image *objImg, int targetLabel)
 {
-    assert(labeledImg && objImg);
-    assert(labeledImg->width == objImg->width &&
+    CHECK_NULL_VOID(labeledImg);
+    CHECK_NULL_VOID(objImg);
+    CHECK_CONDITION_VOID(labeledImg->width == objImg->width &&
            labeledImg->height == objImg->height);
 
     uint8_t *inData = labeledImg->pixels;
@@ -1756,10 +1770,12 @@ void piecewiseTransform(const Image *inImg, Image *outImg,
 
 void _and(const Image *img1, const Image *img2, Image *outImg)
 {
-    assert(img1 && img2 && outImg);
-    assert(img1->format == outImg->format && img1->size == outImg->size);
-    assert(img2->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(img2->width == img1->width && img2->height == img1->height);
+    CHECK_NULL_VOID(img1);
+    CHECK_NULL_VOID(img2);
+    CHECK_NULL_VOID(outImg);
+    CHECK_CONDITION_VOID(img1->format == outImg->format && img1->size == outImg->size);
+    CHECK_FORMAT_VOID(img2, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_CONDITION_VOID(img2->width == img1->width && img2->height == img1->height);
 
     const uint8_t *ps = (const uint8_t *)img1->pixels;
     const uint8_t *pm = (const uint8_t *)img2->pixels;
@@ -1800,11 +1816,13 @@ void _and(const Image *img1, const Image *img2, Image *outImg)
  */
 void _or(const Image *img1, const Image *img2, Image *outImg)
 {
-    assert(img1 && img2 && outImg);
-    assert(img1->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(img2->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(outImg->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(img1->size == img2->size && img2->size == outImg->size);
+    CHECK_NULL_VOID(img1);
+    CHECK_NULL_VOID(img2);
+    CHECK_NULL_VOID(outImg);
+    CHECK_FORMAT_VOID(img1, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_VOID(img2, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_VOID(outImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_CONDITION_VOID(img1->size == img2->size && img2->size == outImg->size);
 
     const uint8_t *pa = (const uint8_t *)img1->pixels;
     const uint8_t *pb = (const uint8_t *)img2->pixels;

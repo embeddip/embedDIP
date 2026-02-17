@@ -1,5 +1,17 @@
 #include "filter.h"
+#include "core/error.h"
 #include "float.h"
+#include <string.h>  /* For memset, memcpy */
+
+// Validation macros to replace assert()
+#define CHECK_NULL_VOID(ptr) \
+    do { if (!(ptr)) return; } while (0)
+
+#define CHECK_FORMAT_VOID(img, expected_fmt) \
+    do { if ((img)->format != (expected_fmt)) return; } while (0)
+
+#define CHECK_CONDITION_VOID(cond) \
+    do { if (!(cond)) return; } while (0)
 
 // Internal helper — filters only one channel
 uint8_t channel_mask[] = {
@@ -43,7 +55,7 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
         inCh = inImg->chals->ch[ch_idx];
         inImg->is_chals = inImg->is_chals | ~(channel_mask[ch_idx]);
 
-        assert(inCh);
+        CHECK_NULL_VOID(inCh);
         const uint8_t *raw = (const uint8_t *)inImg->pixels;
 
         if (inImg->format == IMAGE_FORMAT_GRAYSCALE)
@@ -108,8 +120,8 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
 
 void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
 {
-    assert(kernelY == kernelX);
-    assert(sizeX == sizeY);
+    CHECK_CONDITION_VOID(kernelY == kernelX);
+    CHECK_CONDITION_VOID(sizeX == sizeY);
 
     int half = sizeX / 2;
 
@@ -504,11 +516,14 @@ void rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg)
  * @param[out] bImg   Output blue band.
  */
 {
-    assert(inImg && rImg && gImg && bImg);
-    assert(inImg->format == IMAGE_FORMAT_RGB888);
-    assert(rImg->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(gImg->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(bImg->format == IMAGE_FORMAT_GRAYSCALE);
+    CHECK_NULL_VOID(inImg);
+    CHECK_NULL_VOID(rImg);
+    CHECK_NULL_VOID(gImg);
+    CHECK_NULL_VOID(bImg);
+    CHECK_FORMAT_VOID(inImg, IMAGE_FORMAT_RGB888);
+    CHECK_FORMAT_VOID(rImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_VOID(gImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_VOID(bImg, IMAGE_FORMAT_GRAYSCALE);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *r = (uint8_t *)rImg->pixels;
@@ -533,11 +548,14 @@ void rgbMerge(const Image *rImg, const Image *gImg, const Image *bImg, Image *ou
  * @param[out] outImg  Output image in RGB format.
  */
 {
-    assert(rImg && gImg && bImg && outImg);
-    assert(outImg->format == IMAGE_FORMAT_RGB888);
-    assert(rImg->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(gImg->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(bImg->format == IMAGE_FORMAT_GRAYSCALE);
+    CHECK_NULL_VOID(rImg);
+    CHECK_NULL_VOID(gImg);
+    CHECK_NULL_VOID(bImg);
+    CHECK_NULL_VOID(outImg);
+    CHECK_FORMAT_VOID(outImg, IMAGE_FORMAT_RGB888);
+    CHECK_FORMAT_VOID(rImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_VOID(gImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_VOID(bImg, IMAGE_FORMAT_GRAYSCALE);
 
     uint8_t *out = (uint8_t *)outImg->pixels;
     const uint8_t *r = (const uint8_t *)rImg->pixels;
@@ -799,9 +817,11 @@ void logFilter(const Image *inImg, Image *outImg, float sigma)
  */
 void nonMaximumSuppression(const Image *magImg, const Image *phaseImg, Image *outImg)
 {
-    assert(magImg && phaseImg && outImg);
+    CHECK_NULL_VOID(magImg);
+    CHECK_NULL_VOID(phaseImg);
+    CHECK_NULL_VOID(outImg);
     uint32_t w = magImg->width, h = magImg->height;
-    assert(w == phaseImg->width && h == phaseImg->height);
+    CHECK_CONDITION_VOID(w == phaseImg->width && h == phaseImg->height);
     uint32_t N = w * h;
 
     const float *mag = magImg->chals->ch[0];
@@ -868,7 +888,8 @@ void doubleThreshold(const Image *inImg, Image *outImg,
                      float lowThresh, float highThresh,
                      float weakVal, float strongVal)
 {
-    assert(inImg && outImg);
+    CHECK_NULL_VOID(inImg);
+    CHECK_NULL_VOID(outImg);
     uint32_t N = inImg->width * inImg->height;
     const float *src = inImg->chals->ch[0];
 
@@ -899,7 +920,8 @@ void doubleThreshold(const Image *inImg, Image *outImg,
 void hysteresis(const Image *inImg, Image *outImg,
                 float weakVal, float strongVal)
 {
-    assert(inImg && outImg);
+    CHECK_NULL_VOID(inImg);
+    CHECK_NULL_VOID(outImg);
     uint32_t w = inImg->width, h = inImg->height;
     const float *src = inImg->chals->ch[0];
 
@@ -1035,8 +1057,10 @@ static void sep_conv_xy_f32(const float *src, float *dst,
  */
 void gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma)
 {
-    assert(inImg && outIx && outIy);
-    assert(inImg->format == IMAGE_FORMAT_GRAYSCALE);
+    CHECK_NULL_VOID(inImg);
+    CHECK_NULL_VOID(outIx);
+    CHECK_NULL_VOID(outIy);
+    CHECK_FORMAT_VOID(inImg, IMAGE_FORMAT_GRAYSCALE);
     int width = inImg->width, height = inImg->height;
     int N = width * height;
 
@@ -1089,14 +1113,17 @@ void gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sig
  */
 void gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
 {
-    assert(IxImg && IyImg && outMag);
+    CHECK_NULL_VOID(IxImg);
+    CHECK_NULL_VOID(IyImg);
+    CHECK_NULL_VOID(outMag);
     uint32_t width = IxImg->width, height = IxImg->height;
-    assert(width == IyImg->width && height == IyImg->height);
+    CHECK_CONDITION_VOID(width == IyImg->width && height == IyImg->height);
     uint32_t N = width * height;
 
     const float *ix = IxImg->chals ? IxImg->chals->ch[0] : NULL;
     const float *iy = IyImg->chals ? IyImg->chals->ch[0] : NULL;
-    assert(ix && iy);
+    CHECK_NULL_VOID(ix);
+    CHECK_NULL_VOID(iy);
 
     if (!outMag->chals)
     {
@@ -1123,14 +1150,17 @@ void gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
  */
 void gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase)
 {
-    assert(IxImg && IyImg && outPhase);
+    CHECK_NULL_VOID(IxImg);
+    CHECK_NULL_VOID(IyImg);
+    CHECK_NULL_VOID(outPhase);
     uint32_t width = IxImg->width, height = IyImg->height;
-    assert(width == IyImg->width && height == IyImg->height);
+    CHECK_CONDITION_VOID(width == IyImg->width && height == IyImg->height);
     uint32_t N = width * height;
 
     const float *ix = IxImg->chals ? IxImg->chals->ch[0] : NULL;
     const float *iy = IyImg->chals ? IyImg->chals->ch[0] : NULL;
-    assert(ix && iy);
+    CHECK_NULL_VOID(ix);
+    CHECK_NULL_VOID(iy);
 
     if (!outPhase->chals)
     {
@@ -1154,7 +1184,8 @@ void Canny(const Image *inImg, Image *outImg,
            double threshold1, double threshold2,
            int apertureSize, bool L2gradient)
 {
-    assert(inImg && outImg);
+    CHECK_NULL_VOID(inImg);
+    CHECK_NULL_VOID(outImg);
 
     // --- Step 1: Gaussian smoothing + gradients ---
     float sigma = 1.0; // 0.3 * ((apertureSize - 1) * 0.5 - 1) + 0.8; // could derive from apertureSize

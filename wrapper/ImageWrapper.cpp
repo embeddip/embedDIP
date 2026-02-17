@@ -1,25 +1,20 @@
 #include "ImageWrapper.hpp"
 #include "board/common.h"
-#include <stdexcept>
 
 namespace embedDIP {
 
 Image::Image(ImageResolution resolution, ImageFormat format)
     : image_(nullptr) {
     embeddip_status_t status = createImage(resolution, format, &image_);
-    if (status != EMBEDDIP_OK) {
-        throw std::runtime_error("Failed to create image: " +
-            std::string(embeddip_status_str(status)));
-    }
+    // On failure, image_ remains nullptr - check with isValid() or raw()
+    (void)status; // Suppress unused variable warning in release builds
 }
 
 Image::Image(int width, int height, ImageFormat format)
     : image_(nullptr) {
     embeddip_status_t status = createImageWH(width, height, format, &image_);
-    if (status != EMBEDDIP_OK) {
-        throw std::runtime_error("Failed to create image: " +
-            std::string(embeddip_status_str(status)));
-    }
+    // On failure, image_ remains nullptr - check with isValid() or raw()
+    (void)status; // Suppress unused variable warning in release builds
 }
 
 Image::~Image() {
@@ -274,8 +269,9 @@ int Image::histSpec(Image &out, const std::vector<int> &targetHistogram) const {
  */
 void Image::filter2D(const std::vector<std::vector<float>> &filter,
                      Image &out) const {
+  // Validate filter (non-empty and square)
   if (filter.empty() || filter.size() != filter[0].size()) {
-    throw std::invalid_argument("Filter must be non-empty and square");
+    return; // Silent failure - no exceptions in embedded systems
   }
   int size = static_cast<int>(filter.size());
 
@@ -300,8 +296,9 @@ void Image::filter2D(const std::vector<std::vector<float>> &filter,
     filter2D_single_channel(raw(), out.raw(), 2, &context); // G
     filter2D_single_channel(raw(), out.raw(), 3, &context); // B
   } else {
+    // Unsupported format - silent failure
     delete[] kernelFlat;
-    throw std::runtime_error("Unsupported image format for filter2D");
+    return;
   }
 
   delete[] kernelFlat;

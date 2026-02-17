@@ -3,11 +3,9 @@
 extern "C"
 {
 #include "core/memory_manager.h"
-#include <assert.h>
 }
 
 #include <cstddef>
-#include <stdexcept>
 #include <utility>
 #include <cstring>
 
@@ -20,15 +18,13 @@ namespace embedDIP
     class Memory
     {
     public:
-        Memory() : ptr_(nullptr), size_(0) {} // <- Add this
+        Memory() : ptr_(nullptr), size_(0) {}
 
         explicit Memory(std::size_t size)
             : ptr_(memory_alloc(size)), size_(size)
         {
-            if (!ptr_)
-            {
-                throw std::bad_alloc();
-            }
+            // On failure, ptr_ will be nullptr - check with get() or bool operator
+            // No exceptions in embedded systems
         }
 
         ~Memory()
@@ -87,10 +83,8 @@ namespace embedDIP
         explicit MemoryBlock(std::size_t count)
             : ptr_(static_cast<T *>(memory_alloc(sizeof(T) * count))), count_(count)
         {
-            if (!ptr_)
-            {
-                throw std::bad_alloc();
-            }
+            // On failure, ptr_ will be nullptr - check with get() or bool operator
+            // No exceptions in embedded systems
         }
 
         ~MemoryBlock()

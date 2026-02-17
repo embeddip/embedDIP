@@ -1,7 +1,6 @@
 #include "color.h"
 #include "core/error.h"
 #include <string.h>
-#include <assert.h>  /* TODO: Remove after all asserts are replaced */
 
 // Static conversion functions
 
@@ -74,10 +73,14 @@ static embeddip_status_t grayscale_to_rgb(const Image *inImg, Image *outImg)
 }
 
 // ----------- RGB888 → RGB565 ------------
-static void rgb888_to_rgb565(const Image *inImg, Image *outImg)
+static embeddip_status_t rgb888_to_rgb565(const Image *inImg, Image *outImg)
 {
-    assert(inImg->format == IMAGE_FORMAT_RGB888 && inImg->depth == IMAGE_DEPTH_U24);
-    assert(outImg->format == IMAGE_FORMAT_RGB565 && outImg->depth == IMAGE_DEPTH_U16);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_RGB888);
+    CHECK_DEPTH(inImg, IMAGE_DEPTH_U24);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_RGB565);
+    CHECK_DEPTH(outImg, IMAGE_DEPTH_U16);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint16_t *out = (uint16_t *)outImg->pixels;
@@ -89,13 +92,19 @@ static void rgb888_to_rgb565(const Image *inImg, Image *outImg)
         uint8_t b = in[i * 3 + 2];
         out[i] = RGB888_TO_RGB565(r, g, b);
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- RGB565 → RGB888 ------------
-static void convert_rgb565_to_rgb888(const Image *inImg, Image *outImg)
+static embeddip_status_t convert_rgb565_to_rgb888(const Image *inImg, Image *outImg)
 {
-    assert(inImg->format == IMAGE_FORMAT_RGB565 && inImg->depth == IMAGE_DEPTH_U16);
-    assert(outImg->format == IMAGE_FORMAT_RGB888 && outImg->depth == IMAGE_DEPTH_U24);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_RGB565);
+    CHECK_DEPTH(inImg, IMAGE_DEPTH_U16);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_RGB888);
+    CHECK_DEPTH(outImg, IMAGE_DEPTH_U24);
 
     const uint16_t *in = (const uint16_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
@@ -108,12 +117,17 @@ static void convert_rgb565_to_rgb888(const Image *inImg, Image *outImg)
         out[i * 3 + 1] = g;
         out[i * 3 + 2] = b;
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- RGB888 → YUV ------------
-static void rgb888_to_yuv(const Image *inImg, Image *outImg)
+static embeddip_status_t rgb888_to_yuv(const Image *inImg, Image *outImg)
 {
-    assert(inImg->format == IMAGE_FORMAT_RGB888 && outImg->format == IMAGE_FORMAT_YUV);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_RGB888);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_YUV);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
@@ -134,12 +148,17 @@ static void rgb888_to_yuv(const Image *inImg, Image *outImg)
         out[i * 3 + 1] = (uint8_t)CLIP(u);
         out[i * 3 + 2] = (uint8_t)CLIP(v);
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- YUV → RGB888 ------------
-static void yuv_to_rgb888(const Image *inImg, Image *outImg)
+static embeddip_status_t yuv_to_rgb888(const Image *inImg, Image *outImg)
 {
-    assert(inImg->format == IMAGE_FORMAT_YUV && outImg->format == IMAGE_FORMAT_RGB888);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_YUV);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_RGB888);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
@@ -158,12 +177,17 @@ static void yuv_to_rgb888(const Image *inImg, Image *outImg)
         out[i * 3 + 1] = (uint8_t)fminf(fmaxf(g, 0), 255);
         out[i * 3 + 2] = (uint8_t)fminf(fmaxf(b, 0), 255);
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- RGB888 → HSI ------------
-static void rgb888_to_HSI(const Image *inImg, Image *outImg)
+static embeddip_status_t rgb888_to_HSI(const Image *inImg, Image *outImg)
 {
-    assert(inImg->format == IMAGE_FORMAT_RGB888 && outImg->format == IMAGE_FORMAT_HSI);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_RGB888);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_HSI);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
@@ -198,12 +222,17 @@ static void rgb888_to_HSI(const Image *inImg, Image *outImg)
         out[i * 3 + 1] = (uint8_t)(s * 255.0f);
         out[i * 3 + 2] = (uint8_t)(v * 255.0f);
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- HSI → RGB888 ------------
-static void HSI_to_rgb888(const Image *inImg, Image *outImg)
+static embeddip_status_t HSI_to_rgb888(const Image *inImg, Image *outImg)
 {
-    assert(inImg->format == IMAGE_FORMAT_HSI && outImg->format == IMAGE_FORMAT_RGB888);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_HSI);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_RGB888);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
@@ -260,14 +289,19 @@ static void HSI_to_rgb888(const Image *inImg, Image *outImg)
         out[i * 3 + 1] = (uint8_t)((g_ + m) * 255.0f);
         out[i * 3 + 2] = (uint8_t)((b_ + m) * 255.0f);
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- RGB565 → HSI ------------
-static void rgb565_to_HSI(const Image *inImg, Image *outImg)
+static embeddip_status_t rgb565_to_HSI(const Image *inImg, Image *outImg)
 {
-    assert(inImg->format == IMAGE_FORMAT_RGB565);
-    assert(outImg->format == IMAGE_FORMAT_HSI);
-    assert(inImg->depth == IMAGE_DEPTH_U8 && outImg->depth == IMAGE_DEPTH_U8);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_RGB565);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_HSI);
+    CHECK_DEPTH(inImg, IMAGE_DEPTH_U8);
+    CHECK_DEPTH(outImg, IMAGE_DEPTH_U8);
 
     const uint16_t *in = (const uint16_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
@@ -306,12 +340,17 @@ static void rgb565_to_HSI(const Image *inImg, Image *outImg)
         out[i * 3 + 1] = (uint8_t)(s * 255.0f);
         out[i * 3 + 2] = (uint8_t)(v * 255.0f);
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- HSI → RGB565 ------------
-static void HSI_to_rgb565(const Image *inImg, Image *outImg)
+static embeddip_status_t HSI_to_rgb565(const Image *inImg, Image *outImg)
 {
-    assert(inImg->format == IMAGE_FORMAT_HSI && outImg->format == IMAGE_FORMAT_RGB565);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_HSI);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_RGB565);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint16_t *out = (uint16_t *)outImg->pixels;
@@ -370,6 +409,8 @@ static void HSI_to_rgb565(const Image *inImg, Image *outImg)
 
         out[i] = RGB888_TO_RGB565(r, g, b);
     }
+
+    return EMBEDDIP_OK;
 }
 
 embeddip_status_t cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
@@ -382,147 +423,151 @@ embeddip_status_t cvtColor(const Image *inImg, Image *outImg, ColorConversionCod
         return EMBEDDIP_ERROR_NULL_PTR;
     }
 
-    /*
-     * NOTE: Static helper functions still use internal assertions for now.
-     * Future enhancement: Propagate error codes from all helper functions.
-     * FIXME: Replace remaining asserts in static functions with proper error handling.
-     */
-
     switch (code)
     {
     // ------------------- RGB888 TO -------------------
     case CVT_RGB888_TO_GRAYSCALE:
-        rgb888_to_grayscale(inImg, outImg);
-        break;
+        return rgb888_to_grayscale(inImg, outImg);
 
     case CVT_RGB888_TO_RGB565:
-        rgb888_to_rgb565(inImg, outImg);
-        break;
+        return rgb888_to_rgb565(inImg, outImg);
 
     case CVT_RGB888_TO_YUV:
-        rgb888_to_yuv(inImg, outImg);
-        break;
+        return rgb888_to_yuv(inImg, outImg);
 
     case CVT_RGB888_TO_HSI:
-        rgb888_to_HSI(inImg, outImg);
-        break;
+        return rgb888_to_HSI(inImg, outImg);
 
     // ------------------- RGB565 TO -------------------
     case CVT_RGB565_TO_RGB888:
-        convert_rgb565_to_rgb888(inImg, outImg);
-        break;
+        return convert_rgb565_to_rgb888(inImg, outImg);
 
     case CVT_RGB565_TO_GRAYSCALE:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        convert_rgb565_to_rgb888(inImg, tmp);
-        rgb888_to_grayscale(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = convert_rgb565_to_rgb888(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_grayscale(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     case CVT_RGB565_TO_YUV:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        convert_rgb565_to_rgb888(inImg, tmp);
-        rgb888_to_yuv(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = convert_rgb565_to_rgb888(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_yuv(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     case CVT_RGB565_TO_HSI:
-        rgb565_to_HSI(inImg, outImg);
-        break;
+        return rgb565_to_HSI(inImg, outImg);
 
     // ------------------- GRAYSCALE TO -------------------
     case CVT_GRAYSCALE_TO_RGB888:
-        grayscale_to_rgb(inImg, outImg);
-        break;
+        return grayscale_to_rgb(inImg, outImg);
 
     case CVT_GRAYSCALE_TO_RGB565:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        grayscale_to_rgb(inImg, tmp);
-        rgb888_to_rgb565(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = grayscale_to_rgb(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_rgb565(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     case CVT_GRAYSCALE_TO_YUV:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        grayscale_to_rgb(inImg, tmp);
-        rgb888_to_yuv(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = grayscale_to_rgb(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_yuv(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     case CVT_GRAYSCALE_TO_HSI:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        grayscale_to_rgb(inImg, tmp);
-        rgb888_to_HSI(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = grayscale_to_rgb(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_HSI(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     // ------------------- YUV TO -------------------
     case CVT_YUV_TO_RGB888:
-        yuv_to_rgb888(inImg, outImg);
-        break;
+        return yuv_to_rgb888(inImg, outImg);
 
     case CVT_YUV_TO_RGB565:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        yuv_to_rgb888(inImg, tmp);
-        rgb888_to_rgb565(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = yuv_to_rgb888(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_rgb565(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     case CVT_YUV_TO_GRAYSCALE:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        yuv_to_rgb888(inImg, tmp);
-        rgb888_to_grayscale(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = yuv_to_rgb888(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_grayscale(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     case CVT_YUV_TO_HSI:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        yuv_to_rgb888(inImg, tmp);
-        rgb888_to_HSI(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = yuv_to_rgb888(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_HSI(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     // ------------------- HSI TO -------------------
     case CVT_HSI_TO_RGB888:
-        HSI_to_rgb888(inImg, outImg);
-        break;
+        return HSI_to_rgb888(inImg, outImg);
 
     case CVT_HSI_TO_RGB565:
-        HSI_to_rgb565(inImg, outImg);
-        break;
+        return HSI_to_rgb565(inImg, outImg);
 
     case CVT_HSI_TO_GRAYSCALE:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        HSI_to_rgb888(inImg, tmp);
-        rgb888_to_grayscale(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = HSI_to_rgb888(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_grayscale(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     case CVT_HSI_TO_YUV:
     {
         Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
-        HSI_to_rgb888(inImg, tmp);
-        rgb888_to_yuv(tmp, outImg);
+        if (!tmp) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = HSI_to_rgb888(inImg, tmp);
+        if (status != EMBEDDIP_OK) { deleteImage(tmp); return status; }
+        status = rgb888_to_yuv(tmp, outImg);
         deleteImage(tmp);
-        break;
+        return status;
     }
 
     // ------------------- COPY -------------------

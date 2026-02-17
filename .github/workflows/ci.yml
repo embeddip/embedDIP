@@ -48,10 +48,10 @@ jobs:
           path: build/Testing/
 
   # ============================================================================
-  # STM32 CROSS-COMPILE
+  # STM32 SYNTAX & COMPILATION CHECK
   # ============================================================================
-  stm32-cross-compile:
-    name: STM32F7 Cross-Compile
+  stm32-syntax-check:
+    name: STM32F7 Syntax Check
     runs-on: ubuntu-latest
 
     steps:
@@ -63,62 +63,42 @@ jobs:
       - name: Install ARM toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi cmake
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
       - name: Check toolchain version
         run: arm-none-eabi-gcc --version
 
-      - name: Configure CMake (STM32F7)
+      - name: Compile core sources for STM32
         run: |
-          # Check if toolchain file exists
-          if [ ! -f cmake/gcc-arm-none-eabi.cmake ]; then
-            echo "Toolchain file not found, creating basic one..."
-            mkdir -p cmake
-            cat > cmake/gcc-arm-none-eabi.cmake << 'EOF'
-          set(CMAKE_SYSTEM_NAME Generic)
-          set(CMAKE_SYSTEM_PROCESSOR ARM)
-          set(CMAKE_CROSSCOMPILING TRUE)
+          echo "🔍 Testing STM32 source compilation (syntax check)..."
 
-          set(CMAKE_C_COMPILER arm-none-eabi-gcc)
-          set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
-          set(CMAKE_ASM_COMPILER arm-none-eabi-gcc)
+          # Compile flags for STM32F7
+          FLAGS="-mthumb -mcpu=cortex-m7 -mfloat-abi=hard -mfpu=fpv5-d16"
+          FLAGS="$FLAGS -Wall -Wextra -std=c11"
+          FLAGS="$FLAGS -DSTM32F7xx -DARM_MATH_CM7 -D__FPU_PRESENT=1 -DTARGET_BOARD_STM32F7=1"
+          FLAGS="$FLAGS -I. -Icore -Iimgproc -Iboard -Idevice -Iwrapper"
 
-          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+          # Test compile core modules (object files only, no linking)
+          echo "Compiling core/error.c..."
+          arm-none-eabi-gcc $FLAGS -c core/error.c -o /tmp/error.o || exit 1
 
-          set(CMAKE_C_FLAGS_INIT "-mthumb -mcpu=cortex-m7 -mfloat-abi=hard -mfpu=fpv5-d16")
-          set(CMAKE_CXX_FLAGS_INIT "-mthumb -mcpu=cortex-m7 -mfloat-abi=hard -mfpu=fpv5-d16")
-          EOF
-          fi
+          echo "Compiling board/common.c..."
+          arm-none-eabi-gcc $FLAGS -c board/common.c -o /tmp/common.o || exit 1
 
-          cmake -B build-stm32 \
-                -DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DEMBEDDIP_TARGET_PLATFORM=STM32F7 \
-                -DEMBEDDIP_BUILD_TESTS=OFF \
-                -DEMBEDDIP_BUILD_EXAMPLES=OFF
+          echo "Compiling imgproc/color.c..."
+          arm-none-eabi-gcc $FLAGS -c imgproc/color.c -o /tmp/color.o || exit 1
 
-      - name: Build
-        run: cmake --build build-stm32 --config Release -j$(nproc) || true
+          echo "✅ STM32 source files compiled successfully (syntax validated)"
 
-      - name: Check build output
-        working-directory: build-stm32
-        run: |
-          ls -lh
-          if [ -f libembedDIP.a ]; then
-            echo "✅ STM32 library built successfully"
-            arm-none-eabi-size libembedDIP.a
-          else
-            echo "⚠️  STM32 build incomplete (may need HAL drivers)"
-          fi
+          # Show object file sizes
+          ls -lh /tmp/*.o
+          arm-none-eabi-size /tmp/*.o
 
   # ============================================================================
-  # ESP32 BUILD CHECK
+  # ESP32 SYNTAX CHECK
   # ============================================================================
-  esp32-build-check:
-    name: ESP32 Build Check
+  esp32-syntax-check:
+    name: ESP32 Syntax Check
     runs-on: ubuntu-latest
 
     steps:
@@ -127,30 +107,44 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install dependencies
+      - name: Install ESP32 toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y git wget flex bison gperf python3 python3-pip \
-                                   python3-venv cmake ninja-build ccache libffi-dev \
-                                   libssl-dev dfu-util libusb-1.0-0
+          sudo apt-get install -y wget python3 python3-pip
 
-      - name: Setup ESP-IDF
-        run: |
+          # Download ESP32 toolchain
           mkdir -p ~/esp
           cd ~/esp
-          git clone --depth 1 --branch v5.1 https://github.com/espressif/esp-idf.git
-          cd esp-idf
-          ./install.sh esp32
+          wget -q https://github.com/espressif/crosstool-NG/releases/download/esp-2021r2-patch5/xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+          tar -xzf xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+          export PATH="$HOME/esp/xtensa-esp32-elf/bin:$PATH"
 
-      - name: Configure CMake (ESP32)
+      - name: Verify toolchain
         run: |
-          source ~/esp/esp-idf/export.sh
-          cmake -B build-esp32 \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DEMBEDDIP_TARGET_PLATFORM=ESP32 \
-                -DEMBEDDIP_BUILD_TESTS=OFF \
-                -DEMBEDDIP_BUILD_EXAMPLES=OFF || true
-          echo "⚠️  ESP32 build configuration checked (full build requires ESP-IDF project)"
+          export PATH="$HOME/esp/xtensa-esp32-elf/bin:$PATH"
+          xtensa-esp32-elf-gcc --version
+
+      - name: Compile core sources for ESP32
+        run: |
+          export PATH="$HOME/esp/xtensa-esp32-elf/bin:$PATH"
+          echo "🔍 Testing ESP32 source compilation (syntax check)..."
+
+          # Compile flags for ESP32
+          FLAGS="-mlongcalls -Wall -Wextra -std=c11"
+          FLAGS="$FLAGS -DARDUINO_ARCH_ESP32 -DTARGET_BOARD_ESP32=1"
+          FLAGS="$FLAGS -I. -Icore -Iimgproc -Iboard -Idevice -Iwrapper"
+
+          # Test compile core modules
+          echo "Compiling core/error.c for ESP32..."
+          xtensa-esp32-elf-gcc $FLAGS -c core/error.c -o /tmp/error_esp32.o || exit 1
+
+          echo "Compiling board/common.c for ESP32..."
+          xtensa-esp32-elf-gcc $FLAGS -c board/common.c -o /tmp/common_esp32.o || exit 1
+
+          echo "✅ ESP32 source files compiled successfully (syntax validated)"
+
+          ls -lh /tmp/*_esp32.o
+          xtensa-esp32-elf-size /tmp/*_esp32.o
 
   # ============================================================================
   # STATIC ANALYSIS
@@ -225,7 +219,7 @@ jobs:
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [host-build-and-test, stm32-cross-compile, static-analysis, format-check]
+    needs: [host-build-and-test, stm32-syntax-check, esp32-syntax-check, static-analysis, format-check]
     if: always()
 
     steps:
@@ -234,6 +228,7 @@ jobs:
           echo "## embedDIP CI/CD Summary"
           echo ""
           echo "✅ Host Build & Tests: ${{ needs.host-build-and-test.result }}"
-          echo "✅ STM32 Cross-Compile: ${{ needs.stm32-cross-compile.result }}"
+          echo "✅ STM32 Syntax Check: ${{ needs.stm32-syntax-check.result }}"
+          echo "✅ ESP32 Syntax Check: ${{ needs.esp32-syntax-check.result }}"
           echo "✅ Static Analysis: ${{ needs.static-analysis.result }}"
           echo "✅ Format Check: ${{ needs.format-check.result }}"

@@ -6,9 +6,9 @@ namespace embedDIP
     Camera::Camera(camera_t *driver)
         : driver_(driver) {}
 
-    bool Camera::init(ImageResolution res)
+    bool Camera::init(ImageResolution res, ImageFormat format)
     {
-        return driver_ && driver_->init ? driver_->init(res) == 0 : false;
+        return driver_ && driver_->init ? driver_->init(res, format) == 0 : false;
     }
 
     bool Camera::capture(captureMode mode, Image &img)

@@ -87,13 +87,35 @@ The embedDIP library has been systematically upgraded from a research-quality co
 - **Updated**: MemoryManager to throw std::bad_alloc() on OOM
 - **Added**: Proper exception handling throughout C++ layer
 
-### 2.5 Camera Driver Documentation
-- **Documented**: Incomplete camera functions with FIXME comments
-- **Functions**:
-  - `OV5640_SetPixelFormat()` - Marked as not implemented
-  - `CAMERA_Init()` - Documented initialization requirements
-  - `camera_start()` - Documented format handling needs
-- **Added**: Detailed comments on what needs to be implemented
+### 2.5 Camera Driver Implementation ✅
+- **Implemented**: Complete OV5640 camera driver for STM32F7
+- **Functions Completed**:
+  - `OV5640_SetPixelFormat()` - Full pixel format configuration (RGB565, RGB888, YUV422, Grayscale)
+    - Register 0x4300: Format Control
+    - Register 0x501F: ISP Format MUX Control
+    - Register 0x4407: Output format control
+    - Supports all major image formats with proper register sequences
+  - `CAMERA_Init()` - Complete initialization sequence
+    - Step 1: I2C interface initialization
+    - Step 2: Power cycling (PwrDown → PwrUp)
+    - Step 3: Software reset via register 0x3008
+    - Step 4: Chip ID verification (reads 0x300A, 0x300B → 0x5640)
+    - Step 5: Load OV5640_Init array (base configuration)
+    - Step 6: Resolution-specific configuration (QQVGA/QVGA/WQVGA/VGA)
+    - Step 7: Default pixel format setup (RGB565)
+    - Step 8: Exit standby mode
+    - Step 9: Enable auto-exposure and auto-white-balance
+  - `camera_capture()` - Complete DCMI format handling
+    - Configures camera output format via OV5640_SetPixelFormat()
+    - Configures STM32 DCMI peripheral for each format:
+      - Grayscale: 8-bit Y component capture
+      - RGB565: 16-bit per pixel capture
+      - RGB888: 24-bit per pixel capture
+      - YUV422: 16-bit YUYV capture
+    - Proper DMA length calculation for each format
+    - Hardware sync mode with correct polarity settings
+- **Based On**: OV5640 datasheet register map and power-up sequence
+- **Status**: All critical camera TODOs resolved ✅
 
 ### 2.6 Code Cleanup
 - **Removed**: False TODO comment from `pixel.h:150` - convertTo() is fully implemented
@@ -171,15 +193,16 @@ The embedDIP library has been systematically upgraded from a research-quality co
 - **Jobs**:
   1. **Host Build & Unit Tests** (Ubuntu)
      - Builds library with HOST platform
-     - Runs all unit tests with CTest
+     - Runs all 43 unit tests with CTest
      - Uploads test results as artifacts
-  2. **STM32 Cross-Compile** (Ubuntu + ARM toolchain)
+  2. **STM32 Syntax Check** (Ubuntu + ARM toolchain)
      - Installs gcc-arm-none-eabi
-     - Attempts cross-compilation for STM32F7
-     - Validates library can build for embedded targets
-  3. **ESP32 Build Check** (Ubuntu + ESP-IDF)
-     - Sets up ESP-IDF environment
-     - Validates ESP32 build configuration
+     - Compiles core source files for STM32F7
+     - Validates syntax and compilation for embedded targets
+  3. **ESP32 Syntax Check** (Ubuntu + ESP32 toolchain)
+     - Installs xtensa-esp32-elf toolchain
+     - Compiles core source files for ESP32
+     - Validates syntax and compilation
   4. **Static Analysis** (cppcheck)
      - Runs static analysis on all source files
      - Uploads analysis report

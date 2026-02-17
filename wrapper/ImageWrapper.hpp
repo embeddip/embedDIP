@@ -135,6 +135,10 @@ namespace embedDIP
         // Raw access
         ::Image *raw() noexcept;
         ::Image *raw() const noexcept;
+
+        // Validity check (useful when exceptions are disabled)
+        inline bool isValid() const noexcept { return image_ != nullptr; }
+
         inline void *pixels() const noexcept { return image_->pixels; }
         inline uint32_t size() const noexcept { return image_->size; }
         inline uint32_t width() const noexcept { return image_->width; }

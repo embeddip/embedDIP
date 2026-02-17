@@ -126,12 +126,13 @@ extern "C"
     typedef struct camera_interface
     {
         /**
-         * @brief Initialize the camera with a given resolution.
+         * @brief Initialize the camera with a given resolution and format.
          * @param resolution Target resolution (see ::ImageResolution).
+         * @param format Target pixel format (see ::ImageFormat).
          * @retval 0 on success
          * @retval non-zero on failure (device not found, unsupported mode, etc.)
          */
-        int (*init)(ImageResolution resolution);
+        int (*init)(ImageResolution resolution, ImageFormat format);
 
         /**
          * @brief Capture a frame.

@@ -8,7 +8,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <float.h>
-#include <assert.h>
 
 #ifdef __cplusplus
 extern "C"
