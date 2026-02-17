@@ -1,0 +1,62 @@
+# Build artifacts
+build/
+.cache/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.elf
+*.bin
+*.hex
+*.map
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Testing
+Testing/
+CTestTestfile.cmake
+*.gcov
+*.gcda
+*.gcno
+coverage.info
+coverage-report/
+
+# Documentation
+docs/html/
+docs/latex/
+docs/xml/
+Doxyfile.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+.log
+
+# Platform-specific
+.settings/
+
+# Dependency directories
+node_modules/

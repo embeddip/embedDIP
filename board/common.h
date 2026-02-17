@@ -1,7 +1,7 @@
 /* ========================================================================== */
 /*  File: common.h                                                            */
 /*  Brief: Common helper functions for image allocation, channels, and timing */
-/*  SPDX-License-Identifier: BSD-3-Clause                                     */
+/*  SPDX-License-Identifier: MIT                                              */
 /* ========================================================================== */
 #ifndef COMMON_H
 #define COMMON_H
@@ -19,6 +19,7 @@
  */
 
 #include "core/image.h"
+#include "core/error.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -41,25 +42,28 @@ extern "C"
      * The resolution is determined from lookup tables, and the format specifies
      * how the pixels are stored.
      *
-     * @param[in] resolution  Desired image resolution (lookup-based).
-     * @param[in] format      Desired image format (e.g., GRAYSCALE, RGB565, RGB888).
+     * @param[in]  resolution  Desired image resolution (lookup-based).
+     * @param[in]  format      Desired image format (e.g., GRAYSCALE, RGB565, RGB888).
+     * @param[out] out_image   Pointer to store the newly allocated Image.
      *
-     * @return Pointer to a newly allocated Image on success, NULL on failure.
+     * @return EMBEDDIP_OK on success, error code on failure.
      */
-    Image *createImage(ImageResolution resolution, ImageFormat format);
+    embeddip_status_t createImage(ImageResolution resolution, ImageFormat format, Image **out_image);
+
     /**
      * @brief Allocate and initialize an Image structure with custom width/height.
      *
      * This function allows flexible allocation of images by specifying exact
      * dimensions instead of relying on lookup tables.
      *
-     * @param[in] width   Desired image width in pixels.
-     * @param[in] height  Desired image height in pixels.
-     * @param[in] format  Desired image format (e.g., GRAYSCALE, RGB565, RGB888).
+     * @param[in]  width      Desired image width in pixels.
+     * @param[in]  height     Desired image height in pixels.
+     * @param[in]  format     Desired image format (e.g., GRAYSCALE, RGB565, RGB888).
+     * @param[out] out_image  Pointer to store the newly allocated Image.
      *
-     * @return Pointer to a newly allocated Image on success, NULL on failure.
+     * @return EMBEDDIP_OK on success, error code on failure.
      */
-    Image *createImageWH(int width, int height, ImageFormat format);
+    embeddip_status_t createImageWH(int width, int height, ImageFormat format, Image **out_image);
 
     /**
      * @brief Free all resources associated with an Image structure.
@@ -90,9 +94,29 @@ extern "C"
      * @param[in,out] inImg    Pointer to the Image structure.
      * @param[in]     numChals Number of channels to allocate (max 3).
      *
-     * @return true on success, false on allocation failure.
+     * @return EMBEDDIP_OK on success, error code on failure.
      */
-    bool createChals(Image *inImg, uint8_t numChals);
+    embeddip_status_t createChals(Image *inImg, uint8_t numChals);
+
+    /* ========================================================================
+     * Deprecated/Legacy Functions (for backward compatibility)
+     * ======================================================================== */
+
+    /**
+     * @brief Legacy wrapper for createImage (returns NULL on error).
+     * @deprecated Use createImage() with status code instead.
+     * @note This function is provided for backward compatibility with
+     *       existing internal code. New code should use the status-code version.
+     */
+    Image *createImage_legacy(ImageResolution resolution, ImageFormat format);
+
+    /**
+     * @brief Legacy wrapper for createImageWH (returns NULL on error).
+     * @deprecated Use createImageWH() with status code instead.
+     * @note This function is provided for backward compatibility with
+     *       existing internal code. New code should use the status-code version.
+     */
+    Image *createImageWH_legacy(int width, int height, ImageFormat format);
 
     /**
      * @brief Starts a timer for performance measurement.

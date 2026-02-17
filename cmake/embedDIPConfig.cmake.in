@@ -1,0 +1,22 @@
+@PACKAGE_INIT@
+
+# embedDIP CMake Configuration File
+
+include("${CMAKE_CURRENT_LIST_DIR}/embedDIPTargets.cmake")
+
+check_required_components(embedDIP)
+
+# Provide information about the found package
+set(embedDIP_FOUND TRUE)
+set(embedDIP_VERSION "@PROJECT_VERSION@")
+set(embedDIP_INCLUDE_DIRS "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@/embedDIP")
+set(embedDIP_LIBRARIES embedDIP::embedDIP)
+
+# Platform and feature information
+set(embedDIP_TARGET_PLATFORM "@EMBEDDIP_TARGET_PLATFORM@")
+set(embedDIP_ENABLE_UART_LOGGING "@EMBEDDIP_ENABLE_UART_LOGGING@")
+set(embedDIP_ENABLE_IMAGE_PROCESSING "@EMBEDDIP_ENABLE_IMAGE_PROCESSING@")
+set(embedDIP_ENABLE_CAMERA_INPUT "@EMBEDDIP_ENABLE_CAMERA_INPUT@")
+set(embedDIP_ENABLE_DISPLAY_OUTPUT "@EMBEDDIP_ENABLE_DISPLAY_OUTPUT@")
+
+message(STATUS "Found embedDIP: ${embedDIP_VERSION} (Platform: ${embedDIP_TARGET_PLATFORM})")

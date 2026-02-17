@@ -1,7 +1,7 @@
 /* ========================================================================== */
 /*  File: embedDIP_configs.h                                                  */
 /*  Brief: User configuration for the EmbedDIP library                        */
-/*  SPDX-License-Identifier: BSD-3-Clause                                     */
+/*  SPDX-License-Identifier: MIT                                              */
 /* ========================================================================== */
 #ifndef EMBED_DIP_CONFIGS_H
 #define EMBED_DIP_CONFIGS_H
@@ -18,7 +18,7 @@
  */
 
 /* -------------------------------------------------------------------------- */
-/* Target selection                                                            */
+/* Target selection */
 /* -------------------------------------------------------------------------- */
 /**
  * @defgroup embedDIP_cfg_target Target selection
@@ -32,24 +32,26 @@
  */
 
 /* Uncomment **one** of the following, or define via compiler flags. */
-// #define TARGET_BOARD_STM32F7 1
-#define TARGET_BOARD_ESP32   1 
+#define TARGET_BOARD_STM32F7 1
+// #define TARGET_BOARD_ESP32   1
 /* #define TARGET_BOARD_OTHER   1 */
 
 /* Sanity check: ensure exactly one target is selected. */
-#if ((defined(TARGET_BOARD_STM32F7) ? 1 : 0) + \
-     (defined(TARGET_BOARD_ESP32) ? 1 : 0) +   \
+#if ((defined(TARGET_BOARD_STM32F7) ? 1 : 0) +                                 \
+     (defined(TARGET_BOARD_ESP32) ? 1 : 0) +                                   \
      (defined(TARGET_BOARD_OTHER) ? 1 : 0)) == 0
-#error "No target selected: define exactly one of TARGET_BOARD_STM32F7, TARGET_BOARD_ESP32, TARGET_BOARD_OTHER."
-#elif ((defined(TARGET_BOARD_STM32F7) ? 1 : 0) + \
-       (defined(TARGET_BOARD_ESP32) ? 1 : 0) +   \
+#error                                                                         \
+    "No target selected: define exactly one of TARGET_BOARD_STM32F7, TARGET_BOARD_ESP32, TARGET_BOARD_OTHER."
+#elif ((defined(TARGET_BOARD_STM32F7) ? 1 : 0) +                               \
+       (defined(TARGET_BOARD_ESP32) ? 1 : 0) +                                 \
        (defined(TARGET_BOARD_OTHER) ? 1 : 0)) > 1
-#error "Multiple targets selected: define **only one** of TARGET_BOARD_STM32F7, TARGET_BOARD_ESP32, TARGET_BOARD_OTHER."
+#error                                                                         \
+    "Multiple targets selected: define **only one** of TARGET_BOARD_STM32F7, TARGET_BOARD_ESP32, TARGET_BOARD_OTHER."
 #endif
 /** @} */ /* end of embedDIP_cfg_target */
 
 /* -------------------------------------------------------------------------- */
-/* Board-specific symbols & feature flags                                      */
+/* Board-specific symbols & feature flags */
 /* -------------------------------------------------------------------------- */
 /**
  * @defgroup embedDIP_cfg_features Feature flags
@@ -127,7 +129,8 @@
 /* ============================== OTHER ===================================== */
 #elif defined(TARGET_BOARD_OTHER)
 /**
- * @brief Generic/other target: start with minimal defaults and enable what you need.
+ * @brief Generic/other target: start with minimal defaults and enable what you
+ * need.
  * @note Adjust device macros below to match your board.
  */
 #ifndef ENABLE_UART_LOGGING
@@ -157,7 +160,7 @@
 /** @} */ /* end of embedDIP_cfg_features */
 
 /* -------------------------------------------------------------------------- */
-/* Derived convenience macros (read-only)                                      */
+/* Derived convenience macros (read-only) */
 /* -------------------------------------------------------------------------- */
 /**
  * @defgroup embedDIP_cfg_derived Derived macros

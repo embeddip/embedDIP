@@ -2,9 +2,9 @@
 #define EMBED_DIP_COLOR_H
 
 #include "core/image.h"
+#include "core/error.h"
 #include "math.h"
 #include "board/common.h"
-#include "assert.h"
 #include "core/memory_manager.h"
 
 typedef enum
@@ -49,11 +49,12 @@ typedef enum
  * @param[in]  inImg Pointer to the input image structure
  * @param[out] outImg Pointer to the output image structure
  * @param[in]  code Conversion code defined in ColorConversionCode enum
+ * @return EMBEDDIP_OK on success, error code on failure
  */
-void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code);
+embeddip_status_t cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code);
 
-void hueThreshold(const Image *input, Image *output, float minHue, float maxHue);
+embeddip_status_t hueThreshold(const Image *input, Image *output, float minHue, float maxHue);
 
-void inRange(const Image *input, Image *mask, const uint8_t lower[3], const uint8_t upper[3]);
+embeddip_status_t inRange(const Image *input, Image *mask, const uint8_t lower[3], const uint8_t upper[3]);
 
 #endif // EMBED_DIP_COLOR_H

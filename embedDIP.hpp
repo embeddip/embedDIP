@@ -1,7 +1,7 @@
 /* ========================================================================== */
 /*  File: embedDIP.hpp                                                        */
 /*  Brief: C++ umbrella header for the EmbedDIP C++ API layer                 */
-/*  SPDX-License-Identifier: BSD-3-Clause                                     */
+/*  SPDX-License-Identifier: MIT                                              */
 /* ========================================================================== */
 #pragma once
 

@@ -1295,7 +1295,7 @@ void connectedComponents(const Image *inImg, Image *outImg)
     uint8_t *inData = inImg->pixels;
     uint8_t *outData = outImg->pixels;
 
-    Image *equivalences = (Image *)createImage(IMAGE_RES_WQVGA,
+    Image *equivalences = (Image *)createImage_legacy(IMAGE_RES_WQVGA,
                                                IMAGE_FORMAT_GRAYSCALE);
     uint8_t *equvData = equivalences->pixels;
 
@@ -1569,7 +1569,7 @@ void dilate(const Image *src, Image *dst, const Kernel *kernel, uint8_t iteratio
  */
 void opening(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t iterations)
 {
-    Image *temp = createImage(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE);
+    Image *temp = createImage_legacy(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE);
 
     erode(inImg, temp, kernel, iterations);
     dilate(temp, outImg, kernel, iterations);
@@ -1589,7 +1589,7 @@ void opening(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t it
  */
 void closing(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t iterations)
 {
-    Image *temp = createImage(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE);
+    Image *temp = createImage_legacy(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE);
 
     dilate(inImg, temp, kernel, iterations);
     erode(temp, outImg, kernel, iterations);

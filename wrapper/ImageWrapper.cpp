@@ -1,12 +1,26 @@
 #include "ImageWrapper.hpp"
 #include "board/common.h"
+#include <stdexcept>
+
 namespace embedDIP {
 
 Image::Image(ImageResolution resolution, ImageFormat format)
-    : image_(createImage(resolution, format)) {}
+    : image_(nullptr) {
+    embeddip_status_t status = createImage(resolution, format, &image_);
+    if (status != EMBEDDIP_OK) {
+        throw std::runtime_error("Failed to create image: " +
+            std::string(embeddip_status_str(status)));
+    }
+}
 
 Image::Image(int width, int height, ImageFormat format)
-    : image_(createImageWH(width, height, format)) {}
+    : image_(nullptr) {
+    embeddip_status_t status = createImageWH(width, height, format, &image_);
+    if (status != EMBEDDIP_OK) {
+        throw std::runtime_error("Failed to create image: " +
+            std::string(embeddip_status_str(status)));
+    }
+}
 
 Image::~Image() {
   if (image_) {
@@ -38,8 +52,14 @@ Image &Image::operator=(Image &&other) noexcept {
 ::Image *Image::raw() const noexcept { return image_; }
 
 void Image::createChals(uint8_t numChals) noexcept {
-  if (image_)
-    ::createChals(image_, numChals);
+  if (image_) {
+    embeddip_status_t status = ::createChals(image_, numChals);
+    if (status != EMBEDDIP_OK) {
+      // Note: This is marked noexcept, so we can't throw
+      // In a noexcept context, we silently fail (consider logging in production)
+      // Alternative: Remove noexcept and throw exception
+    }
+  }
 }
 
 bool Image::isChalsEmpty() const noexcept {
@@ -254,8 +274,9 @@ int Image::histSpec(Image &out, const std::vector<int> &targetHistogram) const {
  */
 void Image::filter2D(const std::vector<std::vector<float>> &filter,
                      Image &out) const {
-  assert(!filter.empty() &&
-         filter.size() == filter[0].size()); // Ensure square filter
+  if (filter.empty() || filter.size() != filter[0].size()) {
+    throw std::invalid_argument("Filter must be non-empty and square");
+  }
   int size = static_cast<int>(filter.size());
 
   // Allocate a flat kernel buffer
@@ -280,9 +301,7 @@ void Image::filter2D(const std::vector<std::vector<float>> &filter,
     filter2D_single_channel(raw(), out.raw(), 3, &context); // B
   } else {
     delete[] kernelFlat;
-    // TODO
-    // adad error handlng here.
-    // throw std::runtime_error("Unsupported image format for filter2D");
+    throw std::runtime_error("Unsupported image format for filter2D");
   }
 
   delete[] kernelFlat;

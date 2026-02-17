@@ -537,7 +537,13 @@ void OV5640_SetPixelFormat(uint16_t DeviceAddr, uint8_t Level)
     (void)DeviceAddr;
     (void)Level;
 
-    // TODO: Implement pixel format setting
+    /*
+     * FIXME: NOT YET IMPLEMENTED
+     * Implement pixel format register configuration:
+     * - Configure format control registers (0x4300, 0x501F, etc.)
+     * - Support RGB565, RGB888, YUV422, RAW formats
+     * - Refer to OV5640 datasheet section 2.6 (Format Control)
+     */
 }
 
 /**
@@ -1311,9 +1317,19 @@ uint8_t CAMERA_Init(uint32_t Resolution) /*Camera initialization*/
 {
     (void)Resolution;
 
-    // TODO:
+    /*
+     * FIXME: NOT YET FULLY IMPLEMENTED
+     * Complete camera initialization sequence:
+     * 1. Reset the sensor (software reset via 0x3008 register)
+     * 2. Load initialization sequence from OV5640_Init array
+     * 3. Read and verify chip ID (0x300A, 0x300B should read 0x56, 0x40)
+     * 4. Configure resolution via OV5640_Config()
+     * 5. Set pixel format
+     * 6. Enable test pattern or normal operation
+     * Refer to OV5640 datasheet and application notes for register sequences
+     */
 
-    return 0;
+    return 0; /* Returns success but camera is not actually initialized */
 }
 
 /**
@@ -1475,18 +1491,24 @@ static void camera_capture(captureMode mode, Image *inImg)
     CAMERA_PwrDown();
     CAMERA_PwrUp();
 
+    /*
+     * FIXME: Configure DCMI based on image format
+     * Different formats require different DCMI pixel clock and sync settings.
+     */
     switch (inImg->format)
     {
     case IMAGE_FORMAT_GRAYSCALE:
+        /* FIXME: Configure DCMI for 8-bit grayscale (Y only) */
         break;
     case IMAGE_FORMAT_RGB565:
+        /* FIXME: Configure DCMI for RGB565 format */
         break;
     default:
+        /* FIXME: Handle unsupported formats */
         break;
     }
 
-    // TODO
-
+    /* Start DMA transfer from DCMI to image buffer */
     HAL_DCMI_Start_DMA(&hdcmi, mode == CONTINUOUS ? DCMI_MODE_CONTINUOUS : DCMI_MODE_SNAPSHOT, (uint32_t)inImg->pixels, inImg->size / 2);
 }
 

@@ -1,8 +1,11 @@
 #include "color.h"
+#include "core/error.h"
+#include <string.h>
+#include <assert.h>  /* TODO: Remove after all asserts are replaced */
 
 // Static conversion functions
 
-// ----------- Helper Macro for RGB Conversion ------------
+// ----------- Helper Macros ------------
 #define RGB888_TO_RGB565(r, g, b) (uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
 #define RGB565_TO_RGB888(pixel, r, g, b)                    \
     do                                                      \
@@ -12,11 +15,25 @@
         b = ((pixel << 3) & 0xF8) | ((pixel >> 2) & 0x07);  \
     } while (0)
 
+// Validation macros to replace assert()
+#define CHECK_NULL(ptr) \
+    do { if (!(ptr)) return EMBEDDIP_ERROR_NULL_PTR; } while (0)
+
+#define CHECK_FORMAT(img, expected_fmt) \
+    do { if ((img)->format != (expected_fmt)) return EMBEDDIP_ERROR_INVALID_FORMAT; } while (0)
+
+#define CHECK_DEPTH(img, expected_depth) \
+    do { if ((img)->depth != (expected_depth)) return EMBEDDIP_ERROR_INVALID_DEPTH; } while (0)
+
 // ----------- RGB888 → GRAYSCALE ------------
-static void rgb888_to_grayscale(const Image *inImg, Image *outImg)
+static embeddip_status_t rgb888_to_grayscale(const Image *inImg, Image *outImg)
 {
-    assert(inImg->depth == IMAGE_DEPTH_U24 && inImg->format == IMAGE_FORMAT_RGB888);
-    assert(outImg->depth == IMAGE_DEPTH_U8 && outImg->format == IMAGE_FORMAT_GRAYSCALE);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_RGB888);
+    CHECK_DEPTH(inImg, IMAGE_DEPTH_U24);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_DEPTH(outImg, IMAGE_DEPTH_U8);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
@@ -28,13 +45,19 @@ static void rgb888_to_grayscale(const Image *inImg, Image *outImg)
         uint8_t b = in[i * 3 + 2];
         out[i] = (uint8_t)(0.299f * r + 0.587f * g + 0.114f * b);
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- GRAYSCALE → RGB888 ------------
-static void grayscale_to_rgb(const Image *inImg, Image *outImg)
+static embeddip_status_t grayscale_to_rgb(const Image *inImg, Image *outImg)
 {
-    assert(inImg->depth == IMAGE_DEPTH_U8 && inImg->format == IMAGE_FORMAT_GRAYSCALE);
-    assert(outImg->depth == IMAGE_DEPTH_U24 && outImg->format == IMAGE_FORMAT_RGB888);
+    CHECK_NULL(inImg);
+    CHECK_NULL(outImg);
+    CHECK_FORMAT(inImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_DEPTH(inImg, IMAGE_DEPTH_U8);
+    CHECK_FORMAT(outImg, IMAGE_FORMAT_RGB888);
+    CHECK_DEPTH(outImg, IMAGE_DEPTH_U24);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
@@ -46,6 +69,8 @@ static void grayscale_to_rgb(const Image *inImg, Image *outImg)
         out[i * 3 + 1] = gray;
         out[i * 3 + 2] = gray;
     }
+
+    return EMBEDDIP_OK;
 }
 
 // ----------- RGB888 → RGB565 ------------
@@ -347,9 +372,21 @@ static void HSI_to_rgb565(const Image *inImg, Image *outImg)
     }
 }
 
-void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
+embeddip_status_t cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 {
-    assert(inImg && outImg);
+    /* Validate input parameters */
+    if (!inImg || !outImg) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (!inImg->pixels || !outImg->pixels) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+
+    /*
+     * NOTE: Static helper functions still use internal assertions for now.
+     * Future enhancement: Propagate error codes from all helper functions.
+     * FIXME: Replace remaining asserts in static functions with proper error handling.
+     */
 
     switch (code)
     {
@@ -377,7 +414,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_RGB565_TO_GRAYSCALE:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         convert_rgb565_to_rgb888(inImg, tmp);
         rgb888_to_grayscale(tmp, outImg);
         deleteImage(tmp);
@@ -386,7 +423,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_RGB565_TO_YUV:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         convert_rgb565_to_rgb888(inImg, tmp);
         rgb888_to_yuv(tmp, outImg);
         deleteImage(tmp);
@@ -404,7 +441,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_GRAYSCALE_TO_RGB565:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         grayscale_to_rgb(inImg, tmp);
         rgb888_to_rgb565(tmp, outImg);
         deleteImage(tmp);
@@ -413,7 +450,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_GRAYSCALE_TO_YUV:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         grayscale_to_rgb(inImg, tmp);
         rgb888_to_yuv(tmp, outImg);
         deleteImage(tmp);
@@ -422,7 +459,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_GRAYSCALE_TO_HSI:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         grayscale_to_rgb(inImg, tmp);
         rgb888_to_HSI(tmp, outImg);
         deleteImage(tmp);
@@ -436,7 +473,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_YUV_TO_RGB565:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         yuv_to_rgb888(inImg, tmp);
         rgb888_to_rgb565(tmp, outImg);
         deleteImage(tmp);
@@ -445,7 +482,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_YUV_TO_GRAYSCALE:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         yuv_to_rgb888(inImg, tmp);
         rgb888_to_grayscale(tmp, outImg);
         deleteImage(tmp);
@@ -454,7 +491,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_YUV_TO_HSI:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         yuv_to_rgb888(inImg, tmp);
         rgb888_to_HSI(tmp, outImg);
         deleteImage(tmp);
@@ -472,7 +509,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_HSI_TO_GRAYSCALE:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         HSI_to_rgb888(inImg, tmp);
         rgb888_to_grayscale(tmp, outImg);
         deleteImage(tmp);
@@ -481,7 +518,7 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     case CVT_HSI_TO_YUV:
     {
-        Image *tmp = (Image *)createImageWH(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
+        Image *tmp = (Image *)createImageWH_legacy(inImg->width, inImg->height, IMAGE_FORMAT_RGB888);
         HSI_to_rgb888(inImg, tmp);
         rgb888_to_yuv(tmp, outImg);
         deleteImage(tmp);
@@ -490,14 +527,18 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
 
     // ------------------- COPY -------------------
     case CVT_COPY:
-        assert(inImg->format == outImg->format);
+        if (inImg->format != outImg->format) {
+            return EMBEDDIP_ERROR_INVALID_FORMAT;
+        }
         memcpy(outImg->pixels, inImg->pixels, inImg->size * inImg->depth);
         break;
 
     default:
-        assert(!"Unsupported color conversion code");
-        break;
+        /* Unsupported conversion code */
+        return EMBEDDIP_ERROR_NOT_SUPPORTED;
     }
+
+    return EMBEDDIP_OK;
 }
 
 /**
@@ -511,12 +552,17 @@ void cvtColor(const Image *inImg, Image *outImg, ColorConversionCode code)
  * @param[in]  minHue    Minimum hue value (0–255) for thresholding.
  * @param[in]  maxHue    Maximum hue value (0–255) for thresholding.
  */
-void hueThreshold(const Image *input, Image *output, float minHue, float maxHue)
+embeddip_status_t hueThreshold(const Image *input, Image *output, float minHue, float maxHue)
 {
-    assert(input && output);
-    assert(input->format == IMAGE_FORMAT_HSI);
-    assert(output->format == IMAGE_FORMAT_HSI);
-    assert(input->size == output->size);
+    if (!input || !output) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (input->format != IMAGE_FORMAT_HSI || output->format != IMAGE_FORMAT_HSI) {
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    }
+    if (input->size != output->size) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
 
     const uint8_t *in = (const uint8_t *)input->pixels;
     uint8_t *out = (uint8_t *)output->pixels;
@@ -558,6 +604,8 @@ void hueThreshold(const Image *input, Image *output, float minHue, float maxHue)
             }
         }
     }
+
+    return EMBEDDIP_OK;
 }
 
 /**
@@ -571,10 +619,14 @@ void hueThreshold(const Image *input, Image *output, float minHue, float maxHue)
  * @param[in]  lower   Lower bound array [3].
  * @param[in]  upper   Upper bound array [3].
  */
-void inRange(const Image *input, Image *mask, const uint8_t lower[3], const uint8_t upper[3])
+embeddip_status_t inRange(const Image *input, Image *mask, const uint8_t lower[3], const uint8_t upper[3])
 {
-    assert(input && mask);
-    assert(mask->format == IMAGE_FORMAT_GRAYSCALE);
+    if (!input || !mask || !lower || !upper) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (mask->format != IMAGE_FORMAT_GRAYSCALE) {
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    }
 
     const uint8_t *in = (const uint8_t *)input->pixels;
     uint8_t *out = (uint8_t *)mask->pixels;
@@ -596,4 +648,6 @@ void inRange(const Image *input, Image *mask, const uint8_t lower[3], const uint
             out[i] = 0;
         }
     }
+
+    return EMBEDDIP_OK;
 }

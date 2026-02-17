@@ -1,7 +1,7 @@
 /* ========================================================================== */
 /*  File: camera.h                                                            */
 /*  Brief: Generic camera interface for EmbedDIP                              */
-/*  SPDX-License-Identifier: BSD-3-Clause                                     */
+/*  SPDX-License-Identifier: MIT                                              */
 /* ========================================================================== */
 #ifndef CAMERA_H
 #define CAMERA_H

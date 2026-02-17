@@ -1,19 +1,20 @@
 #include "core/image.h"
+#include "core/error.h"
 #include <stdlib.h>
 #include <string.h>
 #include <board/common.h>
 #include <core/memory_manager.h>
 
-Image *createImage(ImageResolution resolution, ImageFormat format)
+embeddip_status_t createImage(ImageResolution resolution, ImageFormat format, Image **out_image)
 {
+    if (!out_image) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
 
     // Allocate Image structure
     Image *image = (Image *)memory_alloc(sizeof(Image));
-
-    // Check if the image pointer is NULL, which would mean memory allocation failed
-    if (image == NULL)
-    {
-        return NULL; // Failed to allocate memory
+    if (image == NULL) {
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
 
     // Determine the resolution (width and height) based on the provided size argument
@@ -48,8 +49,8 @@ Image *createImage(ImageResolution resolution, ImageFormat format)
         bytes_per_pixel = IMAGE_DEPTH_U24;
         break;
     default:
-        return NULL;
-        break;
+        memory_free(image);
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
     }
 
     // Allocate pixel buffer
@@ -58,24 +59,30 @@ Image *createImage(ImageResolution resolution, ImageFormat format)
     {
         // Rollback if allocation fails
         memory_free(image);
-        return NULL;
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
 
     image->is_chals = 0x00;
     image->chals = NULL;
 
-    return image;
+    *out_image = image;
+    return EMBEDDIP_OK;
 }
 
-Image *createImageWH(int width, int height, ImageFormat format)
+embeddip_status_t createImageWH(int width, int height, ImageFormat format, Image **out_image)
 {
+    if (!out_image) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+
+    if (width <= 0 || height <= 0) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+
     // Allocate Image structure
     Image *image = (Image *)memory_alloc(sizeof(Image));
-
-    // Check if the image pointer is NULL, which would mean memory allocation failed
-    if (image == NULL)
-    {
-        return NULL; // Failed to allocate memory
+    if (image == NULL) {
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
 
     // Determine the resolution (width and height) based on the provided size argument
@@ -110,8 +117,8 @@ Image *createImageWH(int width, int height, ImageFormat format)
         bytes_per_pixel = IMAGE_DEPTH_U24;
         break;
     default:
-        return NULL;
-        break;
+        memory_free(image);
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
     }
 
     // Allocate pixel buffer
@@ -120,13 +127,14 @@ Image *createImageWH(int width, int height, ImageFormat format)
     {
         // Rollback if allocation fails
         memory_free(image);
-        return NULL;
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
 
     image->is_chals = 0x00;
     image->chals = NULL;
 
-    return image;
+    *out_image = image;
+    return EMBEDDIP_OK;
 }
 
 void deleteImage(Image *image)
@@ -171,11 +179,14 @@ bool isChalsEmpty(const Image *inImg)
     return (inImg->is_chals == 0);
 }
 
-bool createChals(Image *inImg, uint8_t numChals)
+embeddip_status_t createChals(Image *inImg, uint8_t numChals)
 {
-    if (inImg == NULL || numChals == 0 || numChals > 3)
-    {
-        return false; // Invalid arguments
+    if (inImg == NULL) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+
+    if (numChals == 0 || numChals > 3) {
+        return EMBEDDIP_ERROR_INVALID_ARG;
     }
 
     if (inImg->chals == NULL)
@@ -183,7 +194,7 @@ bool createChals(Image *inImg, uint8_t numChals)
         inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
         if (inImg->chals == NULL)
         {
-            return false; // Allocation failed
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
         }
         memset(inImg->chals, 0, sizeof(channels_t));
     }
@@ -207,11 +218,35 @@ bool createChals(Image *inImg, uint8_t numChals)
                 }
                 memory_free(inImg->chals);
                 inImg->chals = NULL;
-                return false;
+                return EMBEDDIP_ERROR_OUT_OF_MEMORY;
             }
         }
     }
 
     inImg->is_chals = 1;
-    return true;
+    return EMBEDDIP_OK;
+}
+
+/* ============================================================================
+ * Legacy/Deprecated Wrappers (for backward compatibility)
+ * ========================================================================== */
+
+Image *createImage_legacy(ImageResolution resolution, ImageFormat format)
+{
+    Image *img = NULL;
+    embeddip_status_t status = createImage(resolution, format, &img);
+    if (status != EMBEDDIP_OK) {
+        return NULL;
+    }
+    return img;
+}
+
+Image *createImageWH_legacy(int width, int height, ImageFormat format)
+{
+    Image *img = NULL;
+    embeddip_status_t status = createImageWH(width, height, format, &img);
+    if (status != EMBEDDIP_OK) {
+        return NULL;
+    }
+    return img;
 }

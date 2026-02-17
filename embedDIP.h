@@ -1,7 +1,7 @@
 /* ========================================================================== */
 /*  File: embed_dip.h                                                         */
 /*  Brief: Public umbrella header for the EmbedDIP library                    */
-/*  SPDX-License-Identifier: BSD-3-Clause                                     */
+/*  SPDX-License-Identifier: MIT                                              */
 /*  Copyright (c) 2024–2025                                                   */
 /* ========================================================================== */
 #ifndef EMBED_DIP_H
@@ -114,6 +114,7 @@ extern "C"
  */
 
 /* Core APIs */
+#include "core/error.h"           /**< Error handling and status codes. */
 #include "core/image.h"           /**< Image type and utilities. */
 #include "imgproc/filter.h"       /**< Spatial filtering and kernels. */
 #include "imgproc/histogram.h"    /**< Histogram ops and equalization. */

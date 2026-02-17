@@ -147,7 +147,7 @@ extern "C"
      *
      * @param inImg Pointer to the image whose pixels will be converted.
      */
-    void convertTo(Image *inImg); // TODO: Implement
+    void convertTo(Image *inImg);
 
     void _or(const Image *a, const Image *b, Image *out);
 

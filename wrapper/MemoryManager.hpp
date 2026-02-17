@@ -27,7 +27,7 @@ namespace embedDIP
         {
             if (!ptr_)
             {
-                assert(0 && "Out of memory!");
+                throw std::bad_alloc();
             }
         }
 

@@ -283,6 +283,210 @@ void polarToCart(const Image *magnitude, const Image *phase, Image *outImg)
     outImg->log = IMAGE_DATA_CH0;
 }
 
+/**
+ * @brief Performs element-wise complex multiplication in frequency domain.
+ *
+ *
+ * @param img1    First complex image
+ * @param img2    Second complex image
+ * @param outImg  Output complex image
+ */
+void multiply(const Image *img1, const Image *img2, Image *outImg)
+{
+    if (img1->width != img2->width || img1->height != img2->height)
+        return;
+
+    if (!img1 || !img2 || !outImg)
+        return;
+
+    // Allocate output if needed
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, 1);
+        outImg->is_chals = 1;
+    }
+
+    uint8_t *in1, *in2;
+    float *out;
+    // this should be adjusted according to the last states of the images.
+    if (img1->log == IMAGE_DATA_CH0)
+    {
+        in1 = img1->chals->ch[0];
+    }
+    else if (img1->log == IMAGE_DATA_COMPLEX)
+    {
+        in1 = img1->chals->ch[1];
+    }
+    else if (img1->log == IMAGE_DATA_PIXELS)
+    {
+        in1 = img1->pixels;
+    }
+
+    if (img2->log == IMAGE_DATA_CH0)
+    {
+        in2 = img2->chals->ch[0];
+    }
+    else if (img2->log == IMAGE_DATA_COMPLEX)
+    {
+        in2 = img2->chals->ch[1];
+    }
+    else if (img2->log == IMAGE_DATA_PIXELS)
+    {
+        in2 = img2->pixels;
+    }
+
+    out = outImg->chals->ch[0];
+
+    int size = img1->width * img1->height;
+    for (int i = 0; i < size; ++i)
+    {
+        out[i] = in1[i] * in2[i];
+    }
+
+    outImg->log = IMAGE_DATA_CH0;
+}
+
+/**
+ * @brief Computes pixel-wise difference between two images: out = img1 - img2.
+ *
+ * Both images must have the same dimensions and a single channel.
+ *
+ * @param[in]  img1    First input image.
+ * @param[in]  img2    Second input image.
+ * @param[out] outImg  Output image to store the difference.
+ */
+void difference(const Image *img1, const Image *img2, Image *outImg)
+{
+    if (!img1 || !img2 || !outImg ||
+        img1->width != img2->width || img1->height != img2->height)
+        return;
+
+    int size = img1->width * img1->height;
+
+    // Allocate output channel if needed
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, 1);
+        outImg->is_chals = 1;
+    }
+
+    uint8_t *in1, *in2;
+    float *out;
+    // this should be adjusted according to the last states of the images.
+    if (img1->log == IMAGE_DATA_CH0)
+    {
+        in1 = img1->chals->ch[0];
+    }
+    else if (img1->log == IMAGE_DATA_COMPLEX)
+    {
+        in1 = img1->chals->ch[1];
+    }
+    else if (img1->log == IMAGE_DATA_PIXELS)
+    {
+        in1 = img1->pixels;
+    }
+
+    if (img2->log == IMAGE_DATA_CH0)
+    {
+        in2 = img2->chals->ch[0];
+    }
+    else if (img2->log == IMAGE_DATA_COMPLEX)
+    {
+        in2 = img2->chals->ch[1];
+    }
+    else if (img2->log == IMAGE_DATA_PIXELS)
+    {
+        in2 = img2->pixels;
+    }
+
+    out = outImg->chals->ch[0];
+
+    for (int i = 0; i < size; ++i)
+    {
+        out[i] = fmaxf((float)in1[i] - (float)in2[i], 0.0f);
+    }
+}
+
+/**
+ * @brief Fills the given image with a frequency domain filter mask.
+ *
+ * This modifies the image in-place. It must already have width and height set.
+ *
+ * @param maskImg    Target image to be filled with mask values.
+ * @param filterType Type of filter to create (low-pass, high-pass, band-pass, etc.).
+ * @param cutoff1    Cutoff radius (or inner radius for band-pass).
+ * @param cutoff2    Outer radius for band-pass (ignored for other types).
+ */
+void getFilter(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2)
+{
+    if (!maskImg)
+        return;
+
+    int w = maskImg->width;
+    int h = maskImg->height;
+    int cx = w / 2;
+    int cy = h / 2;
+
+    maskImg->format = IMAGE_FORMAT_GRAYSCALE;
+
+    if (isChalsEmpty(maskImg))
+    {
+        createChals(maskImg, 1);
+        maskImg->is_chals = 1;
+    }
+
+    float *mask = maskImg->chals->ch[0];
+
+    for (int y = 0; y < h; ++y)
+    {
+        for (int x = 0; x < w; ++x)
+        {
+            int dx = x - cx;
+            int dy = y - cy;
+            float d = sqrtf((float)(dx * dx + dy * dy));
+
+            float value = 0.0f;
+
+            switch (filterType)
+            {
+            case FREQ_FILTER_IDEAL_LOWPASS:
+                value = (d <= cutoff1) ? 1.0f : 0.0f;
+                break;
+
+            case FREQ_FILTER_GAUSSIAN_LOWPASS:
+                value = expf(-(d * d) / (2.0f * cutoff1 * cutoff1));
+                break;
+
+            case FREQ_FILTER_IDEAL_HIGHPASS:
+                value = (d >= cutoff1) ? 1.0f : 0.0f;
+                break;
+
+            case FREQ_FILTER_GAUSSIAN_HIGHPASS:
+                value = 1.0f - expf(-(d * d) / (2.0f * cutoff1 * cutoff1));
+                break;
+
+            case FREQ_FILTER_IDEAL_BANDPASS:
+                value = (d >= cutoff1 && d <= cutoff2) ? 1.0f : 0.0f;
+                break;
+
+            case FREQ_FILTER_GAUSSIAN_BANDPASS:
+            {
+                float gLow = expf(-(d * d) / (2.0f * cutoff2 * cutoff2));
+                float gHigh = expf(-(d * d) / (2.0f * cutoff1 * cutoff1));
+                value = gLow - gHigh;
+                break;
+            }
+
+            default:
+                value = 0.0f;
+                break;
+            }
+
+            mask[y * w + x] = value;
+        }
+    }
+}
+
 void ffilter2D(const Image *fftImg, const Image *filterMask, Image *outImg)
 {
     if (!fftImg || !filterMask || !outImg || isChalsEmpty(fftImg) || isChalsEmpty(filterMask))

@@ -1158,13 +1158,13 @@ void Canny(const Image *inImg, Image *outImg,
 
     // --- Step 1: Gaussian smoothing + gradients ---
     float sigma = 1.0; // 0.3 * ((apertureSize - 1) * 0.5 - 1) + 0.8; // could derive from apertureSize
-    Image *Ix = createImageWH(inImg->width, inImg->height, inImg->format);
-    Image *Iy = createImageWH(inImg->width, inImg->height, inImg->format);
+    Image *Ix = createImageWH_legacy(inImg->width, inImg->height, inImg->format);
+    Image *Iy = createImageWH_legacy(inImg->width, inImg->height, inImg->format);
     gaussianGradients(inImg, Ix, Iy, sigma);
 
     // --- Step 2: magnitude + phase ---
-    Image *Mag = createImageWH(inImg->width, inImg->height, inImg->format);
-    Image *Phase = createImageWH(inImg->width, inImg->height, inImg->format);
+    Image *Mag = createImageWH_legacy(inImg->width, inImg->height, inImg->format);
+    Image *Phase = createImageWH_legacy(inImg->width, inImg->height, inImg->format);
     gradientMagnitude(Ix, Iy, Mag);
     gradientPhase(Ix, Iy, Phase);
 
@@ -1199,11 +1199,11 @@ void Canny(const Image *inImg, Image *outImg,
     }
 
     // --- Step 3: NMS ---
-    Image *Nms = createImageWH(inImg->width, inImg->height, inImg->format);
+    Image *Nms = createImageWH_legacy(inImg->width, inImg->height, inImg->format);
     nonMaximumSuppression(Mag, Phase, Nms);
 
     // --- Step 4: Double threshold ---
-    Image *Dt = createImageWH(inImg->width, inImg->height, inImg->format);
+    Image *Dt = createImageWH_legacy(inImg->width, inImg->height, inImg->format);
     doubleThreshold(Nms, Dt, (float)threshold1, (float)threshold2, 50.0f, 255.0f);
 
     // --- Step 5: Hysteresis ---
