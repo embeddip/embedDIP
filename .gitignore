@@ -1,62 +1,177 @@
-# Build artifacts
+# ============================================================================
+# .gitignore for embedDIP Library
+# Portable Embedded Digital Image Processing Library
+# ============================================================================
+
+# ====================
+# Build Artifacts
+# ====================
 build/
+build-*/
+Build/
+out/
+bin/
+obj/
 .cache/
 *.o
 *.a
 *.so
+*.so.*
 *.dylib
 *.dll
+*.lib
 *.exe
 *.elf
 *.bin
 *.hex
 *.map
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
+*.lst
+*.lss
+*.sym
+*.d
 
 # CMake
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
+CTestTestfile.cmake
 Makefile
 *.cmake
 !CMakeLists.txt
+!cmake/*.cmake
+compile_commands.json
+.ninja_deps
+.ninja_log
 
-# Testing
+# ====================
+# IDE Files
+# ====================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# CLion / IntelliJ
+.idea/
+cmake-build-*/
+
+# Eclipse
+.cproject
+.project
+.settings/
+
+# Vim
+*.swp
+*.swo
+*~
+.*.sw?
+
+# Emacs
+\#*\#
+.\#*
+
+# ====================
+# OS Files
+# ====================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+
+# ====================
+# Testing & Coverage
+# ====================
 Testing/
 CTestTestfile.cmake
 *.gcov
 *.gcda
 *.gcno
+*.gcno
 coverage.info
+coverage.out
 coverage-report/
+htmlcov/
+.coverage
+.pytest_cache/
 
+# ====================
 # Documentation
+# ====================
 docs/html/
 docs/latex/
 docs/xml/
+docs/_build/
+docs/.doctrees/
 Doxyfile.bak
+*.pdf
+!docs/*.pdf
 
-# Python
+# ====================
+# Python (for scripts)
+# ====================
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
+*.egg-info/
+dist/
+.eggs/
+venv/
+env/
+ENV/
 
-# Logs and temporary files
+# ====================
+# Node.js (for tools)
+# ====================
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# ====================
+# Logs & Temporary
+# ====================
 *.log
 *.tmp
 *.temp
+*.bak
+*.old
+*.orig
+*.rej
 .log
 
-# Platform-specific
-.settings/
+# ====================
+# Archives
+# ====================
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
 
-# Dependency directories
-node_modules/
+# ====================
+# Keep These Files
+# ====================
+!.gitignore
+!.gitattributes
+!.gitmodules
+!.clang-format
+!.editorconfig
+!README.md
+!LICENSE
+!CHANGELOG.md
+!CONTRIBUTING.md

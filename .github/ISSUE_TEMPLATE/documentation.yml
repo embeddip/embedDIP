@@ -1,0 +1,96 @@
+name: 📚 Documentation Issue
+description: Report an issue with documentation or request documentation improvements
+title: "[Docs]: "
+labels: ["documentation", "triage"]
+assignees:
+  - odurgut
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation!
+
+  - type: dropdown
+    id: issue_type
+    attributes:
+      label: Documentation Issue Type
+      description: What type of documentation issue is this?
+      options:
+        - Missing documentation
+        - Incorrect/outdated documentation
+        - Unclear/confusing documentation
+        - Typo or grammar issue
+        - Code example issue
+        - API reference issue
+        - Tutorial request
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where is the documentation issue located?
+      placeholder: README.md, docs/api/image.md, code comments in core/image.h, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current Documentation
+      description: What does the current documentation say? (copy/paste or quote)
+      render: markdown
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What's Wrong?
+      description: Explain what's wrong, missing, or unclear
+      placeholder: The documentation says... but it should say...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed Fix/Improvement
+      description: If you have a suggestion for how to fix or improve the documentation, please describe it
+      render: markdown
+
+  - type: textarea
+    id: code_example
+    attributes:
+      label: Code Example (if applicable)
+      description: If this is about a code example, provide a corrected or improved version
+      render: c
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      description: How much does this affect users?
+      options:
+        - High (critical information missing/wrong)
+        - Medium (causes confusion)
+        - Low (minor improvement)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or references
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched for similar documentation issues
+          required: true
+        - label: I am willing to submit a PR to fix this documentation issue
+          required: false

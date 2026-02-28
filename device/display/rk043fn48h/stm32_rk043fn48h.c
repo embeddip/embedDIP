@@ -3,6 +3,7 @@
 #ifdef DEVICE_RK043FN48H
 
 #include "device/serial/serial.h"
+#include "core/error.h"
 #include "stm32f7xx_hal.h"
 #include <stdio.h>
 #include <stdarg.h>
@@ -13,28 +14,31 @@
 extern DCMI_HandleTypeDef hdcmi;
 extern LTDC_HandleTypeDef hltdc;
 
-static void display_init(void)
+static int display_init(void)
 {
     HAL_LTDC_SetAddress(&hltdc, FRAME_BUFFER + 0x100000,
                         LTDC_LAYER_1);
     HAL_LTDC_Reload(&hltdc, LTDC_RELOAD_IMMEDIATE);
+    return EMBEDDIP_OK;
 }
 
-static void display_deinit(void)
+static int display_deinit(void)
 {
     HAL_LTDC_DeInit(&hltdc);
+    return EMBEDDIP_OK;
 }
 
-static void display_reset(void)
+static int display_reset(void)
 {
     // No config
+    return EMBEDDIP_OK;
 }
 
 #define LCD_FRAMEBUFFER ((uint32_t *)(FRAME_BUFFER + 0x100000))
 #define LCD_WIDTH 480
 #define LCD_HEIGHT 272
 
-static void display_clear(displayColor color)
+static int display_clear(displayColor color)
 {
     for (uint32_t i = 0; i < (LCD_WIDTH * LCD_HEIGHT); i++)
     {
@@ -44,10 +48,14 @@ static void display_clear(displayColor color)
     // Reset to the default array.
     HAL_LTDC_SetAddress(&hltdc, LCD_FRAMEBUFFER,
                         LTDC_LAYER_1);
+    return EMBEDDIP_OK;
 }
 
-static void display_show(Image *inImg)
+static int display_show(Image *inImg)
 {
+    if (!inImg) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
 
     switch (inImg->format)
     {
@@ -68,8 +76,7 @@ static void display_show(Image *inImg)
     }
     default:
     {
-        // should not go there
-        return;
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
     }
     }
 
@@ -77,12 +84,15 @@ static void display_show(Image *inImg)
     HAL_LTDC_SetAddress(&hltdc, (uint32_t)inImg->pixels,
                         LTDC_LAYER_1);
     HAL_LTDC_Reload(&hltdc, LTDC_RELOAD_IMMEDIATE);
+    return EMBEDDIP_OK;
 }
 
 display_t stm32_ota5180a = {
     .init = display_init,
-    .show = display_show,
+    .deinit = display_deinit,
+    .reset = display_reset,
     .clear = display_clear,
+    .show = display_show,
 };
 
 #endif

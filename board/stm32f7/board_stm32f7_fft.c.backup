@@ -19,7 +19,6 @@ embeddip_status_t logImage(Image *img)
     }
 
     return EMBEDDIP_OK;
-    return EMBEDDIP_OK;
 }
 
 /**
@@ -28,19 +27,16 @@ embeddip_status_t logImage(Image *img)
  * @param[in,out] img   Image to modify (in-place).
  * @param[in]     value Scalar value to add.
  */
-embeddip_status_t addScalar(Image *img, float value)
+int addScalar(Image *img, float value)
 {
-    if (!img) return EMBEDDIP_ERROR_NULL_PTR;
-    if (isChalsEmpty(img)) return EMBEDDIP_ERROR_INVALID_ARG;
+    if (!img || isChalsEmpty(img))
+        return;
 
     float *data = img->chals->ch[0];
-    for (uint32_t i = 0; i < img->size; ++i)
+    for (int i = 0; i < img->size; ++i)
     {
         data[i] += value;
     }
-
-    return EMBEDDIP_OK;
-    return EMBEDDIP_OK;
 }
 
 /**
@@ -54,7 +50,7 @@ embeddip_status_t addScalar(Image *img, float value)
  * @param width        Width of the image (e.g., 256).
  * @param height       Height of the image (e.g., 256).
  */
-embeddip_status_t fftShift(float *data, int width, int height)
+int fftShift(float *data, int width, int height)
 {
     int cx = width / 2;
     int cy = height / 2;
@@ -86,8 +82,6 @@ embeddip_status_t fftShift(float *data, int width, int height)
             data[q2 + 1] = tmp_im;
         }
     }
-
-    return EMBEDDIP_OK;
 }
 
 /**
@@ -96,7 +90,7 @@ embeddip_status_t fftShift(float *data, int width, int height)
  * @param inImg Input image (Fourier domain).
  * @param outImg Output image (spatial domain).
  */
-embeddip_status_t fourierInv(const Image *inImg, Image *outImg)
+int fourierInv(const Image *inImg, Image *outImg)
 {
 
     int imageN = 256;
@@ -132,8 +126,6 @@ embeddip_status_t fourierInv(const Image *inImg, Image *outImg)
         outImg->chals->ch[0][i] = (float)sqrt(
             fourier[2 * i] * fourier[2 * i] + fourier[2 * i + 1] * fourier[2 * i + 1]);
     }
-
-    return EMBEDDIP_OK;
 }
 
 /**
@@ -143,7 +135,7 @@ embeddip_status_t fourierInv(const Image *inImg, Image *outImg)
  * @param phase     Pointer to phase image (1 channel), in radians.
  * @param outImg    Output image with 2 channels: real and imaginary.
  */
-embeddip_status_t polarToCart(const Image *magnitude, const Image *phase, Image *outImg)
+int polarToCart(const Image *magnitude, const Image *phase, Image *outImg)
 {
     int size = magnitude->width * magnitude->height;
 
@@ -164,7 +156,6 @@ embeddip_status_t polarToCart(const Image *magnitude, const Image *phase, Image 
     }
 
     outImg->log = IMAGE_DATA_CH0;
-    return EMBEDDIP_OK;
 }
 
 /**
@@ -175,7 +166,7 @@ embeddip_status_t polarToCart(const Image *magnitude, const Image *phase, Image 
  * @param img2    Second complex image
  * @param outImg  Output complex image
  */
-embeddip_status_t multiply(const Image *img1, const Image *img2, Image *outImg)
+int multiply(const Image *img1, const Image *img2, Image *outImg)
 {
     if (img1->width != img2->width || img1->height != img2->height)
         return;
@@ -239,7 +230,7 @@ embeddip_status_t multiply(const Image *img1, const Image *img2, Image *outImg)
  * @param[in]  img2    Second input image.
  * @param[out] outImg  Output image to store the difference.
  */
-embeddip_status_t difference(const Image *img1, const Image *img2, Image *outImg)
+int difference(const Image *img1, const Image *img2, Image *outImg)
 {
     if (!img1 || !img2 || !outImg ||
         img1->width != img2->width || img1->height != img2->height)
@@ -301,7 +292,7 @@ embeddip_status_t difference(const Image *img1, const Image *img2, Image *outImg
  * @param cutoff1    Cutoff radius (or inner radius for band-pass).
  * @param cutoff2    Outer radius for band-pass (ignored for other types).
  */
-embeddip_status_t getFilter(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2)
+int getFilter(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2)
 {
     if (!maskImg)
         return;
@@ -383,7 +374,7 @@ static bool isValidFFTSize(int w, int h)
  * @brief Performs forward 2D FFT on a single-channel image.
  *        ch[0] holds interleaved (Re, Im), ch[1] holds transposed for vertical pass.
  */
-embeddip_status_t fft(const Image *inImg, Image *outImg)
+int fft(const Image *inImg, Image *outImg)
 {
     int N = inImg->width;
     if (!isValidFFTSize(inImg->width, inImg->height))
@@ -442,7 +433,7 @@ embeddip_status_t fft(const Image *inImg, Image *outImg)
 /**
  * @brief Performs inverse 2D FFT on complex image. ch[0] is output.
  */
-embeddip_status_t ifft(const Image *inImg, Image *outImg)
+int ifft(const Image *inImg, Image *outImg)
 {
     int N = inImg->width;
 
@@ -509,7 +500,7 @@ embeddip_status_t ifft(const Image *inImg, Image *outImg)
  * @brief Performs inverse 2D FFT on a frequency-domain image.
  *        Uses ch[1] as input (transposed buffer), writes to ch[0] as interleaved (Re, Im).
  */
-embeddip_status_t ifft__(const Image *inImg, Image *outImg)
+int ifft__(const Image *inImg, Image *outImg)
 {
     int N = inImg->width;
     if (!isValidFFTSize(inImg->width, inImg->height))
@@ -569,7 +560,7 @@ embeddip_status_t ifft__(const Image *inImg, Image *outImg)
 /**
  * @brief Computes log-magnitude spectrum.
  */
-embeddip_status_t _abs_(const Image *fftImg, Image *magImg)
+int _abs_(const Image *fftImg, Image *magImg)
 {
     int size = fftImg->width * fftImg->height;
 
@@ -604,13 +595,12 @@ embeddip_status_t _abs_(const Image *fftImg, Image *magImg)
     }
 
     magImg->log = IMAGE_DATA_MAGNITUDE;
-    return EMBEDDIP_OK;
 }
 
 /**
  * @brief Computes phase angle from FFT image.
  */
-embeddip_status_t _phase_(const Image *fftImg, Image *phaseImg)
+int _phase_(const Image *fftImg, Image *phaseImg)
 {
     int size = fftImg->width * fftImg->height;
 
@@ -643,13 +633,12 @@ embeddip_status_t _phase_(const Image *fftImg, Image *phaseImg)
     }
 
     phaseImg->log = IMAGE_DATA_PHASE;
-    return EMBEDDIP_OK;
 }
 
 /**
  * @brief Rearranges FFT result so that low-frequency component is centered.
  */
-embeddip_status_t fftshift(float *data, int width, int height)
+int fftshift(float *data, int width, int height)
 {
     int cx = width / 2, cy = height / 2;
     for (int y = 0; y < cy; ++y)
@@ -685,44 +674,23 @@ embeddip_status_t fftshift(float *data, int width, int height)
  * @param[in]  filterMask Grayscale or complex mask to apply in frequency domain.
  * @param[out] outImg     Output image after filtering in the frequency domain.
  */
-embeddip_status_t ffilter2D(const Image *fftImg, const Image *filterMask, Image *outImg)
+int ffilter2D(const Image *fftImg, const Image *filterMask, Image *outImg)
 {
-    if (!fftImg || !filterMask || !outImg)
-        return EMBEDDIP_ERROR_NULL_PTR;
 
-    if (isChalsEmpty(fftImg) || isChalsEmpty(filterMask))
-        return EMBEDDIP_ERROR_INVALID_ARG;
+    if (!fftImg || !filterMask || !outImg ||
+        isChalsEmpty(fftImg) || isChalsEmpty(filterMask))
+        return;
 
     int width = fftImg->width;
     int height = fftImg->height;
     int size = width * height;
 
     // Step 1: Compute magnitude and phase
-    Image *magImg = NULL;
-    Image *phaseImg = NULL;
+    Image *magImg = createImageWH(fftImg->width, fftImg->height, fftImg->format);
+    Image *phaseImg = createImageWH(fftImg->width, fftImg->height, fftImg->format);
 
-    embeddip_status_t status = createImageWH(fftImg->width, fftImg->height, fftImg->format, &magImg);
-    if (status != EMBEDDIP_OK) return status;
-
-    status = createImageWH(fftImg->width, fftImg->height, fftImg->format, &phaseImg);
-    if (status != EMBEDDIP_OK) {
-        deleteImage(magImg);
-        return status;
-    }
-
-    status = _abs_(fftImg, magImg);
-    if (status != EMBEDDIP_OK) {
-        deleteImage(magImg);
-        deleteImage(phaseImg);
-        return status;
-    }
-
-    status = _phase_(fftImg, phaseImg);
-    if (status != EMBEDDIP_OK) {
-        deleteImage(magImg);
-        deleteImage(phaseImg);
-        return status;
-    }
+    _abs_(fftImg, magImg);
+    _phase_(fftImg, phaseImg);
 
     // Step 2: Multiply magnitude by filter mask (element-wise)
     float *mag = magImg->chals->ch[0];
@@ -731,18 +699,12 @@ embeddip_status_t ffilter2D(const Image *fftImg, const Image *filterMask, Image 
         mag[i] *= mask[i];
 
     // Step 3: Reconstruct complex data from filtered mag + original phase
-    status = polarToCart(magImg, phaseImg, outImg);
-
-    // Cleanup temporary images
-    deleteImage(magImg);
-    deleteImage(phaseImg);
-
-    return status;
+    polarToCart(magImg, phaseImg, outImg);
 }
 
 /*
 
-embeddip_status_t fourier(const Image *inImg, Image *outImg)
+int fourier(const Image *inImg, Image *outImg)
 {
     int imageN = 256;
 
@@ -820,7 +782,7 @@ embeddip_status_t fourier(const Image *inImg, Image *outImg)
     }
 }
 
-embeddip_status_t mag(const Image *inImg, Image *outImg)
+int mag(const Image *inImg, Image *outImg)
 {
     int imageN = 256;
 
@@ -846,7 +808,7 @@ embeddip_status_t mag(const Image *inImg, Image *outImg)
     test = test + 1;
 }
 
-embeddip_status_t phase(const Image *inImg, Image *outImg)
+int phase(const Image *inImg, Image *outImg)
 {
     int imageN = 256;
 

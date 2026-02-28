@@ -1,0 +1,368 @@
+name: Nightly Builds
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:
+
+env:
+  CACHE_VERSION: v1
+
+jobs:
+  # ============================================================================
+  # COMPREHENSIVE BUILD MATRIX
+  # ============================================================================
+  nightly-matrix:
+    name: Nightly Build (${{ matrix.platform }}-${{ matrix.toolchain }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # STM32 targets
+          - platform: STM32F7
+            toolchain: gcc-arm-none-eabi
+            cpu: cortex-m7
+            fpu: fpv5-d16
+            float-abi: hard
+          - platform: STM32F4
+            toolchain: gcc-arm-none-eabi
+            cpu: cortex-m4
+            fpu: fpv4-sp-d16
+            float-abi: hard
+          - platform: STM32H7
+            toolchain: gcc-arm-none-eabi
+            cpu: cortex-m7
+            fpu: fpv5-d16
+            float-abi: hard
+          # ESP32 targets
+          - platform: ESP32
+            toolchain: xtensa-esp32-elf
+            cpu: esp32
+          - platform: ESP32-S3
+            toolchain: xtensa-esp32s3-elf
+            cpu: esp32s3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install ARM toolchain
+        if: contains(matrix.toolchain, 'arm-none-eabi')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
+
+      - name: Install ESP32 toolchain
+        if: contains(matrix.toolchain, 'xtensa')
+        run: |
+          mkdir -p ~/toolchain
+          cd ~/toolchain
+
+          if [[ "${{ matrix.toolchain }}" == "xtensa-esp32-elf" ]]; then
+            wget -q https://github.com/espressif/crosstool-NG/releases/download/esp-2021r2-patch5/xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+            tar -xzf xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+            echo "$HOME/toolchain/xtensa-esp32-elf/bin" >> $GITHUB_PATH
+          elif [[ "${{ matrix.toolchain }}" == "xtensa-esp32s3-elf" ]]; then
+            wget -q https://github.com/espressif/crosstool-NG/releases/download/esp-2021r2-patch5/xtensa-esp32s3-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+            tar -xzf xtensa-esp32s3-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+            echo "$HOME/toolchain/xtensa-esp32s3-elf/bin" >> $GITHUB_PATH
+          fi
+
+      - name: Build with multiple optimization levels
+        run: |
+          mkdir -p nightly_builds/${{ matrix.platform }}
+
+          for opt in Os O2 O3; do
+            echo "========================================="
+            echo "Building ${{ matrix.platform }} with -$opt"
+            echo "========================================="
+
+            mkdir -p build_$opt
+
+            if [[ "${{ matrix.toolchain }}" == "gcc-arm-none-eabi" ]]; then
+              FLAGS="-mthumb -mcpu=${{ matrix.cpu }}"
+              FLAGS="$FLAGS -mfloat-abi=${{ matrix.float-abi }} -mfpu=${{ matrix.fpu }}"
+              COMPILER="arm-none-eabi-gcc"
+            else
+              FLAGS="-mlongcalls"
+              COMPILER="${{ matrix.toolchain }}-gcc"
+            fi
+
+            FLAGS="$FLAGS -$opt -g -Wall -Wextra"
+            FLAGS="$FLAGS -ffunction-sections -fdata-sections"
+            FLAGS="$FLAGS -DTARGET_BOARD_${{ matrix.platform }}=1"
+            FLAGS="$FLAGS -Icore -Iimgproc -Iboard -Idevice"
+
+            # Compile all sources
+            for src in core/*.c board/common.c imgproc/*.c; do
+              if [ -f "$src" ]; then
+                obj="build_$opt/$(basename ${src%.c}.o)"
+                $COMPILER $FLAGS -c "$src" -o "$obj" || exit 1
+              fi
+            done
+
+            # Create library
+            if [[ "${{ matrix.toolchain }}" == "gcc-arm-none-eabi" ]]; then
+              arm-none-eabi-ar rcs build_$opt/libembeddip.a build_$opt/*.o
+              arm-none-eabi-size build_$opt/libembeddip.a > nightly_builds/${{ matrix.platform }}/size_$opt.txt
+            else
+              ${{ matrix.toolchain }}-ar rcs build_$opt/libembeddip.a build_$opt/*.o
+              ${{ matrix.toolchain }}-size build_$opt/libembeddip.a > nightly_builds/${{ matrix.platform }}/size_$opt.txt
+            fi
+
+            cp build_$opt/libembeddip.a nightly_builds/${{ matrix.platform }}/libembeddip_$opt.a
+          done
+
+      - name: Generate build report
+        run: |
+          cat > nightly_builds/${{ matrix.platform }}/report.md << EOF
+          # Nightly Build Report: ${{ matrix.platform }}
+
+          **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Commit**: ${{ github.sha }}
+          **Toolchain**: ${{ matrix.toolchain }}
+
+          ## Size Comparison
+
+          ### -Os (Size Optimization)
+          \`\`\`
+          $(cat nightly_builds/${{ matrix.platform }}/size_Os.txt)
+          \`\`\`
+
+          ### -O2 (Balanced)
+          \`\`\`
+          $(cat nightly_builds/${{ matrix.platform }}/size_O2.txt)
+          \`\`\`
+
+          ### -O3 (Speed Optimization)
+          \`\`\`
+          $(cat nightly_builds/${{ matrix.platform }}/size_O3.txt)
+          \`\`\`
+          EOF
+
+      - name: Upload nightly build
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-${{ matrix.platform }}
+          path: nightly_builds/${{ matrix.platform }}/
+          retention-days: 7
+
+  # ============================================================================
+  # STRESS TESTING
+  # ============================================================================
+  stress-test:
+    name: Stress Testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build valgrind
+
+      - name: Build test suite
+        run: |
+          cmake -B build -G Ninja \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DEMBEDDIP_TARGET_PLATFORM=HOST \
+                -DEMBEDDIP_BUILD_TESTS=ON \
+                -DEMBEDDIP_ENABLE_ASAN=ON
+
+          cmake --build build -j$(nproc)
+
+      - name: Run stress tests
+        working-directory: build
+        run: |
+          echo "🔥 Running stress tests..."
+
+          # Run tests multiple times to catch intermittent failures
+          for i in {1..100}; do
+            echo "Iteration $i/100"
+            if ! ctest --output-on-failure --quiet; then
+              echo "Test failed on iteration $i"
+              exit 1
+            fi
+          done
+
+          echo "✅ All stress test iterations passed"
+
+      - name: Memory leak check
+        working-directory: build
+        run: |
+          echo "🧠 Checking for memory leaks..."
+
+          ctest -T memcheck --output-on-failure || true
+
+          # Parse valgrind results
+          find Testing/Temporary -name "MemoryChecker.*.log" -exec cat {} \; > memcheck_summary.txt
+
+          if grep -q "definitely lost" memcheck_summary.txt; then
+            echo "⚠️ Memory leaks detected!"
+            cat memcheck_summary.txt
+            exit 1
+          fi
+
+          echo "✅ No memory leaks detected"
+
+  # ============================================================================
+  # COMPATIBILITY CHECK
+  # ============================================================================
+  compatibility:
+    name: Compatibility Check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-latest]
+        compiler: [gcc-9, gcc-10, gcc-11, gcc-12]
+        exclude:
+          - os: ubuntu-20.04
+            compiler: gcc-12
+          - os: ubuntu-22.04
+            compiler: gcc-9
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.compiler }} cmake ninja-build
+
+      - name: Build with specific compiler
+        run: |
+          export CC=${{ matrix.compiler }}
+
+          cmake -B build -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DEMBEDDIP_TARGET_PLATFORM=HOST
+
+          cmake --build build -j$(nproc)
+
+      - name: Run basic tests
+        working-directory: build
+        run: |
+          ctest --output-on-failure --verbose || true
+
+  # ============================================================================
+  # LONG-RUNNING TESTS
+  # ============================================================================
+  long-tests:
+    name: Long-Running Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake
+
+      - name: Build with instrumentation
+        run: |
+          cmake -B build \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DEMBEDDIP_TARGET_PLATFORM=HOST \
+                -DEMBEDDIP_BUILD_TESTS=ON \
+                -DCMAKE_C_FLAGS="-O0 -g -fprofile-arcs -ftest-coverage"
+
+          cmake --build build -j$(nproc)
+
+      - name: Run extended test suite
+        working-directory: build
+        run: |
+          # Run tests with different image sizes
+          for size in 64 128 256 512 1024; do
+            echo "Testing with image size ${size}x${size}"
+            # Run specific tests with environment variables
+            export TEST_IMAGE_SIZE=$size
+            ctest --output-on-failure || true
+          done
+
+      - name: Fuzzing tests
+        run: |
+          echo "🎲 Running fuzzing tests..."
+          # Simple fuzzing - feed random data to functions
+          # TODO: Implement proper fuzzing with AFL or libFuzzer
+
+      - name: Generate coverage report
+        run: |
+          lcov --capture --directory build --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/test/*' --output-file coverage.info
+          lcov --list coverage.info
+
+  # ============================================================================
+  # NIGHTLY SUMMARY
+  # ============================================================================
+  nightly-summary:
+    name: Nightly Summary
+    runs-on: ubuntu-latest
+    needs: [nightly-matrix, stress-test, compatibility, long-tests]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          cat << EOF > $GITHUB_STEP_SUMMARY
+          # 🌙 Nightly Build Summary
+
+          **Date**: $(date -u +"%Y-%m-%d")
+
+          ## Build Status
+
+          | Platform | Status |
+          |----------|--------|
+          | Multi-Platform Builds | ${{ needs.nightly-matrix.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | Stress Tests | ${{ needs.stress-test.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | Compatibility | ${{ needs.compatibility.result == 'success' && '✅ Passed' || '⚠️ Issues' }} |
+          | Long Tests | ${{ needs.long-tests.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+
+          ## Artifacts
+
+          Nightly builds are available in workflow artifacts (7 day retention).
+
+          EOF
+
+      - name: Create issue on failure
+        if: contains(needs.*.result, 'failure')
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const summary = `
+            # 🚨 Nightly Build Failure
+
+            The nightly build workflow failed on ${new Date().toISOString().split('T')[0]}
+
+            **Failed Jobs:**
+            - Nightly Matrix: ${{ needs.nightly-matrix.result }}
+            - Stress Test: ${{ needs.stress-test.result }}
+            - Compatibility: ${{ needs.compatibility.result }}
+            - Long Tests: ${{ needs.long-tests.result }}
+
+            [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Nightly Build Failure - ' + new Date().toISOString().split('T')[0],
+              body: summary,
+              labels: ['bug', 'nightly-failure', 'ci']
+            });

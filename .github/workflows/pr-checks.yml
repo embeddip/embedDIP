@@ -1,0 +1,424 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Prevent duplicate runs
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # PR VALIDATION
+  # ============================================================================
+  pr-validation:
+    name: Validate PR
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Check PR title
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+
+          # Check for conventional commit format
+          if echo "$PR_TITLE" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+\))?: .+"; then
+            echo "✅ PR title follows conventional commit format"
+          else
+            echo "⚠️ PR title should follow conventional commit format:"
+            echo "   feat: add new feature"
+            echo "   fix: fix a bug"
+            echo "   docs: update documentation"
+            echo "   style: code style changes"
+            echo "   refactor: code refactoring"
+            echo "   perf: performance improvements"
+            echo "   test: add or update tests"
+            echo "   build: build system changes"
+            echo "   ci: CI/CD changes"
+            echo "   chore: other changes"
+            # Don't fail, just warn
+          fi
+
+      - name: Check PR description
+        run: |
+          if [ -z "${{ github.event.pull_request.body }}" ]; then
+            echo "⚠️ PR has no description. Please add context about your changes."
+            exit 1
+          fi
+
+          echo "✅ PR has a description"
+
+      - name: Check for linked issues
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+
+          if echo "$PR_BODY" | grep -qE "(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved) #[0-9]+"; then
+            echo "✅ PR links to an issue"
+          else
+            echo "⚠️ PR doesn't seem to link to any issues"
+            echo "   Consider linking with: Closes #123, Fixes #456, etc."
+          fi
+
+      - name: Check file changes
+        run: |
+          # Get list of changed files
+          git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD > changed_files.txt
+
+          echo "📝 Changed files:"
+          cat changed_files.txt
+
+          # Check if any source files changed
+          if grep -qE "\.(c|cpp|h|hpp)$" changed_files.txt; then
+            echo "source_changed=true" >> $GITHUB_ENV
+          else
+            echo "source_changed=false" >> $GITHUB_ENV
+          fi
+
+          # Check if tests were added for source changes
+          if [ "$source_changed" = "true" ]; then
+            if grep -qE "test.*\.(c|cpp)$" changed_files.txt; then
+              echo "✅ Tests included with source changes"
+            else
+              echo "⚠️ Source code changed but no tests added"
+              echo "   Consider adding tests for your changes"
+            fi
+          fi
+
+      - name: Check for large files
+        run: |
+          echo "🔍 Checking for large files..."
+
+          git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | while read file; do
+            if [ -f "$file" ]; then
+              size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+              if [ $size -gt 1048576 ]; then  # 1 MB
+                echo "⚠️ Large file detected: $file ($size bytes)"
+                echo "   Consider using Git LFS for large files"
+              fi
+            fi
+          done
+
+      - name: Check for TODO/FIXME
+        run: |
+          echo "🔍 Checking for new TODO/FIXME comments..."
+
+          git diff origin/${{ github.event.pull_request.base.ref }}...HEAD | \
+            grep -E "^\+.*\b(TODO|FIXME|XXX|HACK)\b" > new_todos.txt || true
+
+          if [ -s new_todos.txt ]; then
+            echo "⚠️ New TODO/FIXME comments added:"
+            cat new_todos.txt
+            echo ""
+            echo "Consider creating issues for these items"
+          else
+            echo "✅ No new TODO/FIXME comments"
+          fi
+
+  # ============================================================================
+  # CODE REVIEW AUTOMATION
+  # ============================================================================
+  code-review:
+    name: Automated Code Review
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Install review tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck clang-tidy
+
+      - name: Run automated review
+        run: |
+          # Get changed files
+          git diff --name-only --diff-filter=AM origin/${{ github.event.pull_request.base.ref }}...HEAD | \
+            grep -E "\.(c|cpp|h|hpp)$" > changed_files.txt || true
+
+          if [ ! -s changed_files.txt ]; then
+            echo "No C/C++ files changed"
+            exit 0
+          fi
+
+          echo "# Code Review Results" > review_comments.md
+          echo "" >> review_comments.md
+
+          # Run cppcheck on changed files
+          echo "## Static Analysis (cppcheck)" >> review_comments.md
+          echo '```' >> review_comments.md
+
+          while read file; do
+            if [ -f "$file" ]; then
+              cppcheck --enable=warning,style,performance \
+                       --suppress=missingIncludeSystem \
+                       --inline-suppr \
+                       -Icore -Iimgproc -Iboard -Idevice -Iwrapper \
+                       "$file" 2>&1 | grep -v "Checking" || echo "No issues found in $file"
+            fi
+          done < changed_files.txt >> review_comments.md
+
+          echo '```' >> review_comments.md
+
+      - name: Check code complexity
+        run: |
+          pip3 install lizard
+
+          echo "" >> review_comments.md
+          echo "## Code Complexity" >> review_comments.md
+          echo '```' >> review_comments.md
+
+          # Analyze changed files
+          if [ -s changed_files.txt ]; then
+            while read file; do
+              if [ -f "$file" ]; then
+                lizard "$file" -w --CCN 15 || true
+              fi
+            done < changed_files.txt >> review_comments.md
+          fi
+
+          echo '```' >> review_comments.md
+
+      - name: Post review comment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            let reviewComments = '';
+
+            try {
+              reviewComments = fs.readFileSync('review_comments.md', 'utf8');
+            } catch (err) {
+              console.log('No review comments file found');
+              return;
+            }
+
+            // Post as PR comment
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: reviewComments
+            });
+
+  # ============================================================================
+  # DIFF ANALYSIS
+  # ============================================================================
+  diff-analysis:
+    name: Diff Analysis
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Analyze changes
+        run: |
+          echo "# Pull Request Diff Analysis" > diff_analysis.md
+          echo "" >> diff_analysis.md
+
+          # Count changes
+          ADDITIONS=$(git diff --numstat origin/${{ github.event.pull_request.base.ref }}...HEAD | awk '{sum+=$1} END {print sum}')
+          DELETIONS=$(git diff --numstat origin/${{ github.event.pull_request.base.ref }}...HEAD | awk '{sum+=$2} END {print sum}')
+          FILES=$(git diff --numstat origin/${{ github.event.pull_request.base.ref }}...HEAD | wc -l)
+
+          echo "## Statistics" >> diff_analysis.md
+          echo "" >> diff_analysis.md
+          echo "- **Files Changed**: $FILES" >> diff_analysis.md
+          echo "- **Lines Added**: $ADDITIONS" >> diff_analysis.md
+          echo "- **Lines Deleted**: $DELETIONS" >> diff_analysis.md
+          echo "- **Net Change**: $((ADDITIONS - DELETIONS))" >> diff_analysis.md
+          echo "" >> diff_analysis.md
+
+          # Categorize changes
+          echo "## Changed Files by Category" >> diff_analysis.md
+          echo "" >> diff_analysis.md
+
+          git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD | while read file; do
+            if echo "$file" | grep -qE "^core/"; then
+              echo "- 📦 Core: $file" >> diff_analysis.md
+            elif echo "$file" | grep -qE "^imgproc/"; then
+              echo "- 🖼️ Image Processing: $file" >> diff_analysis.md
+            elif echo "$file" | grep -qE "^board/"; then
+              echo "- 🎛️ Board Support: $file" >> diff_analysis.md
+            elif echo "$file" | grep -qE "^device/"; then
+              echo "- 🔌 Device Drivers: $file" >> diff_analysis.md
+            elif echo "$file" | grep -qE "^wrapper/"; then
+              echo "- 🎁 C++ Wrappers: $file" >> diff_analysis.md
+            elif echo "$file" | grep -qE "test/|spec/"; then
+              echo "- ✅ Tests: $file" >> diff_analysis.md
+            elif echo "$file" | grep -qE "\.(md|txt)$"; then
+              echo "- 📝 Documentation: $file" >> diff_analysis.md
+            elif echo "$file" | grep -qE "\.yml$|\.yaml$"; then
+              echo "- ⚙️ CI/CD: $file" >> diff_analysis.md
+            else
+              echo "- 📄 Other: $file" >> diff_analysis.md
+            fi
+          done
+
+          # Warn about large PRs
+          if [ $FILES -gt 30 ]; then
+            echo "" >> diff_analysis.md
+            echo "⚠️ **Large PR**: This PR changes $FILES files. Consider splitting into smaller PRs." >> diff_analysis.md
+          fi
+
+      - name: Upload diff analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: diff-analysis
+          path: diff_analysis.md
+
+  # ============================================================================
+  # BREAKING CHANGES CHECK
+  # ============================================================================
+  breaking-changes:
+    name: Check for Breaking Changes
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          path: base
+
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+
+      - name: Check API changes
+        run: |
+          echo "🔍 Checking for API changes..."
+
+          # Extract function signatures from headers
+          extract_api() {
+            grep -rh "^[a-zA-Z].*(" --include="*.h" "$1" | \
+              grep -v "//" | \
+              sort > "$2"
+          }
+
+          extract_api "base" "base_api.txt"
+          extract_api "pr" "pr_api.txt"
+
+          # Compare APIs
+          echo "# API Changes Analysis" > api_changes.md
+          echo "" >> api_changes.md
+
+          # Check for removed functions
+          REMOVED=$(comm -23 base_api.txt pr_api.txt)
+          if [ -n "$REMOVED" ]; then
+            echo "## ⚠️ Removed APIs (Breaking Changes)" >> api_changes.md
+            echo '```' >> api_changes.md
+            echo "$REMOVED" >> api_changes.md
+            echo '```' >> api_changes.md
+            echo "" >> api_changes.md
+
+            # Set warning flag
+            echo "breaking_changes=true" >> $GITHUB_ENV
+          fi
+
+          # Check for new functions
+          ADDED=$(comm -13 base_api.txt pr_api.txt)
+          if [ -n "$ADDED" ]; then
+            echo "## ✨ New APIs" >> api_changes.md
+            echo '```' >> api_changes.md
+            echo "$ADDED" >> api_changes.md
+            echo '```' >> api_changes.md
+            echo "" >> api_changes.md
+          fi
+
+          # Check for modified function signatures
+          MODIFIED=$(comm -12 base_api.txt pr_api.txt | while read func; do
+            base_def=$(grep -F "$func" base_api.txt)
+            pr_def=$(grep -F "$func" pr_api.txt)
+            if [ "$base_def" != "$pr_def" ]; then
+              echo "$func"
+            fi
+          done)
+
+          if [ -n "$MODIFIED" ]; then
+            echo "## 🔄 Modified APIs (Potential Breaking Changes)" >> api_changes.md
+            echo '```' >> api_changes.md
+            echo "$MODIFIED" >> api_changes.md
+            echo '```' >> api_changes.md
+            echo "" >> api_changes.md
+
+            echo "breaking_changes=true" >> $GITHUB_ENV
+          fi
+
+          if [ "$breaking_changes" = "true" ]; then
+            echo "**This PR contains potential breaking changes!**" >> api_changes.md
+            echo "Please ensure:" >> api_changes.md
+            echo "- [ ] Version is bumped appropriately (major version for breaking changes)" >> api_changes.md
+            echo "- [ ] CHANGELOG.md is updated" >> api_changes.md
+            echo "- [ ] Migration guide is provided" >> api_changes.md
+          fi
+
+      - name: Comment on breaking changes
+        if: env.breaking_changes == 'true'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const apiChanges = fs.readFileSync('api_changes.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: apiChanges
+            });
+
+            // Add label
+            github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['breaking-change']
+            });
+
+  # ============================================================================
+  # SUMMARY
+  # ============================================================================
+  pr-summary:
+    name: PR Check Summary
+    runs-on: ubuntu-latest
+    needs: [pr-validation, code-review, diff-analysis, breaking-changes]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          cat << EOF > $GITHUB_STEP_SUMMARY
+          # Pull Request Check Summary
+
+          | Check | Status |
+          |-------|--------|
+          | Validation | ${{ needs.pr-validation.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | Code Review | ${{ needs.code-review.result == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |
+          | Diff Analysis | ${{ needs.diff-analysis.result == 'success' && '✅ Complete' || '❌ Failed' }} |
+          | Breaking Changes | ${{ needs.breaking-changes.result == 'success' && '✅ Checked' || '⚠️ Found' }} |
+
+          Review the detailed reports in the workflow artifacts.
+          EOF

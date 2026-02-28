@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions
+    url: https://github.com/odurgut/embedDIP/discussions
+    about: Ask questions and discuss embedDIP with the community
+  - name: 📖 Documentation
+    url: https://github.com/odurgut/embedDIP/blob/main/README.md
+    about: Read the official embedDIP documentation
+  - name: 🔍 Search Issues
+    url: https://github.com/odurgut/embedDIP/issues
+    about: Search existing issues before creating a new one

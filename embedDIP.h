@@ -62,7 +62,7 @@ extern "C"
 /** @brief Major version (breaking changes). */
 #define EMBED_DIP_VERSION_MAJOR 0U
 /** @brief Minor version (new features, backward compatible). */
-#define EMBED_DIP_VERSION_MINOR 0U
+#define EMBED_DIP_VERSION_MINOR 1U
 /** @brief Patch version (bug fixes, no API changes). */
 #define EMBED_DIP_VERSION_PATCH 0U
 
@@ -137,8 +137,9 @@ extern "C"
 /* Add ESP32-specific C headers here when available. */
 #endif
 
-#ifdef STM32F7xx
-#include "device/display/display.h" /**< Display abstraction (STM32F7). */
+#if defined(STM32F7xx) || defined(TARGET_BOARD_HOST)
+#include "device/display/display.h" /**< Display abstraction. */
+#include "device/camera/camera.h"   /**< Camera abstraction. */
 #endif
 
     /** @} */ /* end of embedDIP_hw */

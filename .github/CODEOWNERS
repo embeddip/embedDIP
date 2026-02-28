@@ -1,0 +1,38 @@
+# This file defines code owners for the embedDIP project.
+# Code owners are automatically requested for review when someone opens a pull request that modifies code that they own.
+#
+# The last matching pattern takes precedence.
+# More specific patterns should be listed after less specific ones.
+
+# Default owners for everything in the repo
+* @odurgut
+
+# Core library components
+/core/ @odurgut
+/imgproc/ @odurgut
+/board/ @odurgut
+
+# Device drivers
+/device/camera/ @odurgut
+/device/serial/ @odurgut
+/device/display/ @odurgut
+
+# C++ wrappers
+/wrapper/ @odurgut
+
+# Documentation
+*.md @odurgut
+/docs/ @odurgut
+
+# CI/CD configuration
+/.github/ @odurgut
+/.github/workflows/ @odurgut
+
+# Build system
+CMakeLists.txt @odurgut
+/cmake/ @odurgut
+*.cmake @odurgut
+
+# Examples and tests
+/examples/ @odurgut
+/tests/ @odurgut

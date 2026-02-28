@@ -27,31 +27,33 @@ extern "C"
         float delta;
     } SepFilter2DContext;
 
-    void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx);
+    int filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx);
 
-    void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta);
+    int filter2D(const Image *inImg, Image *outImg, const float *kernel, int kernelSize);
 
-    void minFilter(const Image *inImg, Image *outImg, int kernelSize);
+    int filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta);
 
-    void maxFilter(const Image *inImg, Image *outImg, int kernelSize);
+    int minFilter(const Image *inImg, Image *outImg, int kernelSize);
 
-    void medianFilter(const Image *inImg, Image *outImg, int kernelSize);
+    int maxFilter(const Image *inImg, Image *outImg, int kernelSize);
 
-    void rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg);
+    int medianFilter(const Image *inImg, Image *outImg, int kernelSize);
 
-    void rgbMerge(const Image *rImg, const Image *gImg, const Image *bImg, Image *outImg);
+    int rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg);
 
-    void dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2);
+    int rgbMerge(const Image *rImg, const Image *gImg, const Image *bImg, Image *outImg);
 
-    void logFilter(const Image *inImg, Image *outImg, float sigma);
+    int dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2);
 
-    void gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma);
+    int logFilter(const Image *inImg, Image *outImg, float sigma);
 
-    void gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag);
+    int gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma);
 
-    void gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase);
+    int gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag);
 
-    void Canny(const Image *inImg, Image *outImg, double threshold1, double threshold2, int apertureSize, bool L2gradient);
+    int gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase);
+
+    int Canny(const Image *inImg, Image *outImg, double threshold1, double threshold2, int apertureSize, bool L2gradient);
 #ifdef __cplusplus
 }
 #endif

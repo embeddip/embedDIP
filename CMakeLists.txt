@@ -135,6 +135,9 @@ elseif(EMBEDDIP_TARGET_PLATFORM STREQUAL "HOST")
 
     set(DEVICE_SOURCES
         ${DEVICE_COMMON_SOURCES}
+        device/camera/host/host_camera.c
+        device/display/host/host_display.c
+        device/serial/host/host_uart.c
     )
 
     set(PLATFORM_DEFINES
@@ -142,7 +145,7 @@ elseif(EMBEDDIP_TARGET_PLATFORM STREQUAL "HOST")
     )
 
     message(STATUS "HOST build: Using standard malloc/free for memory management")
-    message(STATUS "HOST build: Camera and device drivers will be stubs")
+    message(STATUS "HOST build: File-based camera/display, stdin/stdout serial")
 
 else()
     message(FATAL_ERROR "Unknown platform: ${EMBEDDIP_TARGET_PLATFORM}. Must be STM32F7, ESP32, or HOST")
@@ -191,13 +194,14 @@ if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Include>
         )
 
-        # CMSIS-DSP sources for STM32
+        # CMSIS-DSP sources for STM32 (C and assembly files)
         file(GLOB_RECURSE CMSIS_DSP_SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Source/*.c
+            ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Source/*.S
         )
         if(CMSIS_DSP_SOURCES)
             target_sources(embedDIP PRIVATE ${CMSIS_DSP_SOURCES})
-            message(STATUS "Added CMSIS-DSP sources: ${CMSIS_DSP_SOURCES}")
+            message(STATUS "Added CMSIS-DSP sources (C + ASM)")
         endif()
     else()
         message(WARNING "CMSIS/HAL drivers not found. You may need to specify include paths manually.")
@@ -286,7 +290,11 @@ if(EMBEDDIP_BUILD_TESTS)
 endif()
 
 if(EMBEDDIP_BUILD_EXAMPLES)
-    add_subdirectory(examples)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt)
+        add_subdirectory(examples)
+    else()
+        message(WARNING "Examples directory exists but CMakeLists.txt not found")
+    endif()
 endif()
 
 # === Configuration Summary ===

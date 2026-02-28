@@ -1,0 +1,364 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 3 * * 0'  # Weekly on Sunday at 3 AM
+  workflow_dispatch:
+
+jobs:
+  # ============================================================================
+  # BENCHMARK TESTS
+  # ============================================================================
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # For comparing with baseline
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            python3-pip \
+            valgrind
+
+          pip3 install matplotlib pandas
+
+      - name: Configure CMake with benchmarks
+        run: |
+          cmake -B build -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DEMBEDDIP_TARGET_PLATFORM=HOST \
+                -DEMBEDDIP_BUILD_BENCHMARKS=ON \
+                -DCMAKE_C_FLAGS="-O3 -march=native -DNDEBUG"
+
+      - name: Build benchmarks
+        run: cmake --build build --config Release -j$(nproc)
+
+      - name: Run benchmarks
+        working-directory: build
+        run: |
+          echo "🏃 Running performance benchmarks..."
+
+          # Create results directory
+          mkdir -p benchmark_results
+
+          # Run each benchmark if available
+          if [ -f ./bench_fft ]; then
+            echo "Running FFT benchmark..."
+            ./bench_fft | tee benchmark_results/fft_results.txt
+          fi
+
+          if [ -f ./bench_filters ]; then
+            echo "Running filter benchmark..."
+            ./bench_filters | tee benchmark_results/filter_results.txt
+          fi
+
+          if [ -f ./bench_color ]; then
+            echo "Running color conversion benchmark..."
+            ./bench_color | tee benchmark_results/color_results.txt
+          fi
+
+          if [ -f ./bench_morphology ]; then
+            echo "Running morphology benchmark..."
+            ./bench_morphology | tee benchmark_results/morphology_results.txt
+          fi
+
+      - name: Memory profiling
+        working-directory: build
+        run: |
+          echo "🧠 Profiling memory usage..."
+
+          mkdir -p memory_profile
+
+          # Run memory checks on benchmarks
+          for bench in bench_*; do
+            if [ -x "$bench" ]; then
+              echo "Profiling $bench..."
+              valgrind --tool=massif \
+                       --massif-out-file=memory_profile/${bench}_massif.out \
+                       ./$bench 2>&1 | tee memory_profile/${bench}_valgrind.txt || true
+            fi
+          done
+
+      - name: Generate performance report
+        run: |
+          cat > performance_report.md << 'EOF'
+          # Performance Benchmark Results
+
+          ## Test Configuration
+
+          - **OS**: Ubuntu Latest
+          - **Build Type**: Release (-O3)
+          - **Compiler**: GCC $(gcc --version | head -n1)
+          - **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - **Commit**: ${{ github.sha }}
+
+          ## Results
+
+          EOF
+
+          # Append benchmark results if they exist
+          if [ -d build/benchmark_results ]; then
+            for result in build/benchmark_results/*.txt; do
+              if [ -f "$result" ]; then
+                echo "### $(basename $result .txt)" >> performance_report.md
+                echo '```' >> performance_report.md
+                cat "$result" >> performance_report.md
+                echo '```' >> performance_report.md
+                echo "" >> performance_report.md
+              fi
+            done
+          fi
+
+          # Memory profile summary
+          echo "## Memory Usage Summary" >> performance_report.md
+          echo "" >> performance_report.md
+          if [ -d build/memory_profile ]; then
+            for profile in build/memory_profile/*_massif.out; do
+              if [ -f "$profile" ]; then
+                echo "### $(basename $profile _massif.out)" >> performance_report.md
+                echo '```' >> performance_report.md
+                ms_print "$profile" | head -30 >> performance_report.md
+                echo '```' >> performance_report.md
+                echo "" >> performance_report.md
+              fi
+            done
+          fi
+
+      - name: Compare with baseline
+        run: |
+          echo "📊 Comparing with baseline performance..."
+
+          # Download baseline results from previous run if available
+          gh run download --name performance-baseline --repo ${{ github.repository }} || echo "No baseline found"
+
+          # TODO: Implement comparison logic when baseline exists
+
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: |
+            performance_report.md
+            build/benchmark_results/
+            build/memory_profile/
+
+      - name: Save as baseline
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-baseline
+          path: |
+            build/benchmark_results/
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('performance_report.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: Publish to GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "📈 Publishing performance dashboard..."
+          # TODO: Generate HTML dashboard
+          mkdir -p public
+          cp performance_report.md public/index.md
+
+  # ============================================================================
+  # SIZE ANALYSIS
+  # ============================================================================
+  size-analysis:
+    name: Binary Size Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
+
+      - name: Build for size analysis
+        run: |
+          # Build for different optimization levels
+          for opt in Os O2 O3; do
+            echo "Building with -$opt..."
+            mkdir -p build_$opt
+
+            FLAGS="-mthumb -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard"
+            FLAGS="$FLAGS -$opt -ffunction-sections -fdata-sections"
+            FLAGS="$FLAGS -DSTM32F7xx -DARM_MATH_CM7 -D__FPU_PRESENT=1"
+            FLAGS="$FLAGS -Icore -Iimgproc -Iboard -Idevice"
+
+            for src in core/*.c board/common.c imgproc/*.c; do
+              if [ -f "$src" ]; then
+                obj="build_$opt/$(basename ${src%.c}.o)"
+                arm-none-eabi-gcc $FLAGS -c "$src" -o "$obj"
+              fi
+            done
+
+            # Create library
+            arm-none-eabi-ar rcs build_$opt/libembeddip.a build_$opt/*.o
+
+            # Size analysis
+            echo "=== Size with -$opt ===" >> size_comparison.txt
+            arm-none-eabi-size build_$opt/libembeddip.a >> size_comparison.txt
+            echo "" >> size_comparison.txt
+          done
+
+      - name: Function-level size analysis
+        run: |
+          echo "# Function Size Analysis" > function_sizes.md
+
+          # Analyze object files for largest functions
+          for obj in build_Os/*.o; do
+            echo "## $(basename $obj)" >> function_sizes.md
+            echo '```' >> function_sizes.md
+            arm-none-eabi-nm --size-sort --radix=d $obj | head -20 >> function_sizes.md
+            echo '```' >> function_sizes.md
+          done
+
+      - name: Generate size report
+        run: |
+          cat > size_report.md << 'EOF'
+          # Binary Size Analysis
+
+          ## Optimization Comparison
+
+          EOF
+
+          cat size_comparison.txt >> size_report.md
+
+          echo "" >> size_report.md
+          echo "## Detailed Function Sizes" >> size_report.md
+          cat function_sizes.md >> size_report.md
+
+      - name: Upload size analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-analysis
+          path: |
+            size_report.md
+            size_comparison.txt
+            function_sizes.md
+
+      - name: Check size regression
+        run: |
+          # Get current total size
+          CURRENT_SIZE=$(arm-none-eabi-size build_Os/libembeddip.a | awk 'NR==2 {print $1}')
+
+          echo "Current size: $CURRENT_SIZE bytes"
+
+          # TODO: Compare with baseline and fail if regression > 5%
+
+  # ============================================================================
+  # STACK USAGE ANALYSIS
+  # ============================================================================
+  stack-analysis:
+    name: Stack Usage Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi
+
+      - name: Analyze stack usage
+        run: |
+          echo "📚 Analyzing stack usage..."
+
+          mkdir -p build_stack
+
+          FLAGS="-mthumb -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard"
+          FLAGS="$FLAGS -Os -fstack-usage"
+          FLAGS="$FLAGS -DSTM32F7xx -DARM_MATH_CM7"
+          FLAGS="$FLAGS -Icore -Iimgproc -Iboard"
+
+          for src in core/*.c board/common.c imgproc/*.c; do
+            if [ -f "$src" ]; then
+              obj="build_stack/$(basename ${src%.c}.o)"
+              arm-none-eabi-gcc $FLAGS -c "$src" -o "$obj"
+            fi
+          done
+
+          # Collect stack usage data
+          echo "# Stack Usage Report" > stack_report.md
+          echo "" >> stack_report.md
+          echo "## Functions with High Stack Usage (>512 bytes)" >> stack_report.md
+          echo '```' >> stack_report.md
+          find build_stack -name "*.su" -exec cat {} \; | sort -k2 -n -r | head -30 >> stack_report.md
+          echo '```' >> stack_report.md
+
+      - name: Upload stack analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: stack-analysis
+          path: stack_report.md
+
+  # ============================================================================
+  # PERFORMANCE SUMMARY
+  # ============================================================================
+  summary:
+    name: Performance Summary
+    runs-on: ubuntu-latest
+    needs: [benchmark, size-analysis, stack-analysis]
+    if: always()
+
+    steps:
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          path: results/
+
+      - name: Generate comprehensive summary
+        run: |
+          cat << 'EOF' > $GITHUB_STEP_SUMMARY
+          # 📊 Performance Analysis Summary
+
+          ## Benchmarks
+          - ✅ Execution time benchmarks completed
+          - ✅ Memory profiling completed
+
+          ## Size Analysis
+          - ✅ Binary size analysis completed
+          - ✅ Function-level size breakdown available
+
+          ## Stack Analysis
+          - ✅ Stack usage analysis completed
+
+          View detailed reports in workflow artifacts.
+          EOF

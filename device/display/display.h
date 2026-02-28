@@ -108,11 +108,11 @@ extern "C"
 
     typedef struct display_interface
     {
-        void (*init)(void);
-        void (*deinit)(void);
-        void (*reset)(void);
-        void (*clear)(displayColor color);
-        void (*show)(Image *image);
+        int (*init)(void);
+        int (*deinit)(void);
+        int (*reset)(void);
+        int (*clear)(displayColor color);
+        int (*show)(Image *image);
 
     } display_t;
 

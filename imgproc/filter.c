@@ -4,14 +4,14 @@
 #include <string.h>  /* For memset, memcpy */
 
 // Validation macros to replace assert()
-#define CHECK_NULL_VOID(ptr) \
-    do { if (!(ptr)) return; } while (0)
+#define CHECK_NULL_INT(ptr) \
+    do { if (!(ptr)) return EMBEDDIP_ERROR_NULL_PTR; } while (0)
 
-#define CHECK_FORMAT_VOID(img, expected_fmt) \
-    do { if ((img)->format != (expected_fmt)) return; } while (0)
+#define CHECK_FORMAT_INT(img, expected_fmt) \
+    do { if ((img)->format != (expected_fmt)) return EMBEDDIP_ERROR_INVALID_FORMAT; } while (0)
 
-#define CHECK_CONDITION_VOID(cond) \
-    do { if (!(cond)) return; } while (0)
+#define CHECK_CONDITION_INT(cond) \
+    do { if (!(cond)) return EMBEDDIP_ERROR_INVALID_ARG; } while (0)
 
 // Internal helper — filters only one channel
 uint8_t channel_mask[] = {
@@ -22,8 +22,11 @@ uint8_t channel_mask[] = {
 };
 
 // i am not sure about the kernel.
-void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
+int filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
 {
+    if (!inImg || !outImg || !ctx) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
 
     Filter2DContext *context = (Filter2DContext *)ctx;
     int size = context->size;
@@ -51,11 +54,13 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
     }
     else
     {
-        inImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * inImg->depth);
+        inImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * sizeof(float));
         inCh = inImg->chals->ch[ch_idx];
         inImg->is_chals = inImg->is_chals | ~(channel_mask[ch_idx]);
 
-        CHECK_NULL_VOID(inCh);
+        if (!inCh) {
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
         const uint8_t *raw = (const uint8_t *)inImg->pixels;
 
         if (inImg->format == IMAGE_FORMAT_GRAYSCALE)
@@ -87,9 +92,13 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
     }
     else
     {
-        outImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * inImg->depth);
+        outImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * sizeof(float));
         outImg->is_chals = outImg->is_chals | ~(channel_mask[ch_idx]);
         outCh = outImg->chals->ch[ch_idx];
+
+        if (!outCh) {
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
     }
 
     for (int y = 0; y < height; y++)
@@ -116,12 +125,115 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
             outCh[y * width + x] = sum;
         }
     }
+
+    return EMBEDDIP_OK;
 }
 
-void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
+/**
+ * @brief Apply 2D convolution filter to an image
+ *
+ * This is the C counterpart of ImageWrapper::filter2D(). It applies a 2D
+ * convolution kernel to an image, supporting grayscale and RGB888 formats.
+ *
+ * @param[in]  inImg       Input image (must not be NULL)
+ * @param[out] outImg      Output image (must be pre-allocated, same size as input)
+ * @param[in]  kernel      Flattened kernel array in row-major order (kernelSize x kernelSize)
+ * @param[in]  kernelSize  Size of the square kernel (must be odd: 3, 5, 7, etc.)
+ *
+ * @return EMBEDDIP_OK on success, error code otherwise
+ *
+ * @note The kernel is a 1D array representing a 2D kernel in row-major order.
+ *       For a 3x3 kernel:
+ *       kernel[0..8] = [k00, k01, k02, k10, k11, k12, k20, k21, k22]
+ *
+ * @note Supported formats:
+ *       - IMAGE_FORMAT_GRAYSCALE: Filters single channel
+ *       - IMAGE_FORMAT_RGB888: Filters R, G, B channels independently
+ *
+ * Example:
+ * @code
+ * // 3x3 Gaussian blur kernel
+ * float gaussianKernel[9] = {
+ *     1.0f/16, 2.0f/16, 1.0f/16,
+ *     2.0f/16, 4.0f/16, 2.0f/16,
+ *     1.0f/16, 2.0f/16, 1.0f/16
+ * };
+ *
+ * Image *input = NULL, *output = NULL;
+ * createImageWH(640, 480, IMAGE_FORMAT_GRAYSCALE, &input);
+ * createImageWH(640, 480, IMAGE_FORMAT_GRAYSCALE, &output);
+ *
+ * embeddip_status_t status = filter2D(input, output, gaussianKernel, 3);
+ * if (status != EMBEDDIP_OK) {
+ *     printf("Filter failed: %s\n", embeddip_status_str(status));
+ * }
+ *
+ * deleteImage(input);
+ * deleteImage(output);
+ * @endcode
+ */
+int filter2D(const Image *inImg, Image *outImg, const float *kernel, int kernelSize)
 {
-    CHECK_CONDITION_VOID(kernelY == kernelX);
-    CHECK_CONDITION_VOID(sizeX == sizeY);
+    // Input validation
+    if (!inImg || !outImg || !kernel) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+
+    // Validate kernel size (must be odd and >= 1)
+    if (kernelSize < 1 || (kernelSize % 2) == 0) {
+        return EMBEDDIP_ERROR_INVALID_ARG;
+    }
+
+    // Validate image dimensions match
+    if (inImg->width != outImg->width || inImg->height != outImg->height) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+
+    // Validate image formats match
+    if (inImg->format != outImg->format) {
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    }
+
+    // Create Filter2DContext
+    Filter2DContext context;
+    context.size = kernelSize;
+    context.kernel = (float *)kernel;  // Cast away const for internal use
+    context.chal = 0;  // Not used in this context
+
+    // Dispatch filtering based on format
+    int status;
+    if (inImg->format == IMAGE_FORMAT_GRAYSCALE) {
+        // Filter single grayscale channel (ch_idx = 0)
+        status = filter2D_single_channel((Image *)inImg, outImg, 0, &context);
+        if (status != EMBEDDIP_OK) {
+            return status;
+        }
+    }
+    else if (inImg->format == IMAGE_FORMAT_RGB888) {
+        // Filter each RGB channel independently
+        status = filter2D_single_channel((Image *)inImg, outImg, 1, &context);  // R channel
+        if (status != EMBEDDIP_OK) return status;
+        status = filter2D_single_channel((Image *)inImg, outImg, 2, &context);  // G channel
+        if (status != EMBEDDIP_OK) return status;
+        status = filter2D_single_channel((Image *)inImg, outImg, 3, &context);  // B channel
+        if (status != EMBEDDIP_OK) return status;
+    }
+    else {
+        // Unsupported format
+        return EMBEDDIP_ERROR_NOT_SUPPORTED;
+    }
+
+    return EMBEDDIP_OK;
+}
+
+int filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
+{
+    if (!inImg || !outImg || !kernelX || !kernelY) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (kernelY != kernelX || sizeX != sizeY) {
+        return EMBEDDIP_ERROR_INVALID_ARG;
+    }
 
     int half = sizeX / 2;
 
@@ -217,6 +329,8 @@ void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, 
             outCh[y * width + x] = sum;
         }
     }
+
+    return EMBEDDIP_OK;
 }
 
 /*
@@ -268,8 +382,15 @@ void wrapper(ImageOpFunc func, Image *inImg, Image *outImg, void *context)
  * @param kernelSize Size of the square window (must be odd).
  */
 
-void minFilter(const Image *inImg, Image *outImg, int kernelSize)
+int minFilter(const Image *inImg, Image *outImg, int kernelSize)
 {
+    if (!inImg || !outImg) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (kernelSize < 1 || (kernelSize % 2) == 0) {
+        return EMBEDDIP_ERROR_INVALID_ARG;
+    }
+
     int kernelRadius = kernelSize / 2;
 
     if (isChalsEmpty(outImg))
@@ -342,6 +463,8 @@ void minFilter(const Image *inImg, Image *outImg, int kernelSize)
             }
         }
     }
+
+    return EMBEDDIP_OK;
 }
 
 /**
@@ -352,8 +475,15 @@ void minFilter(const Image *inImg, Image *outImg, int kernelSize)
  * @param kernelSize Size of the square window (must be odd).
  */
 
-void maxFilter(const Image *inImg, Image *outImg, int kernelSize)
+int maxFilter(const Image *inImg, Image *outImg, int kernelSize)
 {
+    if (!inImg || !outImg) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (kernelSize < 1 || (kernelSize % 2) == 0) {
+        return EMBEDDIP_ERROR_INVALID_ARG;
+    }
+
     int kernelRadius = kernelSize / 2;
 
     if (isChalsEmpty(outImg))
@@ -424,6 +554,8 @@ void maxFilter(const Image *inImg, Image *outImg, int kernelSize)
             }
         }
     }
+
+    return EMBEDDIP_OK;
 }
 
 #include <stdlib.h>
@@ -435,8 +567,15 @@ void maxFilter(const Image *inImg, Image *outImg, int kernelSize)
  * @param outImg Output image after median filtering.
  * @param kernelSize Size of the square window (must be odd).
  */
-void medianFilter(const Image *inImg, Image *outImg, int kernelSize)
+int medianFilter(const Image *inImg, Image *outImg, int kernelSize)
 {
+    if (!inImg || !outImg) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (kernelSize < 1 || (kernelSize % 2) == 0) {
+        return EMBEDDIP_ERROR_INVALID_ARG;
+    }
+
     int kernelRadius = kernelSize / 2;
     int windowArea = kernelSize * kernelSize;
 
@@ -504,9 +643,10 @@ void medianFilter(const Image *inImg, Image *outImg, int kernelSize)
     }
 
     outImg->log = IMAGE_DATA_CH0;
+    return EMBEDDIP_OK;
 }
 
-void rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg)
+int rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg)
 /**
  * @brief Splits an RGB888 image into R, G, and B bands.
  *
@@ -516,14 +656,14 @@ void rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg)
  * @param[out] bImg   Output blue band.
  */
 {
-    CHECK_NULL_VOID(inImg);
-    CHECK_NULL_VOID(rImg);
-    CHECK_NULL_VOID(gImg);
-    CHECK_NULL_VOID(bImg);
-    CHECK_FORMAT_VOID(inImg, IMAGE_FORMAT_RGB888);
-    CHECK_FORMAT_VOID(rImg, IMAGE_FORMAT_GRAYSCALE);
-    CHECK_FORMAT_VOID(gImg, IMAGE_FORMAT_GRAYSCALE);
-    CHECK_FORMAT_VOID(bImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_NULL_INT(inImg);
+    CHECK_NULL_INT(rImg);
+    CHECK_NULL_INT(gImg);
+    CHECK_NULL_INT(bImg);
+    CHECK_FORMAT_INT(inImg, IMAGE_FORMAT_RGB888);
+    CHECK_FORMAT_INT(rImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_INT(gImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_INT(bImg, IMAGE_FORMAT_GRAYSCALE);
 
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *r = (uint8_t *)rImg->pixels;
@@ -536,9 +676,11 @@ void rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg)
         g[i] = in[i * 3 + 1];
         b[i] = in[i * 3 + 2];
     }
+
+    return EMBEDDIP_OK;
 }
 
-void rgbMerge(const Image *rImg, const Image *gImg, const Image *bImg, Image *outImg)
+int rgbMerge(const Image *rImg, const Image *gImg, const Image *bImg, Image *outImg)
 /**
  * @brief Merges three grayscale bands into a single RGB888 image.
  *
@@ -548,14 +690,14 @@ void rgbMerge(const Image *rImg, const Image *gImg, const Image *bImg, Image *ou
  * @param[out] outImg  Output image in RGB format.
  */
 {
-    CHECK_NULL_VOID(rImg);
-    CHECK_NULL_VOID(gImg);
-    CHECK_NULL_VOID(bImg);
-    CHECK_NULL_VOID(outImg);
-    CHECK_FORMAT_VOID(outImg, IMAGE_FORMAT_RGB888);
-    CHECK_FORMAT_VOID(rImg, IMAGE_FORMAT_GRAYSCALE);
-    CHECK_FORMAT_VOID(gImg, IMAGE_FORMAT_GRAYSCALE);
-    CHECK_FORMAT_VOID(bImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_NULL_INT(rImg);
+    CHECK_NULL_INT(gImg);
+    CHECK_NULL_INT(bImg);
+    CHECK_NULL_INT(outImg);
+    CHECK_FORMAT_INT(outImg, IMAGE_FORMAT_RGB888);
+    CHECK_FORMAT_INT(rImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_INT(gImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_INT(bImg, IMAGE_FORMAT_GRAYSCALE);
 
     uint8_t *out = (uint8_t *)outImg->pixels;
     const uint8_t *r = (const uint8_t *)rImg->pixels;
@@ -568,37 +710,18 @@ void rgbMerge(const Image *rImg, const Image *gImg, const Image *bImg, Image *ou
         out[i * 3 + 1] = g[i];
         out[i * 3 + 2] = b[i];
     }
+
+    return EMBEDDIP_OK;
 }
 
-// NEW ADDED:
-
-float *createGaussianKernel(int size, float sigma)
+int dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2)
 {
-    float *kernel = (float *)memory_alloc(size * size * sizeof(float));
-    int half = size / 2;
-    float sum = 0.0f;
-
-    for (int y = -half; y <= half; ++y)
-    {
-        for (int x = -half; x <= half; ++x)
-        {
-            float value = expf(-(x * x + y * y) / (2.0f * sigma * sigma));
-            kernel[(y + half) * size + (x + half)] = value;
-            sum += value;
-        }
+    if (!inImg || !outImg) {
+        return EMBEDDIP_ERROR_NULL_PTR;
     }
-
-    // Normalize kernel
-    for (int i = 0; i < size * size; ++i)
-        kernel[i] /= sum;
-
-    return kernel;
-}
-
-void dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2)
-{
-    if (!inImg || !outImg || inImg->format != IMAGE_FORMAT_GRAYSCALE)
-        return;
+    if (inImg->format != IMAGE_FORMAT_GRAYSCALE) {
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    }
 
     int width = inImg->width;
     int height = inImg->height;
@@ -715,6 +838,7 @@ void dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2)
     memory_free(blur2);
 
     outImg->log = IMAGE_DATA_CH0;
+    return EMBEDDIP_OK;
 }
 
 #ifndef M_PI
@@ -731,10 +855,14 @@ void dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2)
  * @param[out] outImg  Pointer to output image (float convolution result).
  * @param[in]  sigma   Standard deviation of the Gaussian (controls smoothness).
  */
-void logFilter(const Image *inImg, Image *outImg, float sigma)
+int logFilter(const Image *inImg, Image *outImg, float sigma)
 {
-    if (!inImg || !outImg || inImg->format != IMAGE_FORMAT_GRAYSCALE)
-        return;
+    if (!inImg || !outImg) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (inImg->format != IMAGE_FORMAT_GRAYSCALE) {
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    }
 
     int width = inImg->width;
     int height = inImg->height;
@@ -805,6 +933,7 @@ void logFilter(const Image *inImg, Image *outImg, float sigma)
     memory_free(kernel);
     memory_free(src);
     outImg->log = IMAGE_DATA_CH0;
+    return EMBEDDIP_OK;
 }
 
 /**
@@ -817,11 +946,9 @@ void logFilter(const Image *inImg, Image *outImg, float sigma)
  */
 void nonMaximumSuppression(const Image *magImg, const Image *phaseImg, Image *outImg)
 {
-    CHECK_NULL_VOID(magImg);
-    CHECK_NULL_VOID(phaseImg);
-    CHECK_NULL_VOID(outImg);
+    if (!magImg || !phaseImg || !outImg) return;
     uint32_t w = magImg->width, h = magImg->height;
-    CHECK_CONDITION_VOID(w == phaseImg->width && h == phaseImg->height);
+    if (w != phaseImg->width || h != phaseImg->height) return;
     uint32_t N = w * h;
 
     const float *mag = magImg->chals->ch[0];
@@ -888,8 +1015,7 @@ void doubleThreshold(const Image *inImg, Image *outImg,
                      float lowThresh, float highThresh,
                      float weakVal, float strongVal)
 {
-    CHECK_NULL_VOID(inImg);
-    CHECK_NULL_VOID(outImg);
+    if (!inImg || !outImg) return;
     uint32_t N = inImg->width * inImg->height;
     const float *src = inImg->chals->ch[0];
 
@@ -920,8 +1046,7 @@ void doubleThreshold(const Image *inImg, Image *outImg,
 void hysteresis(const Image *inImg, Image *outImg,
                 float weakVal, float strongVal)
 {
-    CHECK_NULL_VOID(inImg);
-    CHECK_NULL_VOID(outImg);
+    if (!inImg || !outImg) return;
     uint32_t w = inImg->width, h = inImg->height;
     const float *src = inImg->chals->ch[0];
 
@@ -1055,12 +1180,12 @@ static void sep_conv_xy_f32(const float *src, float *dst,
  * Writes float results into outIx->chals->ch[0] and outIy->chals->ch[0],
  * mirroring your logFilter() “float in ch0” convention.
  */
-void gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma)
+int gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma)
 {
-    CHECK_NULL_VOID(inImg);
-    CHECK_NULL_VOID(outIx);
-    CHECK_NULL_VOID(outIy);
-    CHECK_FORMAT_VOID(inImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_NULL_INT(inImg);
+    CHECK_NULL_INT(outIx);
+    CHECK_NULL_INT(outIy);
+    CHECK_FORMAT_INT(inImg, IMAGE_FORMAT_GRAYSCALE);
     int width = inImg->width, height = inImg->height;
     int N = width * height;
 
@@ -1105,25 +1230,26 @@ void gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sig
     // optional: mark data origin/type if you track it (similar to outImg->log = IMAGE_DATA_CH0)
     outIx->log = IMAGE_DATA_CH0; // reuse your flag; or define IMAGE_DATA_DX if you prefer
     outIy->log = IMAGE_DATA_CH0;
+    return EMBEDDIP_OK;
 }
 
 /**
  * @brief Compute gradient magnitude sqrt(Ix^2 + Iy^2) from float ch0 of Ix, Iy.
  * Writes float magnitude to outMag->chals->ch[0].
  */
-void gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
+int gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
 {
-    CHECK_NULL_VOID(IxImg);
-    CHECK_NULL_VOID(IyImg);
-    CHECK_NULL_VOID(outMag);
+    CHECK_NULL_INT(IxImg);
+    CHECK_NULL_INT(IyImg);
+    CHECK_NULL_INT(outMag);
     uint32_t width = IxImg->width, height = IxImg->height;
-    CHECK_CONDITION_VOID(width == IyImg->width && height == IyImg->height);
+    CHECK_CONDITION_INT(width == IyImg->width && height == IyImg->height);
     uint32_t N = width * height;
 
     const float *ix = IxImg->chals ? IxImg->chals->ch[0] : NULL;
     const float *iy = IyImg->chals ? IyImg->chals->ch[0] : NULL;
-    CHECK_NULL_VOID(ix);
-    CHECK_NULL_VOID(iy);
+    CHECK_NULL_INT(ix);
+    CHECK_NULL_INT(iy);
 
     if (!outMag->chals)
     {
@@ -1141,6 +1267,7 @@ void gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
     }
 
     outMag->log = IMAGE_DATA_CH0;
+    return EMBEDDIP_OK;
 }
 
 /**
@@ -1148,19 +1275,19 @@ void gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
  * Writes float phase (in radians) to outPhase->chals->ch[0].
  * Range: [-π, π].
  */
-void gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase)
+int gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase)
 {
-    CHECK_NULL_VOID(IxImg);
-    CHECK_NULL_VOID(IyImg);
-    CHECK_NULL_VOID(outPhase);
+    CHECK_NULL_INT(IxImg);
+    CHECK_NULL_INT(IyImg);
+    CHECK_NULL_INT(outPhase);
     uint32_t width = IxImg->width, height = IyImg->height;
-    CHECK_CONDITION_VOID(width == IyImg->width && height == IyImg->height);
+    CHECK_CONDITION_INT(width == IyImg->width && height == IyImg->height);
     uint32_t N = width * height;
 
     const float *ix = IxImg->chals ? IxImg->chals->ch[0] : NULL;
     const float *iy = IyImg->chals ? IyImg->chals->ch[0] : NULL;
-    CHECK_NULL_VOID(ix);
-    CHECK_NULL_VOID(iy);
+    CHECK_NULL_INT(ix);
+    CHECK_NULL_INT(iy);
 
     if (!outPhase->chals)
     {
@@ -1178,14 +1305,15 @@ void gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase)
     }
 
     outPhase->log = IMAGE_DATA_CH0;
+    return EMBEDDIP_OK;
 }
 
-void Canny(const Image *inImg, Image *outImg,
+int Canny(const Image *inImg, Image *outImg,
            double threshold1, double threshold2,
            int apertureSize, bool L2gradient)
 {
-    CHECK_NULL_VOID(inImg);
-    CHECK_NULL_VOID(outImg);
+    CHECK_NULL_INT(inImg);
+    CHECK_NULL_INT(outImg);
 
     // --- Step 1: Gaussian smoothing + gradients ---
     float sigma = 1.0; // 0.3 * ((apertureSize - 1) * 0.5 - 1) + 0.8; // could derive from apertureSize
@@ -1247,4 +1375,6 @@ void Canny(const Image *inImg, Image *outImg,
     // deleteImage(Phase);
     // deleteImage(Nms);
     // deleteImage(Dt);
+
+    return EMBEDDIP_OK;
 }

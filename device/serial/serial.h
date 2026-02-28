@@ -24,12 +24,12 @@ extern "C"
 
     typedef struct serial_interface
     {
-        void (*init)(void);
-        void (*flush)(void); // not known.
-        void (*capture)(Image *img);
-        void (*send)(const Image *img);
-        void (*sendJPEG)(const Image *img);
-        void (*send1D)(const void *data, uint8_t elem_size, uint32_t length, Serial1DDataType type);
+        int (*init)(void);
+        int (*flush)(void); // not known.
+        int (*capture)(Image *img);
+        int (*send)(const Image *img);
+        int (*sendJPEG)(const Image *img);
+        int (*send1D)(const void *data, uint8_t elem_size, uint32_t length, Serial1DDataType type);
     } serial_t;
 
     int _write(int file, char *ptr, int len);

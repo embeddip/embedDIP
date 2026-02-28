@@ -19,13 +19,14 @@ static void delay_ms(uint32_t ms) {
   }
 }
 
-void serial_init(void) {
+int serial_init(void) {
   Serial.flush();
   Serial.setDebugOutput(true);
   Serial.begin(500000);
+  return EMBEDDIP_OK;
 }
-void serial_flush(void) {}
-void serial_capture(Image *img) {
+int serial_flush(void) { return EMBEDDIP_OK; }
+int serial_capture(Image *img) {
 
   int readbyte = 0;
   Serial.flush();
@@ -81,8 +82,9 @@ void serial_capture(Image *img) {
   }
 
   delay(200);
+  return EMBEDDIP_OK;
 }
-void serial_send(const Image *img) {
+int serial_send(const Image *img) {
   // Serial.flush();
   // Serial.begin(2000000);
   uint8_t request_start_sequence[4] = "STW";
@@ -121,10 +123,11 @@ void serial_send(const Image *img) {
   delay(200);
   // Serial.flush();
   // Serial.begin(115200);
+  return EMBEDDIP_OK;
 }
-void serial_send_jpeg(const Image *img) {}
-void serial_send_1d(const void *data, uint8_t elem_size, uint32_t length,
-                    Serial1DDataType type) {}
+int serial_send_jpeg(const Image *img) { return EMBEDDIP_OK; }
+int serial_send_1d(const void *data, uint8_t elem_size, uint32_t length,
+                    Serial1DDataType type) { return EMBEDDIP_OK; }
 
 // Define the object
 serial_t esp32_uart = {

@@ -2,186 +2,382 @@ name: embedDIP CI/CD
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, feature/* ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
+
+env:
+  CMAKE_VERSION: '3.25.0'
+  CACHE_VERSION: v1
+
+# Limit concurrent workflow runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ============================================================================
-  # HOST BUILD & UNIT TESTS
+  # HOST BUILD & UNIT TESTS (MATRIX)
   # ============================================================================
-  host-build-and-test:
-    name: Host Build & Unit Tests
-    runs-on: ubuntu-latest
+  host-build-test:
+    name: Host Build (${{ matrix.os }}, ${{ matrix.build_type }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        build_type: [Debug, Release]
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+          - os: macos-latest
+            compiler: clang
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0  # Full history for proper versioning
 
-      - name: Install dependencies
+      - name: Cache CMake build
+        uses: actions/cache@v3
+        with:
+          path: |
+            build
+            ~/.cache/ccache
+          key: ${{ runner.os }}-cmake-${{ matrix.build_type }}-${{ hashFiles('**/CMakeLists.txt') }}-${{ env.CACHE_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-${{ matrix.build_type }}-
+            ${{ runner.os }}-cmake-
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            lcov \
+            gcovr \
+            ccache \
+            valgrind \
+            doxygen \
+            graphviz
 
-      - name: Configure CMake (HOST)
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
         run: |
-          cmake -B build \
-                -DCMAKE_BUILD_TYPE=Debug \
+          brew install cmake ninja lcov ccache doxygen graphviz
+
+      - name: Setup ccache
+        run: |
+          ccache --set-config=max_size=500M
+          ccache --set-config=compression=true
+          ccache -z
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                 -DEMBEDDIP_TARGET_PLATFORM=HOST \
                 -DEMBEDDIP_BUILD_TESTS=ON \
-                -DEMBEDDIP_BUILD_EXAMPLES=OFF
+                -DEMBEDDIP_BUILD_EXAMPLES=ON \
+                -DEMBEDDIP_ENABLE_COVERAGE=${{ matrix.build_type == 'Debug' && 'ON' || 'OFF' }} \
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
-        run: cmake --build build --config Debug -j$(nproc)
+        run: |
+          cmake --build build --config ${{ matrix.build_type }} -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+          ccache -s
 
       - name: Run tests
         working-directory: build
-        run: ctest --output-on-failure --verbose
+        run: |
+          ctest --output-on-failure --verbose --parallel $(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+      - name: Run Valgrind (Memory Check)
+        if: runner.os == 'Linux' && matrix.build_type == 'Debug'
+        working-directory: build
+        run: |
+          ctest -T memcheck --output-on-failure || true
+          find Testing/Temporary -name "MemoryChecker.*.log" -exec cat {} \;
+
+      - name: Generate code coverage
+        if: runner.os == 'Linux' && matrix.build_type == 'Debug'
+        run: |
+          lcov --capture --directory build --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/test/*' '*/examples/*' --output-file coverage.info
+          lcov --list coverage.info
+          gcovr --xml-pretty --exclude-unreachable-branches --print-summary \
+                -o coverage.xml --root . --exclude '.*test.*' --exclude '.*examples.*'
+
+      - name: Upload coverage to Codecov
+        if: runner.os == 'Linux' && matrix.build_type == 'Debug'
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-${{ matrix.os }}
+          fail_ci_if_error: false
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-host
-          path: build/Testing/
+          name: test-results-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            build/Testing/
+            build/test_results/
+
+      - name: Upload compile commands
+        if: matrix.os == 'ubuntu-latest' && matrix.build_type == 'Debug'
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-commands
+          path: build/compile_commands.json
 
   # ============================================================================
-  # STM32 SYNTAX & COMPILATION CHECK
+  # EMBEDDED TARGET BUILDS (ARM & ESP32)
   # ============================================================================
-  stm32-syntax-check:
-    name: STM32F7 Syntax Check
+  embedded-build:
+    name: ${{ matrix.platform }} Build
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: STM32F7
+            arch: arm-none-eabi
+            cpu: cortex-m7
+            fpu: fpv5-d16
+            float-abi: hard
+            defines: STM32F7xx ARM_MATH_CM7 __FPU_PRESENT=1 TARGET_BOARD_STM32F7=1
+          - name: STM32F4
+            arch: arm-none-eabi
+            cpu: cortex-m4
+            fpu: fpv4-sp-d16
+            float-abi: hard
+            defines: STM32F4xx ARM_MATH_CM4 __FPU_PRESENT=1 TARGET_BOARD_STM32F4=1
+          - name: ESP32
+            arch: xtensa-esp32-elf
+            cpu: esp32
+            defines: ARDUINO_ARCH_ESP32 TARGET_BOARD_ESP32=1
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Cache toolchain
+        uses: actions/cache@v3
+        with:
+          path: ~/toolchain
+          key: ${{ matrix.platform.arch }}-toolchain-${{ env.CACHE_VERSION }}
 
       - name: Install ARM toolchain
+        if: contains(matrix.platform.arch, 'arm-none-eabi')
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
-
-      - name: Check toolchain version
-        run: arm-none-eabi-gcc --version
-
-      - name: Compile core sources for STM32
-        run: |
-          echo "🔍 Testing STM32 source compilation (syntax check)..."
-
-          # Compile flags for STM32F7
-          FLAGS="-mthumb -mcpu=cortex-m7 -mfloat-abi=hard -mfpu=fpv5-d16"
-          FLAGS="$FLAGS -Wall -Wextra -std=c11"
-          FLAGS="$FLAGS -DSTM32F7xx -DARM_MATH_CM7 -D__FPU_PRESENT=1 -DTARGET_BOARD_STM32F7=1"
-          FLAGS="$FLAGS -I. -Icore -Iimgproc -Iboard -Idevice -Iwrapper"
-
-          # Test compile core modules (object files only, no linking)
-          echo "Compiling core/error.c..."
-          arm-none-eabi-gcc $FLAGS -c core/error.c -o /tmp/error.o || exit 1
-
-          echo "Compiling board/common.c..."
-          arm-none-eabi-gcc $FLAGS -c board/common.c -o /tmp/common.o || exit 1
-
-          echo "Compiling imgproc/color.c..."
-          arm-none-eabi-gcc $FLAGS -c imgproc/color.c -o /tmp/color.o || exit 1
-
-          echo "✅ STM32 source files compiled successfully (syntax validated)"
-
-          # Show object file sizes
-          ls -lh /tmp/*.o
-          arm-none-eabi-size /tmp/*.o
-
-  # ============================================================================
-  # ESP32 SYNTAX CHECK
-  # ============================================================================
-  esp32-syntax-check:
-    name: ESP32 Syntax Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
 
       - name: Install ESP32 toolchain
+        if: contains(matrix.platform.arch, 'xtensa-esp32-elf')
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget python3 python3-pip
-
-          # Download ESP32 toolchain
-          mkdir -p ~/esp
-          cd ~/esp
-          wget -q https://github.com/espressif/crosstool-NG/releases/download/esp-2021r2-patch5/xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
-          tar -xzf xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
-          export PATH="$HOME/esp/xtensa-esp32-elf/bin:$PATH"
+          mkdir -p ~/toolchain
+          cd ~/toolchain
+          if [ ! -d "xtensa-esp32-elf" ]; then
+            wget -q https://github.com/espressif/crosstool-NG/releases/download/esp-2021r2-patch5/xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+            tar -xzf xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+          fi
+          echo "$HOME/toolchain/xtensa-esp32-elf/bin" >> $GITHUB_PATH
 
       - name: Verify toolchain
         run: |
-          export PATH="$HOME/esp/xtensa-esp32-elf/bin:$PATH"
-          xtensa-esp32-elf-gcc --version
+          ${{ matrix.platform.arch }}-gcc --version
+          ${{ matrix.platform.arch }}-size --version
 
-      - name: Compile core sources for ESP32
+      - name: Compile library sources
         run: |
-          export PATH="$HOME/esp/xtensa-esp32-elf/bin:$PATH"
-          echo "🔍 Testing ESP32 source compilation (syntax check)..."
+          echo "🔨 Building embedDIP for ${{ matrix.platform.name }}..."
 
-          # Compile flags for ESP32
-          FLAGS="-mlongcalls -Wall -Wextra -std=c11"
-          FLAGS="$FLAGS -DARDUINO_ARCH_ESP32 -DTARGET_BOARD_ESP32=1"
+          # Set compiler flags
+          if [[ "${{ matrix.platform.arch }}" == "arm-none-eabi" ]]; then
+            FLAGS="-mthumb -mcpu=${{ matrix.platform.cpu }}"
+            FLAGS="$FLAGS -mfloat-abi=${{ matrix.platform.float-abi }} -mfpu=${{ matrix.platform.fpu }}"
+          else
+            FLAGS="-mlongcalls"
+          fi
+
+          FLAGS="$FLAGS -Wall -Wextra -Werror -pedantic"
+          FLAGS="$FLAGS -Os -ffunction-sections -fdata-sections"
+          FLAGS="$FLAGS -std=c11"
+
+          # Add platform defines
+          for def in ${{ matrix.platform.defines }}; do
+            FLAGS="$FLAGS -D$def"
+          done
+
           FLAGS="$FLAGS -I. -Icore -Iimgproc -Iboard -Idevice -Iwrapper"
 
-          # Test compile core modules
-          echo "Compiling core/error.c for ESP32..."
-          xtensa-esp32-elf-gcc $FLAGS -c core/error.c -o /tmp/error_esp32.o || exit 1
+          # Compile all core sources
+          mkdir -p build_embedded
+          for src in core/*.c board/common.c board/${{ matrix.platform.name == 'ESP32' && 'esp32' || 'stm32f7' }}/*.c imgproc/*.c; do
+            if [ -f "$src" ]; then
+              echo "Compiling $src..."
+              obj="build_embedded/$(basename ${src%.c}.o)"
+              ${{ matrix.platform.arch }}-gcc $FLAGS -c "$src" -o "$obj" || exit 1
+            fi
+          done
 
-          echo "Compiling board/common.c for ESP32..."
-          xtensa-esp32-elf-gcc $FLAGS -c board/common.c -o /tmp/common_esp32.o || exit 1
+          echo "✅ Compilation successful!"
 
-          echo "✅ ESP32 source files compiled successfully (syntax validated)"
+          # Show size analysis
+          echo "📊 Size analysis:"
+          ${{ matrix.platform.arch }}-size build_embedded/*.o | tee size_report.txt
 
-          ls -lh /tmp/*_esp32.o
-          xtensa-esp32-elf-size /tmp/*_esp32.o
+          # Calculate total sizes
+          total_text=$(${{ matrix.platform.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$1} END {print sum}')
+          total_data=$(${{ matrix.platform.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$2} END {print sum}')
+          total_bss=$(${{ matrix.platform.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$3} END {print sum}')
+
+          echo "Total TEXT: $total_text bytes"
+          echo "Total DATA: $total_data bytes"
+          echo "Total BSS:  $total_bss bytes"
+
+          # Save metrics
+          echo "text=$total_text" >> size_metrics.txt
+          echo "data=$total_data" >> size_metrics.txt
+          echo "bss=$total_bss" >> size_metrics.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedded-build-${{ matrix.platform.name }}
+          path: |
+            build_embedded/*.o
+            size_report.txt
+            size_metrics.txt
 
   # ============================================================================
-  # STATIC ANALYSIS
+  # STATIC ANALYSIS (COMPREHENSIVE)
   # ============================================================================
   static-analysis:
     name: Static Analysis
     runs-on: ubuntu-latest
+    needs: [host-build-test]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download compile commands
+        uses: actions/download-artifact@v4
+        with:
+          name: compile-commands
+          path: .
 
       - name: Install analysis tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cppcheck clang-tidy
+          sudo apt-get install -y \
+            cppcheck \
+            clang-tidy \
+            clang-tools \
+            iwyu \
+            python3-pip
+
+          # Install additional Python-based tools
+          pip3 install \
+            lizard \
+            cpplint \
+            flawfinder
 
       - name: Run cppcheck
         run: |
-          cppcheck --enable=warning,style,performance,portability \
+          cppcheck --enable=all \
                    --suppress=missingIncludeSystem \
+                   --suppress=unusedFunction \
                    --inline-suppr \
-                   --error-exitcode=0 \
+                   --std=c11 \
+                   --platform=unix64 \
+                   --force \
+                   --xml \
+                   --xml-version=2 \
                    -I core -I imgproc -I board -I device -I wrapper \
-                   core/ imgproc/ board/ wrapper/ 2>&1 | tee cppcheck-report.txt
+                   core/ imgproc/ board/ wrapper/ device/ 2> cppcheck-report.xml
 
-      - name: Upload cppcheck report
+          # Generate human-readable report
+          cppcheck --enable=all \
+                   --suppress=missingIncludeSystem \
+                   --suppress=unusedFunction \
+                   --inline-suppr \
+                   -I core -I imgproc -I board -I device -I wrapper \
+                   core/ imgproc/ board/ wrapper/ device/ 2>&1 | tee cppcheck-report.txt
+
+      - name: Run clang-tidy
+        run: |
+          find core imgproc board wrapper -name "*.c" -o -name "*.cpp" | \
+            xargs clang-tidy -p . --checks='*,-llvmlibc-*' \
+            2>&1 | tee clang-tidy-report.txt || true
+
+      - name: Run cyclomatic complexity check
+        run: |
+          lizard -l cpp -w core/ imgproc/ board/ wrapper/ device/ \
+            --CCN 15 --length 100 --arguments 10 \
+            --warnings_only \
+            -o lizard-report.txt || true
+
+      - name: Run security analysis
+        run: |
+          flawfinder --minlevel=2 --html --context \
+            core/ imgproc/ board/ wrapper/ device/ \
+            > flawfinder-report.html || true
+
+      - name: Check for common issues
+        run: |
+          echo "🔍 Checking for common issues..."
+
+          # Check for TODO/FIXME comments
+          echo "## TODO/FIXME comments:" > code-todos.txt
+          grep -rn "TODO\|FIXME\|XXX\|HACK" core/ imgproc/ board/ wrapper/ device/ || true >> code-todos.txt
+
+          # Check for magic numbers
+          echo "## Potential magic numbers:" > magic-numbers.txt
+          grep -rn "[^a-zA-Z_][0-9][0-9][0-9]" core/ imgproc/ --include="*.c" --include="*.h" || true >> magic-numbers.txt
+
+          # Check for long functions
+          echo "## Functions with >100 lines:" > long-functions.txt
+          lizard -l cpp core/ imgproc/ board/ wrapper/ -L 100 >> long-functions.txt || true
+
+      - name: Upload analysis reports
         uses: actions/upload-artifact@v4
         with:
-          name: cppcheck-report
-          path: cppcheck-report.txt
+          name: static-analysis-reports
+          path: |
+            cppcheck-report.*
+            clang-tidy-report.txt
+            lizard-report.txt
+            flawfinder-report.html
+            code-todos.txt
+            magic-numbers.txt
+            long-functions.txt
 
   # ============================================================================
-  # CODE FORMATTING CHECK
+  # CODE FORMATTING & STYLE
   # ============================================================================
   format-check:
-    name: Code Formatting Check
+    name: Code Format & Style Check
     runs-on: ubuntu-latest
 
     steps:
@@ -189,46 +385,223 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-14
+          sudo ln -sf /usr/bin/clang-format-14 /usr/bin/clang-format
 
       - name: Check code formatting
         run: |
-          # Create .clang-format if it doesn't exist
-          if [ ! -f .clang-format ]; then
-            cat > .clang-format << 'EOF'
-          ---
-          BasedOnStyle: Google
-          IndentWidth: 4
-          TabWidth: 4
-          UseTab: Never
-          ColumnLimit: 100
-          PointerAlignment: Left
-          AllowShortFunctionsOnASingleLine: Empty
-          BreakBeforeBraces: Allman
-          EOF
+          echo "🎨 Checking code formatting..."
+
+          # Find all source files
+          FILES=$(find core imgproc board wrapper device -name "*.c" -o -name "*.h" -o -name "*.cpp" -o -name "*.hpp")
+
+          # Check each file
+          FAILED=0
+          for file in $FILES; do
+            if ! clang-format --dry-run --Werror "$file" 2>/dev/null; then
+              echo "❌ $file needs formatting"
+              FAILED=1
+            fi
+          done
+
+          if [ $FAILED -eq 1 ]; then
+            echo "⚠️  Some files need formatting. Run: clang-format -i <files>"
+            # Don't fail CI yet, just warn
+            # exit 1
+          else
+            echo "✅ All files are properly formatted"
           fi
 
-          # Check formatting (don't fail for now, just report)
-          find core imgproc board wrapper -name "*.c" -o -name "*.h" -o -name "*.cpp" -o -name "*.hpp" | \
-            xargs clang-format --dry-run --Werror 2>&1 | tee format-check.txt || true
-          echo "⚠️  Formatting check complete (issues are informational only)"
+      - name: Check naming conventions
+        run: |
+          echo "🔤 Checking naming conventions..."
+
+          # Check for camelCase in C files (should be snake_case)
+          grep -rn "[a-z][A-Z]" core/ imgproc/ --include="*.c" --include="*.h" \
+            | grep -v "typedef\|struct\|enum\|^[[:space:]]*\*\|^[[:space:]]*//" \
+            | head -20 \
+            > naming-issues.txt || true
+
+          if [ -s naming-issues.txt ]; then
+            echo "⚠️  Potential naming convention issues found:"
+            cat naming-issues.txt
+          fi
 
   # ============================================================================
-  # BUILD STATUS SUMMARY
+  # DOCUMENTATION GENERATION
+  # ============================================================================
+  documentation:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Generate documentation
+        run: |
+          # Create Doxyfile if it doesn't exist
+          if [ ! -f Doxyfile ]; then
+            doxygen -g Doxyfile
+            sed -i 's/PROJECT_NAME           = "My Project"/PROJECT_NAME           = "embedDIP"/' Doxyfile
+            sed -i 's/EXTRACT_ALL            = NO/EXTRACT_ALL            = YES/' Doxyfile
+            sed -i 's/GENERATE_HTML          = YES/GENERATE_HTML          = YES/' Doxyfile
+            sed -i 's/GENERATE_LATEX         = YES/GENERATE_LATEX         = NO/' Doxyfile
+            sed -i 's/RECURSIVE              = NO/RECURSIVE              = YES/' Doxyfile
+            sed -i 's/INPUT                  =/INPUT                  = core imgproc board wrapper device/' Doxyfile
+          fi
+
+          doxygen Doxyfile
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: html/
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./html
+
+  # ============================================================================
+  # SECURITY SCANNING
+  # ============================================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: cpp
+
+      - name: Build for CodeQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake
+          cmake -B build -DEMBEDDIP_TARGET_PLATFORM=HOST
+          cmake --build build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+
+  # ============================================================================
+  # DEPENDENCY SCANNING
+  # ============================================================================
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check for known vulnerabilities in dependencies
+        run: |
+          echo "📦 Checking submodules and dependencies..."
+          git submodule status
+
+          # List all external dependencies
+          echo "## Dependencies:" > dependencies-report.txt
+          git submodule foreach 'echo "$name: $(git describe --tags --always)"' >> dependencies-report.txt
+
+      - name: Upload dependency report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-report
+          path: dependencies-report.txt
+
+  # ============================================================================
+  # BUILD SUMMARY & METRICS
   # ============================================================================
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [host-build-and-test, stm32-syntax-check, esp32-syntax-check, static-analysis, format-check]
+    needs:
+      - host-build-test
+      - embedded-build
+      - static-analysis
+      - format-check
+      - documentation
+      - security-scan
     if: always()
 
     steps:
-      - name: Summary
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Generate summary report
         run: |
-          echo "## embedDIP CI/CD Summary"
-          echo ""
-          echo "✅ Host Build & Tests: ${{ needs.host-build-and-test.result }}"
-          echo "✅ STM32 Syntax Check: ${{ needs.stm32-syntax-check.result }}"
-          echo "✅ ESP32 Syntax Check: ${{ needs.esp32-syntax-check.result }}"
-          echo "✅ Static Analysis: ${{ needs.static-analysis.result }}"
-          echo "✅ Format Check: ${{ needs.format-check.result }}"
+          cat << EOF > $GITHUB_STEP_SUMMARY
+          # 🚀 embedDIP CI/CD Summary
+
+          ## Build Status
+
+          | Job | Status |
+          |-----|--------|
+          | Host Build & Tests | ${{ needs.host-build-test.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | Embedded Builds | ${{ needs.embedded-build.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | Static Analysis | ${{ needs.static-analysis.result == 'success' && '✅ Passed' || '⚠️ Warnings' }} |
+          | Format Check | ${{ needs.format-check.result == 'success' && '✅ Passed' || '⚠️ Issues' }} |
+          | Documentation | ${{ needs.documentation.result == 'success' && '✅ Generated' || '❌ Failed' }} |
+          | Security Scan | ${{ needs.security-scan.result == 'success' && '✅ Passed' || '⚠️ Issues' }} |
+
+          ## Metrics
+
+          EOF
+
+          # Add embedded build sizes if available
+          if [ -d "artifacts/embedded-build-STM32F7" ]; then
+            echo "### STM32F7 Build Size" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat artifacts/embedded-build-STM32F7/size_report.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 Full reports available in workflow artifacts" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment PR with summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });

@@ -1,0 +1,290 @@
+name: Dependency Management
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'  # Weekly on Monday at 4 AM
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # ============================================================================
+  # UPDATE SUBMODULES
+  # ============================================================================
+  update-submodules:
+    name: Update Git Submodules
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for submodule updates
+        run: |
+          git submodule update --remote --recursive
+
+          if git diff --quiet; then
+            echo "No submodule updates available"
+            echo "has_updates=false" >> $GITHUB_ENV
+          else
+            echo "Submodule updates found"
+            echo "has_updates=true" >> $GITHUB_ENV
+
+            # Generate update summary
+            echo "# Submodule Updates" > update_summary.md
+            echo "" >> update_summary.md
+
+            git submodule foreach --recursive 'echo "## $name"; git log --oneline HEAD..@{u} | head -10; echo ""' >> update_summary.md
+          fi
+
+      - name: Create Pull Request
+        if: env.has_updates == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update submodules'
+          title: 'chore: update git submodules'
+          body-path: update_summary.md
+          branch: automated/update-submodules
+          delete-branch: true
+          labels: dependencies, automated
+
+  # ============================================================================
+  # CHECK FOR OUTDATED DEPENDENCIES
+  # ============================================================================
+  check-dependencies:
+    name: Check External Dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check CMSIS-DSP version
+        run: |
+          echo "# Dependency Status Report" > dep_status.md
+          echo "" >> dep_status.md
+
+          # Check if CMSIS-DSP exists
+          if [ -d "Drivers/CMSIS/DSP" ]; then
+            echo "## CMSIS-DSP" >> dep_status.md
+
+            cd Drivers/CMSIS/DSP
+            if [ -d ".git" ]; then
+              CURRENT=$(git describe --tags --always)
+              LATEST=$(git ls-remote --tags origin | grep -v '{}' | tail -1 | awk -F'/' '{print $NF}')
+
+              echo "- **Current Version**: $CURRENT" >> ../../../dep_status.md
+              echo "- **Latest Version**: $LATEST" >> ../../../dep_status.md
+
+              if [ "$CURRENT" != "$LATEST" ]; then
+                echo "- ⚠️ **Status**: Update available" >> ../../../dep_status.md
+              else
+                echo "- ✅ **Status**: Up to date" >> ../../../dep_status.md
+              fi
+            fi
+            cd ../../..
+          fi
+
+          echo "" >> dep_status.md
+
+      - name: Check toolchain versions
+        run: |
+          echo "## Toolchain Versions" >> dep_status.md
+          echo "" >> dep_status.md
+
+          # Check GCC ARM version if available
+          if command -v arm-none-eabi-gcc &> /dev/null; then
+            GCC_VERSION=$(arm-none-eabi-gcc --version | head -1)
+            echo "- **ARM GCC**: $GCC_VERSION" >> dep_status.md
+          fi
+
+          # Check CMake version
+          if command -v cmake &> /dev/null; then
+            CMAKE_VERSION=$(cmake --version | head -1)
+            echo "- **CMake**: $CMAKE_VERSION" >> dep_status.md
+          fi
+
+          echo "" >> dep_status.md
+
+      - name: Check for security advisories
+        run: |
+          echo "## Security Advisories" >> dep_status.md
+          echo "" >> dep_status.md
+
+          # Check GitHub security advisories
+          gh api graphql -f query='
+          {
+            repository(owner:"'${{ github.repository_owner }}'", name:"'${{ github.event.repository.name }}'") {
+              vulnerabilityAlerts(first: 10) {
+                nodes {
+                  securityVulnerability {
+                    package {
+                      name
+                    }
+                    severity
+                    advisory {
+                      summary
+                    }
+                  }
+                }
+              }
+            }
+          }' > advisories.json || true
+
+          if [ -s advisories.json ]; then
+            echo "⚠️ Security advisories found - please review" >> dep_status.md
+          else
+            echo "✅ No security advisories" >> dep_status.md
+          fi
+
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload dependency report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-report
+          path: dep_status.md
+
+      - name: Create issue if updates needed
+        if: contains(env.has_updates, 'true')
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('dep_status.md', 'utf8');
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🔄 Dependency updates available',
+              body: report,
+              labels: ['dependencies', 'maintenance']
+            });
+
+  # ============================================================================
+  # AUDIT EXTERNAL SOURCES
+  # ============================================================================
+  audit-external:
+    name: Audit External Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check license compliance
+        run: |
+          echo "# License Audit Report" > license_report.md
+          echo "" >> license_report.md
+
+          echo "## Project Files" >> license_report.md
+          echo "" >> license_report.md
+
+          # Check for license headers
+          missing_license=0
+          for file in core/*.{c,h} imgproc/*.{c,h} board/**/*.{c,h}; do
+            if [ -f "$file" ]; then
+              if ! head -10 "$file" | grep -qi "license\|copyright\|spdx"; then
+                echo "- ⚠️ Missing license: $file" >> license_report.md
+                ((missing_license++))
+              fi
+            fi
+          done
+
+          if [ $missing_license -eq 0 ]; then
+            echo "✅ All files have license headers" >> license_report.md
+          else
+            echo "" >> license_report.md
+            echo "**Total files missing license headers: $missing_license**" >> license_report.md
+          fi
+
+          echo "" >> license_report.md
+
+      - name: Check for external dependencies
+        run: |
+          echo "## External Dependencies" >> license_report.md
+          echo "" >> license_report.md
+
+          # List all submodules and their licenses
+          git submodule foreach --quiet 'echo "### $name"; if [ -f LICENSE ]; then echo "License: $(head -1 LICENSE)"; else echo "⚠️ No LICENSE file found"; fi; echo ""' >> license_report.md
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: license_report.md
+
+  # ============================================================================
+  # VULNERABILITY SCAN
+  # ============================================================================
+  vulnerability-scan:
+    name: Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Generate vulnerability report
+        run: |
+          docker run --rm -v $(pwd):/src aquasec/trivy fs --format table --output /src/vulnerability-report.txt /src || true
+
+      - name: Upload vulnerability report
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-report
+          path: vulnerability-report.txt
+
+  # ============================================================================
+  # DEPENDENCY SUMMARY
+  # ============================================================================
+  summary:
+    name: Dependency Summary
+    runs-on: ubuntu-latest
+    needs: [update-submodules, check-dependencies, audit-external, vulnerability-scan]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          cat << EOF > $GITHUB_STEP_SUMMARY
+          # Dependency Management Summary
+
+          ## Status
+
+          | Check | Result |
+          |-------|--------|
+          | Submodule Updates | ${{ needs.update-submodules.result == 'success' && '✅ Checked' || '❌ Failed' }} |
+          | Dependency Check | ${{ needs.check-dependencies.result == 'success' && '✅ Complete' || '❌ Failed' }} |
+          | License Audit | ${{ needs.audit-external.result == 'success' && '✅ Passed' || '⚠️ Issues' }} |
+          | Vulnerability Scan | ${{ needs.vulnerability-scan.result == 'success' && '✅ Clean' || '⚠️ Found' }} |
+
+          View detailed reports in workflow artifacts.
+          EOF

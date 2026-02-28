@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <core/image.h>
+#include <core/error.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -29,39 +30,39 @@ extern "C"
         FREQ_FILTER_GAUSSIAN_BANDPASS
     } FrequencyFilterType;
 
-    void fourier(const Image *inImg, Image *outImg);
+    embeddip_status_t fourier(const Image *inImg, Image *outImg);
 
-    void mag(const Image *inImg, Image *outImg);
+    embeddip_status_t mag(const Image *inImg, Image *outImg);
 
-    void phase(const Image *inImg, Image *outImg);
+    embeddip_status_t phase(const Image *inImg, Image *outImg);
 
-    void logImage(Image *img);
+    embeddip_status_t logImage(Image *img);
 
-    void addScalar(Image *img, float value);
+    embeddip_status_t addScalar(Image *img, float value);
 
-    void fftShift(float *data, int width, int height);
+    embeddip_status_t fftShift(float *data, int width, int height);
 
-    void fourierInv(const Image *inImg, Image *outImg);
+    embeddip_status_t fourierInv(const Image *inImg, Image *outImg);
 
-    void polarToCart(const Image *magnitude, const Image *phase, Image *outImg);
+    embeddip_status_t polarToCart(const Image *magnitude, const Image *phase, Image *outImg);
 
-    void multiply(const Image *img1, const Image *img2, Image *outImg);
+    embeddip_status_t multiply(const Image *img1, const Image *img2, Image *outImg);
 
-    void getMask(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2);
+    embeddip_status_t getMask(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2);
 
     /// test
 
     // static bool isValidFFTSize(int w, int h);
-    int fft(const Image *inImg, Image *outImg);
-    int ifft(const Image *inImg, Image *outImg);
-    void _abs_(const Image *fftImg, Image *magImg);
-    void _phase_(const Image *fftImg, Image *phaseImg);
-    void fftshift(float *data, int width, int height);
-    void getFilter(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2);
+    embeddip_status_t fft(const Image *inImg, Image *outImg);
+    embeddip_status_t ifft(const Image *inImg, Image *outImg);
+    embeddip_status_t _abs_(const Image *fftImg, Image *magImg);
+    embeddip_status_t _phase_(const Image *fftImg, Image *phaseImg);
+    embeddip_status_t fftshift(float *data, int width, int height);
+    embeddip_status_t getFilter(Image *maskImg, FrequencyFilterType filterType, float cutoff1, float cutoff2);
 
-    void ffilter2D(const Image *fftImg, const Image *filterMask, Image *outImg);
+    embeddip_status_t ffilter2D(const Image *fftImg, const Image *filterMask, Image *outImg);
 
-    void difference(const Image *img1, const Image *img2, Image *outImg);
+    embeddip_status_t difference(const Image *img1, const Image *img2, Image *outImg);
 
 #ifdef __cplusplus
 }

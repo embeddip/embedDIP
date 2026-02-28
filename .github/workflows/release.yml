@@ -1,0 +1,310 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ============================================================================
+  # CREATE RELEASE BUILDS
+  # ============================================================================
+  build-release:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - name: STM32F7
+            arch: arm-none-eabi
+            defines: "STM32F7xx ARM_MATH_CM7 __FPU_PRESENT=1"
+            flags: "-mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb"
+          - name: STM32F4
+            arch: arm-none-eabi
+            defines: "STM32F4xx ARM_MATH_CM4 __FPU_PRESENT=1"
+            flags: "-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb"
+          - name: ESP32
+            arch: xtensa-esp32-elf
+            defines: "ARDUINO_ARCH_ESP32"
+            flags: "-mlongcalls"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION: $VERSION"
+
+      - name: Install ARM toolchain
+        if: contains(matrix.platform.arch, 'arm-none-eabi')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
+
+      - name: Install ESP32 toolchain
+        if: contains(matrix.platform.arch, 'xtensa-esp32-elf')
+        run: |
+          mkdir -p ~/toolchain
+          cd ~/toolchain
+          wget -q https://github.com/espressif/crosstool-NG/releases/download/esp-2021r2-patch5/xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+          tar -xzf xtensa-esp32-elf-gcc8_4_0-esp-2021r2-patch5-linux-amd64.tar.gz
+          echo "$HOME/toolchain/xtensa-esp32-elf/bin" >> $GITHUB_PATH
+
+      - name: Build static library
+        run: |
+          mkdir -p release/${{ matrix.platform.name }}
+
+          # Compile with optimization
+          FLAGS="${{ matrix.platform.flags }}"
+          FLAGS="$FLAGS -Os -g -Wall -Wextra"
+          FLAGS="$FLAGS -ffunction-sections -fdata-sections"
+
+          for def in ${{ matrix.platform.defines }}; do
+            FLAGS="$FLAGS -D$def"
+          done
+
+          FLAGS="$FLAGS -Icore -Iimgproc -Iboard -Idevice -Iwrapper"
+
+          # Compile all sources
+          mkdir -p build_release
+          for src in core/*.c board/common.c imgproc/*.c; do
+            if [ -f "$src" ]; then
+              echo "Compiling $src..."
+              obj="build_release/$(basename ${src%.c}.o)"
+              ${{ matrix.platform.arch }}-gcc $FLAGS -c "$src" -o "$obj"
+            fi
+          done
+
+          # Create static library
+          ${{ matrix.platform.arch }}-ar rcs release/${{ matrix.platform.name }}/libembeddip.a build_release/*.o
+
+          # Copy headers
+          mkdir -p release/${{ matrix.platform.name }}/include
+          cp -r core/*.h imgproc/*.h board/*.h device/*.h wrapper/*.h release/${{ matrix.platform.name }}/include/
+
+          # Generate size report
+          ${{ matrix.platform.arch }}-size --format=berkeley release/${{ matrix.platform.name }}/libembeddip.a > release/${{ matrix.platform.name }}/size_report.txt
+
+          echo "✅ Built libembeddip.a for ${{ matrix.platform.name }}"
+
+      - name: Create package
+        run: |
+          cd release/${{ matrix.platform.name }}
+
+          # Create README
+          cat > README.md << 'EOF'
+          # embedDIP - ${{ matrix.platform.name }} Release
+
+          Version: ${{ steps.version.outputs.version }}
+          Platform: ${{ matrix.platform.name }}
+          Compiler: ${{ matrix.platform.arch }}-gcc
+
+          ## Contents
+
+          - `libembeddip.a` - Static library
+          - `include/` - Header files
+          - `size_report.txt` - Memory usage report
+
+          ## Usage
+
+          1. Link with `-lembeddip`
+          2. Add `-Iinclude` to your include path
+          3. Link with appropriate CMSIS-DSP library
+
+          ## Example
+
+          ```cmake
+          target_link_libraries(your_project
+              ${CMAKE_CURRENT_SOURCE_DIR}/lib/libembeddip.a
+          )
+          target_include_directories(your_project PRIVATE
+              ${CMAKE_CURRENT_SOURCE_DIR}/include
+          )
+          ```
+          EOF
+
+          cd ../..
+
+          # Create tarball
+          tar -czf embedDIP-${{ steps.version.outputs.version }}-${{ matrix.platform.name }}.tar.gz \
+            -C release ${{ matrix.platform.name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedDIP-${{ matrix.platform.name }}
+          path: embedDIP-${{ steps.version.outputs.version }}-${{ matrix.platform.name }}.tar.gz
+
+  # ============================================================================
+  # BUILD DOCUMENTATION
+  # ============================================================================
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz texlive-latex-base texlive-latex-extra
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate Doxygen docs
+        run: |
+          # Update version in Doxyfile
+          if [ -f Doxyfile ]; then
+            sed -i "s/PROJECT_NUMBER.*/PROJECT_NUMBER = ${{ steps.version.outputs.version }}/" Doxyfile
+          fi
+
+          doxygen Doxyfile || echo "Doxygen completed with warnings"
+
+      - name: Create documentation package
+        run: |
+          tar -czf embedDIP-${{ steps.version.outputs.version }}-docs.tar.gz html/
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedDIP-docs
+          path: embedDIP-${{ steps.version.outputs.version }}-docs.tar.gz
+
+  # ============================================================================
+  # CREATE GITHUB RELEASE
+  # ============================================================================
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-release, build-docs]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 ${{ steps.version.outputs.version }}^ 2>/dev/null || echo "")
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "## Changes since $PREV_TAG" > CHANGELOG.md
+            git log $PREV_TAG..${{ steps.version.outputs.version }} --pretty=format:"- %s (%h)" >> CHANGELOG.md
+          else
+            echo "## Initial Release" > CHANGELOG.md
+            echo "First release of embedDIP library" >> CHANGELOG.md
+          fi
+
+          echo "" >> CHANGELOG.md
+          echo "## Build Artifacts" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "- **STM32F7** - Cortex-M7 optimized build" >> CHANGELOG.md
+          echo "- **STM32F4** - Cortex-M4 optimized build" >> CHANGELOG.md
+          echo "- **ESP32** - Xtensa optimized build" >> CHANGELOG.md
+          echo "- **Documentation** - API reference and examples" >> CHANGELOG.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: embedDIP ${{ steps.version.outputs.version }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'rc') || contains(steps.version.outputs.version, 'beta') }}
+          files: |
+            release-artifacts/**/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================================
+  # NOTIFY
+  # ============================================================================
+  notify:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    if: success()
+
+    steps:
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create success summary
+        run: |
+          cat << EOF > $GITHUB_STEP_SUMMARY
+          # 🎉 Release ${{ steps.version.outputs.version }} Published!
+
+          ## Artifacts Available
+
+          - ✅ STM32F7 Library
+          - ✅ STM32F4 Library
+          - ✅ ESP32 Library
+          - ✅ Documentation
+
+          ## Download
+
+          Visit the [releases page](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}) to download.
+
+          ## Next Steps
+
+          1. Test the release with example projects
+          2. Update documentation if needed
+          3. Announce to users
+          EOF
