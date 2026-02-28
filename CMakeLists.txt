@@ -177,6 +177,7 @@ target_include_directories(embedDIP PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/imgproc>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/board>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/camera>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/camera/ov5640>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/display>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/serial>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/wrapper>
@@ -192,6 +193,7 @@ if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Device/ST/STM32F7xx/Include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Core/Include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Include>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Core/Inc>
         )
 
         # CMSIS-DSP sources for STM32 (C and assembly files)

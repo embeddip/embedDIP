@@ -149,10 +149,16 @@ static int serial_capture(Image *img)
     HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);
     HAL_Delay(1); // Optional small delay
 
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->width), sizeof(img->width), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->height), sizeof(img->height), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->format), sizeof(img->format), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->depth), sizeof(img->depth), HAL_MAX_DELAY);
+    // Send metadata as fixed-size uint32_t to match Python expectations
+    uint32_t width_u32 = img->width;
+    uint32_t height_u32 = img->height;
+    uint32_t format_u32 = (uint32_t)img->format;
+    uint32_t depth_u32 = (uint32_t)img->depth;
+
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&width_u32), sizeof(uint32_t), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&height_u32), sizeof(uint32_t), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&format_u32), sizeof(uint32_t), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&depth_u32), sizeof(uint32_t), HAL_MAX_DELAY);
 
     // Receive image data in blocks
     uint8_t *pixelPtr = img->pixels;
@@ -184,12 +190,16 @@ static int serial_send(const Image *img)
     HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);
     HAL_Delay(1); // Give receiver time to prepare
 
-    // Step 2: Send image metadata
+    // Step 2: Send image metadata as fixed-size uint32_t to match Python expectations
+    uint32_t width_u32 = img->width;
+    uint32_t height_u32 = img->height;
+    uint32_t format_u32 = (uint32_t)img->format;
+    uint32_t depth_u32 = (uint32_t)img->depth;
 
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->width), sizeof(img->width), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->height), sizeof(img->height), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->format), sizeof(img->format), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&img->depth), sizeof(img->depth), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&width_u32), sizeof(uint32_t), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&height_u32), sizeof(uint32_t), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&format_u32), sizeof(uint32_t), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&depth_u32), sizeof(uint32_t), HAL_MAX_DELAY);
     HAL_Delay(2); // Allow receiver to process metadata
 
     // Step 3: Send image pixel data in blocks

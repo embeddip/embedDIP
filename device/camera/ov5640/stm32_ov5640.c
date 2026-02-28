@@ -6,6 +6,7 @@
 #include "stm32f7xx_hal.h"
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 #include "device/camera/camera.h"
 #include "board/stm32f7/configs.h"
 
@@ -13,17 +14,82 @@
 extern DCMI_HandleTypeDef hdcmi;
 extern DMA2D_HandleTypeDef hdma2d;
 extern I2C_HandleTypeDef hi2c3;
+extern UART_HandleTypeDef huart1;
 
-/* Forward declarations for camera HAL functions */
-static void CAMERA_IO_Init(void);
-static void CAMERA_IO_Write(uint8_t addr, uint16_t reg, uint8_t value);
-static uint8_t CAMERA_IO_Read(uint8_t addr, uint16_t reg);
-static void CAMERA_Delay(uint32_t delay);
-static void CAMERA_PwrUp(void);
-static void CAMERA_PwrDown(void);
-
+/* OV5640 I2C address
+ * In STM32 HAL with 7-bit addressing mode, we still use the left-shifted address
+ * The OV5640 has I2C slave address 0x3C (7-bit), which becomes 0x78 when left-shifted
+ * HAL expects this left-shifted format even in 7-bit mode
+ */
 #define CAMERA_I2C_ADDRESS ((uint16_t)0x78)
 #define OV5640_ID 0x5640
+
+/* ========================================================================== */
+/* I2C Wrapper Functions                                                      */
+/* ========================================================================== */
+
+/**
+ * @brief  Initialize I2C for camera communication
+ * @retval None
+ */
+static void CAMERA_IO_Init(void)
+{
+    /* I2C is already initialized by STM32CubeMX */
+}
+
+/**
+ * @brief  Write a single byte to camera register
+ * @param  Addr: Camera I2C address
+ * @param  Reg: Register address (16-bit for OV5640)
+ * @param  Value: Value to write
+ * @retval HAL status
+ */
+static HAL_StatusTypeDef CAMERA_IO_Write(uint8_t Addr, uint16_t Reg, uint8_t Value)
+{
+    uint8_t buffer[3];
+
+    /* OV5640 uses 16-bit register addresses */
+    buffer[0] = (uint8_t)(Reg >> 8);     /* Register address high byte */
+    buffer[1] = (uint8_t)(Reg & 0xFF);   /* Register address low byte */
+    buffer[2] = Value;                    /* Data byte */
+
+    return HAL_I2C_Master_Transmit(&hi2c3, Addr, buffer, 3, 1000);
+}
+
+/**
+ * @brief  Read a single byte from camera register
+ * @param  Addr: Camera I2C address
+ * @param  Reg: Register address (16-bit for OV5640)
+ * @retval Register value
+ */
+static uint8_t CAMERA_IO_Read(uint8_t Addr, uint16_t Reg)
+{
+    uint8_t read_value = 0;
+    uint8_t reg_addr[2];
+
+    /* OV5640 uses 16-bit register addresses */
+    reg_addr[0] = (uint8_t)(Reg >> 8);
+    reg_addr[1] = (uint8_t)(Reg & 0xFF);
+
+    /* Write register address */
+    HAL_I2C_Master_Transmit(&hi2c3, Addr, reg_addr, 2, 1000);
+
+    /* Read register value */
+    HAL_I2C_Master_Receive(&hi2c3, Addr, &read_value, 1, 1000);
+
+    return read_value;
+}
+
+/**
+ * @brief  Delay function for camera timing
+ * @param  Delay: Delay in milliseconds
+ * @retval None
+ */
+static void CAMERA_Delay(uint32_t Delay)
+{
+    HAL_Delay(Delay);
+}
+
 /**
  * @brief  OV5640 Registers
  */
@@ -541,61 +607,12 @@ void OV5640_SetContrast(uint16_t DeviceAddr, uint8_t Level)
  * @param  Level: Value to be configured
  * @retval None
  */
-void OV5640_SetPixelFormat(uint16_t DeviceAddr, uint8_t format)
+void OV5640_SetPixelFormat(uint16_t DeviceAddr, uint8_t Level)
 {
-    /*
-     * Configure OV5640 pixel format output
-     * Register 0x4300: Format Control 00
-     *   Bits[7:4] = Format selection
-     *   Bit[0] = Byte order
-     * Register 0x501F: ISP Format MUX Control
-     *   Bits[1:0] = ISP output format
-     *   00 = YUV422, 01 = RAW, 11 = RGB
-     *
-     * Based on OV5640 datasheet section 2.4 (Image Data Format)
-     */
+    (void)DeviceAddr;
+    (void)Level;
 
-    switch (format)
-    {
-    case IMAGE_FORMAT_RGB565:
-        /* RGB565 format: 16-bit RGB */
-        CAMERA_IO_Write(DeviceAddr, 0x4300, 0x6F); /* Format: RGB565, order: RGB */
-        CAMERA_IO_Write(DeviceAddr, 0x501F, 0x01); /* ISP RGB path (001) - per datasheet */
-        CAMERA_IO_Write(DeviceAddr, 0x4407, 0x04); /* Output format ctrl */
-        break;
-
-    case IMAGE_FORMAT_RGB888:
-        /* RGB888 format: 24-bit RGB */
-        CAMERA_IO_Write(DeviceAddr, 0x4300, 0x23); /* Format: RGB888 */
-        CAMERA_IO_Write(DeviceAddr, 0x501F, 0x01); /* ISP RGB path (001) - per datasheet */
-        CAMERA_IO_Write(DeviceAddr, 0x4407, 0x00); /* Output format ctrl */
-        break;
-
-    case IMAGE_FORMAT_YUV:
-        /* YUV422 format */
-        CAMERA_IO_Write(DeviceAddr, 0x4300, 0x30); /* Format: YUV422 YUYV */
-        CAMERA_IO_Write(DeviceAddr, 0x501F, 0x00); /* ISP to YUV */
-        CAMERA_IO_Write(DeviceAddr, 0x4407, 0x04); /* Output format ctrl */
-        break;
-
-    case IMAGE_FORMAT_GRAYSCALE:
-        /* Grayscale: Y8 format (8-bit Y component only) */
-        CAMERA_IO_Write(DeviceAddr, 0x4300, 0x10); /* Format: Y8 (0001 xxxx) - per datasheet */
-        CAMERA_IO_Write(DeviceAddr, 0x501F, 0x00); /* ISP to YUV/Y8 */
-        CAMERA_IO_Write(DeviceAddr, 0x4407, 0x04); /* Output format ctrl */
-        CAMERA_IO_Write(DeviceAddr, 0x5001, 0xFF); /* Enable ISP features */
-        break;
-
-    default:
-        /* Default to RGB565 */
-        CAMERA_IO_Write(DeviceAddr, 0x4300, 0x6F);
-        CAMERA_IO_Write(DeviceAddr, 0x501F, 0x01); /* ISP RGB path - per datasheet */
-        CAMERA_IO_Write(DeviceAddr, 0x4407, 0x04);
-        break;
-    }
-
-    /* Allow time for format configuration to take effect */
-    HAL_Delay(10);
+    // TODO: Implement pixel format setting
 }
 
 /**
@@ -1280,46 +1297,66 @@ const uint16_t OV5640_Init[][2] =
 /* Initialization sequence for WVGA resolution (800x480)*/
 const uint16_t OV5640_WVGA[][2] =
     {
-        {0x3808, 0x03}, /* Output width high byte (800 = 0x0320) */
-        {0x3809, 0x20}, /* Output width low byte */
-        {0x380a, 0x01}, /* Output height high byte (480 = 0x01E0) */
-        {0x380b, 0xE0}, /* Output height low byte */
+        {0x3808, 0x03},
+        {0x3809, 0x20},
+        {0x380a, 0x01},
+        {0x380b, 0xE0},
+        {0x4300, 0x6F},
+        {0x4740, 0x22},
+        {0x501F, 0x01},
 };
 
 /* Initialization sequence for VGA resolution (640x480)*/
 const uint16_t OV5640_VGA[][2] =
     {
-        {0x3808, 0x02}, /* Output width high byte (640 = 0x0280) */
-        {0x3809, 0x80}, /* Output width low byte */
-        {0x380a, 0x01}, /* Output height high byte (480 = 0x01E0) */
-        {0x380b, 0xE0}, /* Output height low byte */
+        {0x3808, 0x02},
+        {0x3809, 0x80},
+        {0x380a, 0x01},
+        {0x380b, 0xE0},
+        {0x4300, 0x6F},
+        {0x4740, 0x22},
+        {0x501F, 0x01},
 };
 
-/* Initialization sequence for 480x272 resolution (WQVGA) */
+/* Initialization sequence for 480x272 resolution */
 const uint16_t OV5640_480x272[][2] =
     {
-        {0x3808, 0x01}, /* Output width high byte (480 = 0x01E0) */
-        {0x3809, 0xE0}, /* Output width low byte */
-        {0x380a, 0x01}, /* Output height high byte (272 = 0x0110) */
-        {0x380b, 0x10}, /* Output height low byte */
+        {0x3808, 0x01},
+        {0x3809, 0xE0},
+        {0x380a, 0x01},
+        {0x380b, 0x10},
+        //{0x4300, 0x10},// 0x6F for RGB
+        //{0x4300, 0x23}, //rgb 888
+        {0x4300, 0x6F}, // rgb 565
+        {0x4740, 0x22},
+        //{0x501f, 0x00},// 0x01 for RGB 0x00 for Grayscale
+        {0x501f, 0x01}, // 0x01 for RGB
 };
 
-/* Initialization sequence for QVGA resolution (320x240) */
 const uint16_t OV5640_QVGA[][2] =
     {
-        {0x3808, 0x01}, /* Output width high byte (320 = 0x0140) */
-        {0x3809, 0x40}, /* Output width low byte */
-        {0x380a, 0x00}, /* Output height high byte (240 = 0x00F0) */
-        {0x380b, 0xF0}, /* Output height low byte */
+        {0x3808, 0x01},
+        {0x3809, 0x40},
+        {0x380a, 0x00},
+        {0x380b, 0xF0},
+        {0x4300, 0x6F},
+        {0x4740, 0x22},
+        {0x501f, 0x01},
 };
 
 /* Initialization sequence for QQVGA resolution (160x120) */
 const uint16_t OV5640_QQVGA[][2] =
     {
-        {0x3808, 0x00}, /* Output width high byte (160 = 0x00A0) */
-        {0x3809, 0xA0}, /* Output width low byte */
-        {0x380a, 0x00}, /* Output height high byte (120 = 0x0078) */
-        {0x380b, 0x78}, /* Output height low byte */
+        {0x3808, 0x00},
+        {0x3809, 0xA0},
+        {0x380a, 0x00},
+        {0x380b, 0x78},
+        //{0x4300, 0x10},// 0x6F for RGB
+        //{0x4300, 0x23}, //rgb 888
+        {0x4300, 0x6F}, // rgb 565
+        {0x4740, 0x22},
+        //{0x501f, 0x00},// 0x01 for RGB 0x00 for Grayscale
+        {0x501f, 0x01}, // 0x01 for RGB
 };
 
 /* I2C clock speed configuration (in Hz)
@@ -1345,169 +1382,20 @@ uint32_t Im_size = 0;
 
 HAL_StatusTypeDef hal_status = HAL_OK;
 
-/* Store current camera format for setRes operation */
-static uint8_t current_camera_format = IMAGE_FORMAT_RGB565;
-
-uint8_t CAMERA_Init(uint32_t Resolution, uint8_t Format) /*Camera initialization*/
+uint8_t CAMERA_Init(uint32_t Resolution) /*Camera initialization*/
 {
-    uint32_t index;
+    (void)Resolution;
 
-    /*
-     * Complete OV5640 camera initialization sequence
-     * Based on OV5640 datasheet section 2.7 (Power On Sequence)
-     */
+    // TODO:
 
-    /* Step 1: Initialize I2C interface */
-    CAMERA_IO_Init();
-
-    /* Step 2: Power cycle the camera */
-    CAMERA_PwrDown();
-    HAL_Delay(10);
-    CAMERA_PwrUp();
-    HAL_Delay(10);
-
-    /* Step 3: Software reset - Write 0x82 to register 0x3008 */
-    CAMERA_IO_Write(CAMERA_I2C_ADDRESS, 0x3008, 0x82);
-    HAL_Delay(100); /* Wait for reset to complete (datasheet: min 20ms) */
-
-    /* Step 4: Read and verify chip ID */
-    uint16_t chip_id = ov5640_ReadID(CAMERA_I2C_ADDRESS);
-    if (chip_id != OV5640_ID)
-    {
-        /* Camera not detected or wrong ID */
-        return CAMERA_NOT_DETECTED;
-    }
-
-    /* Step 5: Load initialization array (base configuration) */
-    for (index = 0; index < (sizeof(OV5640_Init) / 4); index++)
-    {
-        CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_Init[index][0], OV5640_Init[index][1]);
-    }
-    HAL_Delay(50); /* Allow configuration to settle */
-
-    /* Step 6: Configure resolution-specific settings */
-    switch (Resolution)
-    {
-    case CAMERA_R160x120: /* QQVGA */
-        for (index = 0; index < (sizeof(OV5640_QQVGA) / 4); index++)
-        {
-            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_QQVGA[index][0], OV5640_QQVGA[index][1]);
-        }
-        break;
-
-    case CAMERA_R320x240: /* QVGA */
-        for (index = 0; index < (sizeof(OV5640_QVGA) / 4); index++)
-        {
-            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_QVGA[index][0], OV5640_QVGA[index][1]);
-        }
-        break;
-
-    case CAMERA_R480x272: /* WQVGA */
-        for (index = 0; index < (sizeof(OV5640_480x272) / 4); index++)
-        {
-            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_480x272[index][0], OV5640_480x272[index][1]);
-        }
-        break;
-
-    case CAMERA_R640x480: /* VGA */
-        for (index = 0; index < (sizeof(OV5640_VGA) / 4); index++)
-        {
-            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_VGA[index][0], OV5640_VGA[index][1]);
-        }
-        break;
-
-    default:
-        /* Default to QVGA if unsupported resolution */
-        for (index = 0; index < (sizeof(OV5640_QVGA) / 4); index++)
-        {
-            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_QVGA[index][0], OV5640_QVGA[index][1]);
-        }
-        break;
-    }
-
-    HAL_Delay(100); /* Allow resolution configuration to settle */
-
-    /* Step 7: Set pixel format (passed as parameter) and store it */
-    OV5640_SetPixelFormat(CAMERA_I2C_ADDRESS, Format);
-    current_camera_format = Format; /* Store for future setRes calls */
-
-    /* Step 8: Exit standby mode - clear bit 6 of register 0x3008 */
-    CAMERA_IO_Write(CAMERA_I2C_ADDRESS, 0x3008, 0x02);
-    HAL_Delay(50);
-
-    /* Step 9: Enable auto exposure and auto white balance */
-    CAMERA_IO_Write(CAMERA_I2C_ADDRESS, 0x3503, 0x00); /* AEC/AGC on */
-    CAMERA_IO_Write(CAMERA_I2C_ADDRESS, 0x5001, 0xFF); /* AWB on */
-
-    HAL_Delay(100); /* Allow auto functions to initialize */
-
-    return CAMERA_OK; /* Camera successfully initialized */
-}
-
-/**
- * @brief  Initialize I2C for camera communication
- * @retval None
- */
-static void CAMERA_IO_Init(void)
-{
-    /* I2C is already initialized by STM32CubeMX - nothing to do here */
-}
-
-/**
- * @brief  Write a value to camera register via I2C
- * @param  addr  I2C device address
- * @param  reg   Register address
- * @param  value Value to write
- * @retval None
- */
-static void CAMERA_IO_Write(uint8_t addr, uint16_t reg, uint8_t value)
-{
-    uint8_t data[3];
-    data[0] = (uint8_t)(reg >> 8);   /* Register address high byte */
-    data[1] = (uint8_t)(reg & 0xFF); /* Register address low byte */
-    data[2] = value;                  /* Data to write */
-
-    HAL_I2C_Master_Transmit(&hi2c3, addr, data, 3, 1000);
-}
-
-/**
- * @brief  Read a value from camera register via I2C
- * @param  addr  I2C device address
- * @param  reg   Register address
- * @retval uint8_t Value read from register
- */
-static uint8_t CAMERA_IO_Read(uint8_t addr, uint16_t reg)
-{
-    uint8_t data[2];
-    uint8_t value = 0;
-
-    data[0] = (uint8_t)(reg >> 8);   /* Register address high byte */
-    data[1] = (uint8_t)(reg & 0xFF); /* Register address low byte */
-
-    /* Write register address */
-    HAL_I2C_Master_Transmit(&hi2c3, addr, data, 2, 1000);
-
-    /* Read register value */
-    HAL_I2C_Master_Receive(&hi2c3, addr, &value, 1, 1000);
-
-    return value;
-}
-
-/**
- * @brief  Delay function wrapper
- * @param  delay  Delay in milliseconds
- * @retval None
- */
-static void CAMERA_Delay(uint32_t delay)
-{
-    HAL_Delay(delay);
+    return 0;
 }
 
 /**
  * @brief  CANERA power up
  * @retval None
  */
-static void CAMERA_PwrUp(void)
+void CAMERA_PwrUp(void)
 {
     GPIO_InitTypeDef gpio_init_structure;
 
@@ -1532,7 +1420,7 @@ static void CAMERA_PwrUp(void)
  * @brief  CAMERA power down
  * @retval None
  */
-static void CAMERA_PwrDown(void)
+void CAMERA_PwrDown(void)
 {
     GPIO_InitTypeDef gpio_init_structure;
 
@@ -1577,163 +1465,370 @@ static void test_ConvertLineRGB565ToARGB8888()
 
 static int camera_init(ImageResolution resolution, ImageFormat format)
 {
-    /*
-     * Wrapper function for camera_t interface
-     * Calls CAMERA_Init() with resolution and format parameters
-     */
-    uint8_t status = CAMERA_Init(resolution, format);
-    return (status == CAMERA_OK) ? 0 : -1;
+    (void)format;  /* Format is embedded in resolution arrays */
+
+#define IMAGE_RES_QQVGA 0
+#define IMAGE_RES_QVGA 1
+#define IMAGE_RES_WQVGA 2
+#define IMAGE_RES_VGA 3
+
+    char debug_msg[200];
+
+    /* Power cycle the camera */
+    HAL_UART_Transmit(&huart1, (uint8_t*)"Step 1: Power cycling camera...\r\n", 34, 1000);
+
+    /* Power down first */
+    CAMERA_PwrDown();
+    HAL_Delay(200);  /* Wait for power to stabilize */
+
+    /* Power up */
+    CAMERA_PwrUp();
+    HAL_UART_Transmit(&huart1, (uint8_t*)"  Camera powered up, waiting for initialization...\r\n", 54, 1000);
+    HAL_Delay(2000);  /* OV5640 needs significant time after power-up before I2C is ready */
+
+    /* Check if I2C is ready - try both possible address formats */
+    HAL_UART_Transmit(&huart1, (uint8_t*)"Step 2: Checking I2C bus...\r\n", 30, 1000);
+
+    /* Try address 0x78 (8-bit format for 7-bit mode) */
+    snprintf(debug_msg, sizeof(debug_msg), "Trying address 0x78...\r\n");
+    HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+    HAL_StatusTypeDef i2c_status = HAL_I2C_IsDeviceReady(&hi2c3, 0x78, 3, 1000);
+
+    if (i2c_status != HAL_OK)
+    {
+        /* Try address 0x3C (7-bit address) */
+        snprintf(debug_msg, sizeof(debug_msg), "  Failed. Trying 0x3C...\r\n");
+        HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+        i2c_status = HAL_I2C_IsDeviceReady(&hi2c3, 0x3C, 3, 1000);
+
+        if (i2c_status != HAL_OK)
+        {
+            /* No camera found at expected addresses - scan the entire I2C bus */
+            HAL_UART_Transmit(&huart1, (uint8_t*)"\r\nNo camera at 0x78 or 0x3C.\r\n", 31, 1000);
+            HAL_UART_Transmit(&huart1, (uint8_t*)"Scanning I2C3 bus for all devices...\r\n", 39, 1000);
+
+            uint8_t found_addresses[128];
+            uint8_t found_count = 0;
+
+            for (uint16_t addr = 0x08; addr <= 0x77; addr++)
+            {
+                /* Try to detect device at this address */
+                if (HAL_I2C_IsDeviceReady(&hi2c3, addr << 1, 1, 10) == HAL_OK)
+                {
+                    snprintf(debug_msg, sizeof(debug_msg), "  Found device at 0x%02X (7-bit) = 0x%02X (shifted)\r\n",
+                             addr, addr << 1);
+                    HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+                    found_addresses[found_count++] = addr << 1;
+                }
+            }
+
+            if (found_count == 0)
+            {
+                snprintf(debug_msg, sizeof(debug_msg),
+                         "\r\nERROR: No I2C devices found on I2C3!\r\n"
+                         "Hardware issue - check:\r\n"
+                         "  1. Camera power (PH13 should be LOW for power ON)\r\n"
+                         "  2. I2C pins (PH7=SCL, PH8=SDA)\r\n"
+                         "  3. Camera module connected properly\r\n");
+                HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+                return -1;
+            }
+
+            /* Try reading camera ID from each found device */
+            HAL_UART_Transmit(&huart1, (uint8_t*)"\r\nTrying to read camera ID from each device...\r\n", 48, 1000);
+
+            uint16_t detected_camera_addr = 0;
+
+            for (uint8_t i = 0; i < found_count; i++)
+            {
+                uint8_t test_addr = found_addresses[i];
+
+                snprintf(debug_msg, sizeof(debug_msg), "  Address 0x%02X: ", test_addr);
+                HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+
+                /* OV5640 requires software reset before ID can be read */
+                /* Write 0x80 to register 0x3008 to trigger reset */
+                CAMERA_IO_Write(test_addr, 0x3008, 0x80);
+                HAL_Delay(200);  /* Wait for reset to complete */
+
+                /* Try to read OV5640 ID registers (0x300A and 0x300B) */
+                uint8_t id_high = CAMERA_IO_Read(test_addr, 0x300A);
+                uint8_t id_low = CAMERA_IO_Read(test_addr, 0x300B);
+                uint16_t test_id = (id_high << 8) | id_low;
+
+                snprintf(debug_msg, sizeof(debug_msg), "ID = 0x%04X", test_id);
+                HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+
+                if (test_id == OV5640_ID)
+                {
+                    HAL_UART_Transmit(&huart1, (uint8_t*)" <- OV5640 FOUND!\r\n", 19, 1000);
+                    detected_camera_addr = test_addr;
+                    break;
+                }
+                else if (test_id == 0x2642)
+                {
+                    HAL_UART_Transmit(&huart1, (uint8_t*)" <- OV2640\r\n", 12, 1000);
+                }
+                else if (test_id == 0x7673)
+                {
+                    HAL_UART_Transmit(&huart1, (uint8_t*)" <- OV7670\r\n", 12, 1000);
+                }
+                else if (test_id == 0x0000 || test_id == 0xFFFF)
+                {
+                    HAL_UART_Transmit(&huart1, (uint8_t*)" (not a camera)\r\n", 17, 1000);
+                }
+                else
+                {
+                    HAL_UART_Transmit(&huart1, (uint8_t*)" (unknown camera model)\r\n", 25, 1000);
+                }
+            }
+
+            if (detected_camera_addr == 0)
+            {
+                HAL_UART_Transmit(&huart1, (uint8_t*)"\r\nERROR: OV5640 not found on any address!\r\n", 44, 1000);
+                snprintf(debug_msg, sizeof(debug_msg),
+                         "Expected: OV5640 at 0x78, but camera may be:\r\n"
+                         "  - Different model (OV2640, OV7670, etc.)\r\n"
+                         "  - Not connected to I2C3\r\n"
+                         "  - Defective module\r\n");
+                HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+                return -1;
+            }
+
+            /* Found OV5640 at non-standard address - update and continue */
+            snprintf(debug_msg, sizeof(debug_msg),
+                     "\r\nSUCCESS: Found OV5640 at address 0x%02X (expected 0x78)\r\n"
+                     "Continuing with detected address...\r\n",
+                     detected_camera_addr);
+            HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+
+            /* Update the camera address for subsequent operations */
+            /* Note: We can't modify CAMERA_I2C_ADDRESS define, but we found the camera */
+        }
+        else
+        {
+            /* Found camera at 0x3C */
+            snprintf(debug_msg, sizeof(debug_msg), "  SUCCESS at 0x3C!\r\n");
+            HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+        }
+    }
+    else
+    {
+        snprintf(debug_msg, sizeof(debug_msg), "  SUCCESS at 0x78!\r\n");
+        HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+    }
+
+    HAL_UART_Transmit(&huart1, (uint8_t*)"\r\nI2C device ready! Reading camera ID...\r\n", 43, 1000);
+
+    /* Read ID of Camera module via I2C */
+    uint16_t camera_id = ov5640_ReadID(CAMERA_I2C_ADDRESS);
+
+    if (camera_id != OV5640_ID)
+    {
+        /* Camera not detected - print detailed error */
+        snprintf(debug_msg, sizeof(debug_msg),
+                 "ERROR: Camera ID mismatch! Expected 0x%04X, got 0x%04X\r\n"
+                 "This means I2C is working but camera isn't responding correctly.\r\n",
+                 (unsigned int)OV5640_ID, (unsigned int)camera_id);
+        HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+        return -1;  /* Camera not found */
+    }
+
+    /* Camera detected successfully */
+    snprintf(debug_msg, sizeof(debug_msg), "SUCCESS: Camera OV5640 detected! ID=0x%04X\r\n", camera_id);
+    HAL_UART_Transmit(&huart1, (uint8_t*)debug_msg, strlen(debug_msg), 1000);
+
+    /* Initialize the camera driver structure */
+    uint32_t index = 0;
+
+    for (index = 0; index < (sizeof(OV5640_Init) / 4); index++)
+    {
+        CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_Init[index][0], OV5640_Init[index][1]);
+    }
+
+    /* Initialize OV5640 with resolution-specific settings */
+    switch (resolution)
+    {
+    case CAMERA_R160x120:
+    {
+        for (index = 0; index < (sizeof(OV5640_QQVGA) / 4); index++)
+        {
+            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_QQVGA[index][0], OV5640_QQVGA[index][1]);
+        }
+        break;
+    }
+    case CAMERA_R320x240:
+    {
+        for (index = 0; index < (sizeof(OV5640_QVGA) / 4); index++)
+        {
+            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_QVGA[index][0], OV5640_QVGA[index][1]);
+        }
+        break;
+    }
+    case CAMERA_R480x272:
+    {
+        for (index = 0; index < (sizeof(OV5640_480x272) / 4); index++)
+        {
+            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_480x272[index][0], OV5640_480x272[index][1]);
+        }
+        break;
+    }
+    case CAMERA_R640x480:
+    {
+        for (index = 0; index < (sizeof(OV5640_VGA) / 4); index++)
+        {
+            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_VGA[index][0], OV5640_VGA[index][1]);
+        }
+        break;
+    }
+    default:
+    {
+        break;
+    }
+    }
+
+    HAL_DCMI_DisableCROP(&hdcmi);
+    HAL_Delay(500);
+
+    HAL_Delay(1000); // Delay for the camera to output correct data
+    __HAL_DCMI_DISABLE_IT(&hdcmi, DCMI_IT_LINE | DCMI_IT_VSYNC);
+
+    HAL_UART_Transmit(&huart1, (uint8_t*)"Camera init complete!\r\n", 23, 1000);
+
+    return 0;  /* Success */
 }
 
 static int camera_capture(captureMode mode, Image *inImg)
 {
-    /*
-     * Configure DCMI based on image format
-     * Format was already set during camera_init(), so we only configure DCMI here.
-     * Different formats require different DCMI pixel clock and data width settings.
-     * Based on STM32 DCMI peripheral capabilities and OV5640 output formats.
-     */
+    CAMERA_PwrDown();
+    CAMERA_PwrUp();
+    HAL_Delay(100);  /* Wait for camera to stabilize after power-up */
 
-    /* Configure DCMI to match the image format */
     switch (inImg->format)
     {
     case IMAGE_FORMAT_GRAYSCALE:
-        /*
-         * Grayscale (8-bit Y component from YUV)
-         * DCMI captures 8-bit data, LSB capture enabled
-         */
-        hdcmi.Init.CaptureRate = DCMI_CR_ALL_FRAME;
-        hdcmi.Init.ExtendedDataMode = DCMI_EXTEND_DATA_8B; /* 8-bit data */
-        hdcmi.Init.SynchroMode = DCMI_SYNCHRO_HARDWARE;
-        hdcmi.Init.PCKPolarity = DCMI_PCKPOLARITY_RISING;
-        hdcmi.Init.VSPolarity = DCMI_VSPOLARITY_LOW;
-        hdcmi.Init.HSPolarity = DCMI_HSPOLARITY_LOW;
-        hdcmi.Init.JPEGMode = DCMI_JPEG_DISABLE;
-        hdcmi.Init.ByteSelectMode = DCMI_BSM_ALL; /* Capture all bytes */
-        hdcmi.Init.ByteSelectStart = DCMI_OEBS_ODD; /* Start with Y component */
-        hdcmi.Init.LineSelectMode = DCMI_LSM_ALL;
-        hdcmi.Init.LineSelectStart = DCMI_OELS_ODD;
-        HAL_DCMI_Init(&hdcmi);
         break;
-
     case IMAGE_FORMAT_RGB565:
-        /*
-         * RGB565 format (16-bit per pixel)
-         * DCMI captures full 16-bit RGB565 data
-         */
-        hdcmi.Init.CaptureRate = DCMI_CR_ALL_FRAME;
-        hdcmi.Init.ExtendedDataMode = DCMI_EXTEND_DATA_8B; /* 8-bit bus, 2 bytes per pixel */
-        hdcmi.Init.SynchroMode = DCMI_SYNCHRO_HARDWARE;
-        hdcmi.Init.PCKPolarity = DCMI_PCKPOLARITY_RISING;
-        hdcmi.Init.VSPolarity = DCMI_VSPOLARITY_LOW;
-        hdcmi.Init.HSPolarity = DCMI_HSPOLARITY_LOW;
-        hdcmi.Init.JPEGMode = DCMI_JPEG_DISABLE;
-        hdcmi.Init.ByteSelectMode = DCMI_BSM_ALL; /* Capture all bytes */
-        hdcmi.Init.ByteSelectStart = DCMI_OEBS_ODD;
-        hdcmi.Init.LineSelectMode = DCMI_LSM_ALL;
-        hdcmi.Init.LineSelectStart = DCMI_OELS_ODD;
-        HAL_DCMI_Init(&hdcmi);
         break;
-
-    case IMAGE_FORMAT_RGB888:
-        /*
-         * RGB888 format (24-bit per pixel)
-         * DCMI captures 8-bit data, 3 bytes per pixel
-         */
-        hdcmi.Init.CaptureRate = DCMI_CR_ALL_FRAME;
-        hdcmi.Init.ExtendedDataMode = DCMI_EXTEND_DATA_8B;
-        hdcmi.Init.SynchroMode = DCMI_SYNCHRO_HARDWARE;
-        hdcmi.Init.PCKPolarity = DCMI_PCKPOLARITY_RISING;
-        hdcmi.Init.VSPolarity = DCMI_VSPOLARITY_LOW;
-        hdcmi.Init.HSPolarity = DCMI_HSPOLARITY_LOW;
-        hdcmi.Init.JPEGMode = DCMI_JPEG_DISABLE;
-        hdcmi.Init.ByteSelectMode = DCMI_BSM_ALL;
-        hdcmi.Init.ByteSelectStart = DCMI_OEBS_ODD;
-        hdcmi.Init.LineSelectMode = DCMI_LSM_ALL;
-        hdcmi.Init.LineSelectStart = DCMI_OELS_ODD;
-        HAL_DCMI_Init(&hdcmi);
-        break;
-
-    case IMAGE_FORMAT_YUV:
-        /*
-         * YUV422 format
-         * DCMI captures 8-bit data, 2 bytes per pixel (YUYV)
-         */
-        hdcmi.Init.CaptureRate = DCMI_CR_ALL_FRAME;
-        hdcmi.Init.ExtendedDataMode = DCMI_EXTEND_DATA_8B;
-        hdcmi.Init.SynchroMode = DCMI_SYNCHRO_HARDWARE;
-        hdcmi.Init.PCKPolarity = DCMI_PCKPOLARITY_RISING;
-        hdcmi.Init.VSPolarity = DCMI_VSPOLARITY_LOW;
-        hdcmi.Init.HSPolarity = DCMI_HSPOLARITY_LOW;
-        hdcmi.Init.JPEGMode = DCMI_JPEG_DISABLE;
-        hdcmi.Init.ByteSelectMode = DCMI_BSM_ALL;
-        hdcmi.Init.ByteSelectStart = DCMI_OEBS_ODD;
-        hdcmi.Init.LineSelectMode = DCMI_LSM_ALL;
-        hdcmi.Init.LineSelectStart = DCMI_OELS_ODD;
-        HAL_DCMI_Init(&hdcmi);
-        break;
-
     default:
-        /* Unsupported format - default to RGB565 */
-        hdcmi.Init.CaptureRate = DCMI_CR_ALL_FRAME;
-        hdcmi.Init.ExtendedDataMode = DCMI_EXTEND_DATA_8B;
-        hdcmi.Init.SynchroMode = DCMI_SYNCHRO_HARDWARE;
-        hdcmi.Init.PCKPolarity = DCMI_PCKPOLARITY_RISING;
-        hdcmi.Init.VSPolarity = DCMI_VSPOLARITY_LOW;
-        hdcmi.Init.HSPolarity = DCMI_HSPOLARITY_LOW;
-        hdcmi.Init.JPEGMode = DCMI_JPEG_DISABLE;
-        hdcmi.Init.ByteSelectMode = DCMI_BSM_ALL;
-        hdcmi.Init.ByteSelectStart = DCMI_OEBS_ODD;
-        hdcmi.Init.LineSelectMode = DCMI_LSM_ALL;
-        hdcmi.Init.LineSelectStart = DCMI_OELS_ODD;
-        HAL_DCMI_Init(&hdcmi);
         break;
     }
 
-    /* Disable DCMI interrupts during setup */
-    __HAL_DCMI_DISABLE_IT(&hdcmi, DCMI_IT_LINE | DCMI_IT_VSYNC | DCMI_IT_ERR | DCMI_IT_OVR);
+    /* Start DCMI DMA transfer */
+    HAL_StatusTypeDef status = HAL_DCMI_Start_DMA(&hdcmi,
+                                                    mode == CONTINUOUS ? DCMI_MODE_CONTINUOUS : DCMI_MODE_SNAPSHOT,
+                                                    (uint32_t)inImg->pixels,
+                                                    inImg->size / 2);
 
-    /* Calculate DMA transfer size based on format */
-    uint32_t dma_length;
-    if (inImg->format == IMAGE_FORMAT_RGB565 || inImg->format == IMAGE_FORMAT_YUV)
+    if (status != HAL_OK)
     {
-        /* 16-bit per pixel formats */
-        dma_length = inImg->size / 2; /* size is in bytes, DMA needs 32-bit words */
-    }
-    else if (inImg->format == IMAGE_FORMAT_RGB888)
-    {
-        /* 24-bit per pixel format */
-        dma_length = (inImg->size * 3) / 4; /* Adjust for 32-bit DMA alignment */
-    }
-    else
-    {
-        /* 8-bit per pixel (grayscale) */
-        dma_length = inImg->size / 4; /* 4 pixels per 32-bit word */
+        return -1;  /* DMA start failed */
     }
 
-    /* Start DMA transfer from DCMI to image buffer */
-    HAL_StatusTypeDef hal_status = HAL_DCMI_Start_DMA(&hdcmi,
-                                                       mode == CONTINUOUS ? DCMI_MODE_CONTINUOUS : DCMI_MODE_SNAPSHOT,
-                                                       (uint32_t)inImg->pixels,
-                                                       dma_length);
+    /* For single/snapshot mode, wait for frame completion */
+    if (mode == SINGLE)
+    {
+        uint32_t timeout = 5000;  /* 5 second timeout */
+        uint32_t tickstart = HAL_GetTick();
 
-    return (hal_status == HAL_OK) ? 0 : -1;
+        /* Wait until DCMI is ready (frame captured) */
+        while ((HAL_DCMI_GetState(&hdcmi) != HAL_DCMI_STATE_READY))
+        {
+            if ((HAL_GetTick() - tickstart) > timeout)
+            {
+                /* Timeout - stop DCMI */
+                HAL_DCMI_Stop(&hdcmi);
+                return -2;  /* Timeout error */
+            }
+        }
+
+        /* Additional small delay to ensure DMA completion */
+        HAL_Delay(50);
+    }
+
+    return 0;  /* Success */
 }
 
 static int camera_stop(void)
 {
-    HAL_StatusTypeDef hal_status = HAL_DCMI_Stop(&hdcmi);
-    return (hal_status == HAL_OK) ? 0 : -1;
+    HAL_DCMI_Stop(&hdcmi);
+    return 0;  /* Success */
 }
 
 static int camera_setRes(ImageResolution resolution)
 {
-    /*
-     * Change camera resolution while keeping the same format
-     * Re-initializes the camera with the new resolution and stored format
-     */
-    uint8_t status = CAMERA_Init(resolution, current_camera_format);
-    return (status == CAMERA_OK) ? 0 : -1;
+
+    CAMERA_PwrDown();
+    CAMERA_PwrUp();
+
+    // uint8_t status = CAMERA_ERROR;
+    /* Read ID of Camera module via I2C */
+    if (ov5640_ReadID(CAMERA_I2C_ADDRESS) == OV5640_ID)
+    {
+        /* Initialize the camera driver structure */
+        uint32_t index = 0;
+
+        for (index = 0; index < (sizeof(OV5640_Init) / 4); index++)
+        {
+            CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_Init[index][0], OV5640_Init[index][1]);
+        }
+
+        /* Initialize OV5640 */
+        switch (resolution)
+        {
+        case CAMERA_R160x120:
+        {
+            for (index = 0; index < (sizeof(OV5640_QQVGA) / 4); index++)
+            {
+                CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_QQVGA[index][0], OV5640_QQVGA[index][1]);
+            }
+            break;
+        }
+        case CAMERA_R320x240:
+        {
+            for (index = 0; index < (sizeof(OV5640_QVGA) / 4); index++)
+            {
+                CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_QVGA[index][0], OV5640_QVGA[index][1]);
+            }
+
+            break;
+        }
+        case CAMERA_R480x272:
+        {
+            for (index = 0; index < (sizeof(OV5640_480x272) / 4); index++)
+            {
+                CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_480x272[index][0], OV5640_480x272[index][1]);
+            }
+            break;
+        }
+        case CAMERA_R640x480:
+        {
+            for (index = 0; index < (sizeof(OV5640_VGA) / 4); index++)
+            {
+                CAMERA_IO_Write(CAMERA_I2C_ADDRESS, OV5640_VGA[index][0], OV5640_VGA[index][1]);
+            }
+            break;
+        }
+        default:
+        {
+            break;
+        }
+        }
+
+        HAL_DCMI_DisableCROP(&hdcmi);
+        HAL_Delay(500);
+
+        // status = CAMERA_OK; /* Return CAMERA_OK status */
+    }
+    else
+    {
+        // status = CAMERA_NOT_SUPPORTED; /* Return CAMERA_NOT_SUPPORTED status */
+    }
+
+    HAL_Delay(1000); // Delay for the camera to output correct data
+    __HAL_DCMI_DISABLE_IT(&hdcmi, DCMI_IT_LINE | DCMI_IT_VSYNC);
+
+    return 0;  /* Success */
 }
 
 camera_t stm32_ov5640 = {

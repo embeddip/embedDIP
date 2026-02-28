@@ -1,8 +1,36 @@
 #include "color.h"
 #include "core/error.h"
 #include <string.h>
+#include <math.h>
 
 // Static conversion functions
+
+// ----------- Inline Math Helpers (to avoid linking issues) ------------
+static inline float inline_fmodf(float x, float y)
+{
+    if (y == 0.0f) return 0.0f;
+    return x - ((int)(x / y)) * y;
+}
+
+static inline float inline_fabsf(float x)
+{
+    return (x < 0.0f) ? -x : x;
+}
+
+static inline float inline_fminf(float a, float b)
+{
+    return (a < b) ? a : b;
+}
+
+static inline float inline_fmaxf(float a, float b)
+{
+    return (a > b) ? a : b;
+}
+
+static inline float inline_roundf(float x)
+{
+    return (x >= 0.0f) ? (float)(int)(x + 0.5f) : (float)(int)(x - 0.5f);
+}
 
 // ----------- Helper Macros ------------
 #define RGB888_TO_RGB565(r, g, b) (uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
@@ -140,9 +168,9 @@ static embeddip_status_t rgb888_to_yuv(const Image *inImg, Image *outImg)
         uint8_t g = in[i * 3 + 1];
         uint8_t b = in[i * 3 + 2];
 
-        int y = (int)(roundf(0.299f * r + 0.587f * g + 0.114f * b));
-        int u = (int)(roundf(-0.14713f * r - 0.28886f * g + 0.436f * b)) + 128;
-        int v = (int)(roundf(0.615f * r - 0.51499f * g - 0.10001f * b)) + 128;
+        int y = (int)(inline_roundf(0.299f * r + 0.587f * g + 0.114f * b));
+        int u = (int)(inline_roundf(-0.14713f * r - 0.28886f * g + 0.436f * b)) + 128;
+        int v = (int)(inline_roundf(0.615f * r - 0.51499f * g - 0.10001f * b)) + 128;
 
         out[i * 3] = (uint8_t)CLIP(y);
         out[i * 3 + 1] = (uint8_t)CLIP(u);
@@ -173,9 +201,9 @@ static embeddip_status_t yuv_to_rgb888(const Image *inImg, Image *outImg)
         int g = (int)(y - 0.344 * u - 0.714 * v);
         int b = (int)(y + 1.770 * u);
 
-        out[i * 3] = (uint8_t)fminf(fmaxf(r, 0), 255);
-        out[i * 3 + 1] = (uint8_t)fminf(fmaxf(g, 0), 255);
-        out[i * 3 + 2] = (uint8_t)fminf(fmaxf(b, 0), 255);
+        out[i * 3] = (uint8_t)inline_fminf(inline_fmaxf(r, 0), 255);
+        out[i * 3 + 1] = (uint8_t)inline_fminf(inline_fmaxf(g, 0), 255);
+        out[i * 3 + 2] = (uint8_t)inline_fminf(inline_fmaxf(b, 0), 255);
     }
 
     return EMBEDDIP_OK;
@@ -198,8 +226,8 @@ static embeddip_status_t rgb888_to_HSI(const Image *inImg, Image *outImg)
         float g = in[i * 3 + 1] / 255.0f;
         float b = in[i * 3 + 2] / 255.0f;
 
-        float max = fmaxf(fmaxf(r, g), b);
-        float min = fminf(fminf(r, g), b);
+        float max = inline_fmaxf(inline_fmaxf(r, g), b);
+        float min = inline_fminf(inline_fminf(r, g), b);
         float delta = max - min;
 
         float h = 0.0f, s, v = max;
@@ -207,7 +235,7 @@ static embeddip_status_t rgb888_to_HSI(const Image *inImg, Image *outImg)
         if (delta != 0)
         {
             if (max == r)
-                h = 60 * fmodf((g - b) / delta, 6.0f);
+                h = 60 * inline_fmodf((g - b) / delta, 6.0f);
             else if (max == g)
                 h = 60 * ((b - r) / delta + 2);
             else
@@ -244,7 +272,7 @@ static embeddip_status_t HSI_to_rgb888(const Image *inImg, Image *outImg)
         float v = in[i * 3 + 2] / 255.0f;
 
         float c = v * s;
-        float x = c * (1 - fabsf(fmodf(h / 60.0f, 2) - 1));
+        float x = c * (1 - inline_fabsf(inline_fmodf(h / 60.0f, 2) - 1));
         float m = v - c;
 
         float r_, g_, b_;
@@ -315,8 +343,8 @@ static embeddip_status_t rgb565_to_HSI(const Image *inImg, Image *outImg)
         float gf = g / 255.0f;
         float bf = b / 255.0f;
 
-        float max = fmaxf(fmaxf(rf, gf), bf);
-        float min = fminf(fminf(rf, gf), bf);
+        float max = inline_fmaxf(inline_fmaxf(rf, gf), bf);
+        float min = inline_fminf(inline_fminf(rf, gf), bf);
         float delta = max - min;
 
         float h = 0.0f, s = 0.0f, v = max;
@@ -324,7 +352,7 @@ static embeddip_status_t rgb565_to_HSI(const Image *inImg, Image *outImg)
         if (delta > 0.0001f)
         {
             if (max == rf)
-                h = 60.0f * fmodf(((gf - bf) / delta), 6.0f);
+                h = 60.0f * inline_fmodf(((gf - bf) / delta), 6.0f);
             else if (max == gf)
                 h = 60.0f * (((bf - rf) / delta) + 2.0f);
             else // max == bf
@@ -362,7 +390,7 @@ static embeddip_status_t HSI_to_rgb565(const Image *inImg, Image *outImg)
         float v = in[i * 3 + 2] / 255.0f;
 
         float c = v * s;
-        float x = c * (1 - fabsf(fmodf(h / 60.0f, 2) - 1));
+        float x = c * (1 - inline_fabsf(inline_fmodf(h / 60.0f, 2) - 1));
         float m = v - c;
 
         float r_, g_, b_;
