@@ -11,7 +11,7 @@ namespace embedDIP
     public:
         explicit Camera(camera_t *driver);
 
-        bool init(ImageResolution res, ImageFormat format);
+        bool init(ImageResolution res, ImageFormat format = IMAGE_FORMAT_RGB565);
         bool capture(captureMode mode, Image &img);
         bool stop();
         bool setRes(ImageResolution res);

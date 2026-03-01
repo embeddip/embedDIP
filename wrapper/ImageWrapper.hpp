@@ -183,7 +183,6 @@ namespace embedDIP
         void drawHoughLine(float rho, float theta, uint8_t color) const noexcept;
 
         // Morphology
-        void getStructuringElement(Kernel &kernel, MorphShape shape, uint8_t size) const noexcept;
         void erode(Image &out, const Kernel &kernel, uint8_t iterations) const noexcept;
         void dilate(Image &out, const Kernel &kernel, uint8_t iterations) const noexcept;
         void opening(Image &out, const Kernel &kernel, uint8_t iterations) const noexcept;
@@ -276,7 +275,7 @@ namespace embedDIP
 
         void bitwiseAnd(const Image &other, Image &out) const;
         void _or(const Image &other, Image &out) const;
-        void _and(const Image &other, Image &out) const;
+        void _and_(const Image &other, Image &out) const;
 
         void bitwiseXor(const Image &other, Image &out) const;
         void bitwiseNot(Image &out) const;

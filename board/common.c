@@ -32,6 +32,10 @@ embeddip_status_t createImage(ImageResolution resolution, ImageFormat format, Im
         image->depth = IMAGE_DEPTH_U8;
         bytes_per_pixel = IMAGE_DEPTH_U8;
         break;
+    case IMAGE_FORMAT_MASK:
+        image->depth = IMAGE_DEPTH_U8;
+        bytes_per_pixel = IMAGE_DEPTH_U8;
+        break;
     case IMAGE_FORMAT_RGB565:
         image->depth = IMAGE_DEPTH_U16;
         bytes_per_pixel = IMAGE_DEPTH_U16;
@@ -97,6 +101,10 @@ embeddip_status_t createImageWH(int width, int height, ImageFormat format, Image
     switch (format)
     {
     case IMAGE_FORMAT_GRAYSCALE:
+        image->depth = IMAGE_DEPTH_U8;
+        bytes_per_pixel = IMAGE_DEPTH_U8;
+        break;
+    case IMAGE_FORMAT_MASK:
         image->depth = IMAGE_DEPTH_U8;
         bytes_per_pixel = IMAGE_DEPTH_U8;
         break;
@@ -203,7 +211,71 @@ embeddip_status_t createChals(Image *inImg, uint8_t numChals)
     {
         if (inImg->chals->ch[i] == NULL)
         {
-            size_t bufSize = (size_t)inImg->width * (size_t)inImg->height * sizeof(float) * 2U;
+            // NOTE: Removed "* 2U" multiplier - was allocating double the required memory
+            // Correct size: width × height × sizeof(float) for a single channel
+            // For WQVGA (480×272): 522,240 bytes per channel (not 1,044,480!)
+            size_t bufSize = (size_t)inImg->width * (size_t)inImg->height * sizeof(float);
+            inImg->chals->ch[i] = (float *)memory_alloc(bufSize);
+            if (inImg->chals->ch[i] == NULL)
+            {
+                // Roll back allocations for already-created channels
+                for (uint8_t j = 0; j < i; j++)
+                {
+                    if (inImg->chals->ch[j] != NULL)
+                    {
+                        memory_free(inImg->chals->ch[j]);
+                        inImg->chals->ch[j] = NULL;
+                    }
+                }
+                memory_free(inImg->chals);
+                inImg->chals = NULL;
+                return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+            }
+        }
+    }
+
+    inImg->is_chals = 1;
+    return EMBEDDIP_OK;
+}
+
+/**
+ * @brief Creates complex-valued channels for FFT operations.
+ *
+ * Allocates channels with 2× size to store interleaved complex data (real + imaginary).
+ * Used by FFT operations that need width × height × 2 × sizeof(float) per channel.
+ *
+ * @param inImg     Target image.
+ * @param numChals  Number of complex channels to create (1-3).
+ * @return EMBEDDIP_OK on success, error code otherwise.
+ */
+embeddip_status_t createChalsComplex(Image *inImg, uint8_t numChals)
+{
+    if (inImg == NULL) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+
+    if (numChals == 0 || numChals > 3) {
+        return EMBEDDIP_ERROR_INVALID_ARG;
+    }
+
+    if (inImg->chals == NULL)
+    {
+        inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (inImg->chals == NULL)
+        {
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
+        memset(inImg->chals, 0, sizeof(channels_t));
+    }
+
+    for (uint8_t i = 0; i < numChals; i++)
+    {
+        if (inImg->chals->ch[i] == NULL)
+        {
+            // Complex channel: width × height × 2 × sizeof(float)
+            // The × 2 is for interleaved real and imaginary parts
+            // For WQVGA (480×272): 1,044,480 bytes per complex channel
+            size_t bufSize = (size_t)inImg->width * (size_t)inImg->height * 2U * sizeof(float);
             inImg->chals->ch[i] = (float *)memory_alloc(bufSize);
             if (inImg->chals->ch[i] == NULL)
             {

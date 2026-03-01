@@ -87,8 +87,7 @@ void Image::grayscaleKMeans(Image &out, int k) const noexcept {
 }
 
 void Image::colorKMeans(Image &out, int k) const noexcept {
-  //::colorKMeans(raw(), out.raw(), k);
-  ::colorKMeans3(raw(), out.raw(), k);
+  ::colorKMeans(raw(), out.raw(), k);
 }
 void Image::grayscaleRegionGrowing(Image &out, const Point *seeds, int numSeeds,
                                    uint8_t tolerance) const noexcept {
@@ -112,7 +111,7 @@ void Image::colorRegionGrowing(Image &out, const Point *seeds, int numSeeds,
     cSeeds[i].y = seeds[i].y;
   }
 
-  ::colorRegionGrowing3(raw(), out.raw(), cSeeds.data(), numSeeds, tolerance);
+  ::colorRegionGrowing(raw(), out.raw(), cSeeds.data(), numSeeds, tolerance);
 }
 
 std::vector<std::vector<int>> Image::houghAccumulator(int numRho, int numTheta,
@@ -343,7 +342,7 @@ void Image::rgbMerge(const Image &r, const Image &g, const Image &b) noexcept
 
 void Image::filter2DSeparable(Image &out, int sizeX, float *kernelX, int sizeY,
                               float *kernelY, float delta) const {
-  ::filter2D_separable(raw(), out.raw(), sizeX, kernelX, sizeY, kernelY, delta);
+  ::sepfilter2D(raw(), out.raw(), sizeX, kernelX, sizeY, kernelY, delta);
 }
 
 void Image::sepFilter2D(Image &out, const std::vector<float> &kernelX,
@@ -363,7 +362,7 @@ void Image::sepFilter2D(Image &out, const std::vector<float> &kernelX,
  * @param[in]  delta    Optional scaling factor applied after convolution.
  */
 {
-  ::filter2D_separable(this->raw(), out.raw(), static_cast<int>(kernelX.size()),
+  ::sepfilter2D(this->raw(), out.raw(), static_cast<int>(kernelX.size()),
                        const_cast<float *>(kernelX.data()),
                        static_cast<int>(kernelY.size()),
                        const_cast<float *>(kernelY.data()), delta);
@@ -402,20 +401,20 @@ void Image::_abs_(Image &out) const { ::_abs_(raw(), out.raw()); }
 
 void Image::_phase_(Image &out) const { ::_phase_(raw(), out.raw()); }
 
-void Image::_log_() const { ::logImage(raw()); }
+void Image::_log_() const { ::_log_(raw()); }
 
-void Image::_add_(float value) const { ::addScalar(raw(), value); }
+void Image::_add_(float value) const { ::_add_(raw(), value); }
 
 void Image::normalize() { ::normalize(raw()); }
 
 void Image::fftshift() {
-  ::fftshift(raw()->chals->ch[1], raw()->width, raw()->height);
+  ::fftshift(raw());
 }
 
 void Image::ifft(Image &out) const { ::ifft(raw(), out.raw()); }
 
 void Image::ifftshift() {
-  ::fftshift(raw()->chals->ch[0], raw()->width, raw()->height);
+  ::fftshift(raw());
 }
 
 void Image::polarToCart(const Image &magnitude, Image &phase) const {
@@ -465,7 +464,7 @@ void Image::cvtColor(Image &out, ColorConversionCode code) const {
  * @brief Element-wise bitwise AND operation.
  */
 void Image::bitwiseAnd(const Image &other, Image &out) const {
-  ::_and(raw(), other.raw(), out.raw());
+  ::_and_(raw(), other.raw(), out.raw());
 }
 
 /**
@@ -476,10 +475,10 @@ void Image::_or(const Image &other, Image &out) const {
 }
 
 /**
- * @brief Element-wise bitwise OR operation.
+ * @brief Element-wise bitwise AND operation.
  */
-void Image::_and(const Image &other, Image &out) const {
-  ::_and(raw(), other.raw(), out.raw());
+void Image::_and_(const Image &other, Image &out) const {
+  ::_and_(raw(), other.raw(), out.raw());
 }
 
 /**

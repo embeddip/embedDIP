@@ -35,94 +35,110 @@ int filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
 
     int width = inImg->width;
     int height = inImg->height;
+    int num_pixels = width * height;
 
-    float *inCh = NULL;
-
-    if (inImg->chals == NULL)
+    // Ensure output has channels allocated
+    if (isChalsEmpty(outImg))
     {
-        inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-        inImg->chals->ch[0] = NULL;
-        inImg->chals->ch[1] = NULL;
-        inImg->chals->ch[2] = NULL;
-        inImg->chals->ch[3] = NULL;
+        createChals(outImg, outImg->depth);
+        outImg->is_chals = 1;
     }
 
-    // Allocate float input if necessary
-    if (inImg->is_chals & ~(channel_mask[ch_idx]))
+    // Ensure output channel is allocated
+    if (outImg->chals->ch[ch_idx] == NULL)
     {
-        inCh = inImg->chals->ch[ch_idx];
-    }
-    else
-    {
-        inImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * sizeof(float));
-        inCh = inImg->chals->ch[ch_idx];
-        inImg->is_chals = inImg->is_chals | ~(channel_mask[ch_idx]);
-
-        if (!inCh) {
+        outImg->chals->ch[ch_idx] = (float *)memory_alloc(num_pixels * sizeof(float));
+        if (!outImg->chals->ch[ch_idx]) {
             return EMBEDDIP_ERROR_OUT_OF_MEMORY;
         }
+    }
+
+    float *outCh = outImg->chals->ch[ch_idx];
+
+    // Apply 2D convolution based on input data location
+    if (inImg->log == IMAGE_DATA_PIXELS)
+    {
+        // Read directly from pixels buffer without allocating temp channel
         const uint8_t *raw = (const uint8_t *)inImg->pixels;
 
-        if (inImg->format == IMAGE_FORMAT_GRAYSCALE)
+        for (int y = 0; y < height; y++)
         {
-            for (int i = 0; i < (int)inImg->size; ++i)
-                inCh[i] = (float)raw[i];
+            for (int x = 0; x < width; x++)
+            {
+                float sum = 0.0f;
+
+                for (int fy = -k; fy <= k; ++fy)
+                {
+                    for (int fx = -k; fx <= k; ++fx)
+                    {
+                        int iy = y + fy;
+                        int ix = x + fx;
+
+                        float val = 0.0f;
+                        if (iy >= 0 && iy < height && ix >= 0 && ix < width)
+                        {
+                            if (inImg->format == IMAGE_FORMAT_GRAYSCALE)
+                            {
+                                val = (float)raw[iy * width + ix];
+                            }
+                            else if (inImg->format == IMAGE_FORMAT_RGB888)
+                            {
+                                val = (float)raw[(iy * width + ix) * 3 + ch_idx - 1];
+                            }
+                        }
+
+                        sum += val * kernel[(fy + k) * size + (fx + k)];
+                    }
+                }
+
+                outCh[y * width + x] = sum;
+            }
         }
-        else if (inImg->format == IMAGE_FORMAT_RGB888)
-        {
-            for (int i = 0; i < (int)inImg->size; ++i)
-                inCh[i] = (float)raw[i * 3 + ch_idx - 1]; // ch[1]=R, ch[2]=G, ch[3]=B
-        }
-    }
-
-    float *outCh = NULL;
-
-    if (outImg->chals == NULL)
-    {
-        outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-        outImg->chals->ch[0] = NULL;
-        outImg->chals->ch[1] = NULL;
-        outImg->chals->ch[2] = NULL;
-        outImg->chals->ch[3] = NULL;
-    }
-
-    if (outImg->is_chals & ~(channel_mask[ch_idx]))
-    {
-        outCh = outImg->chals->ch[ch_idx];
     }
     else
     {
-        outImg->chals->ch[ch_idx] = (float *)memory_alloc(height * width * sizeof(float));
-        outImg->is_chals = outImg->is_chals | ~(channel_mask[ch_idx]);
-        outCh = outImg->chals->ch[ch_idx];
-
-        if (!outCh) {
-            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
-        }
-    }
-
-    for (int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
+        // Read from chals - use appropriate channel
+        if (isChalsEmpty(inImg))
         {
-            float sum = 0.0f;
+            createChals((Image *)inImg, inImg->depth);
+        }
 
-            for (int fy = -k; fy <= k; ++fy)
+        // Map log state to channel index
+        int in_ch_idx = ch_idx;
+        if (inImg->log >= IMAGE_DATA_CH0 && inImg->log <= IMAGE_DATA_CH5)
+        {
+            in_ch_idx = inImg->log - IMAGE_DATA_CH0;
+        }
+        else if (inImg->log == IMAGE_DATA_MAGNITUDE || inImg->log == IMAGE_DATA_PHASE)
+        {
+            in_ch_idx = 0;
+        }
+
+        float *inCh = inImg->chals->ch[in_ch_idx];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
             {
-                for (int fx = -k; fx <= k; ++fx)
+                float sum = 0.0f;
+
+                for (int fy = -k; fy <= k; ++fy)
                 {
-                    int iy = y + fy;
-                    int ix = x + fx;
+                    for (int fx = -k; fx <= k; ++fx)
+                    {
+                        int iy = y + fy;
+                        int ix = x + fx;
 
-                    float val = 0.0f;
-                    if (iy >= 0 && iy < height && ix >= 0 && ix < width)
-                        val = inCh[iy * width + ix];
+                        float val = 0.0f;
+                        if (iy >= 0 && iy < height && ix >= 0 && ix < width)
+                            val = inCh[iy * width + ix];
 
-                    sum += val * kernel[(fy + k) * size + (fx + k)];
+                        sum += val * kernel[(fy + k) * size + (fx + k)];
+                    }
                 }
-            }
 
-            outCh[y * width + x] = sum;
+                outCh[y * width + x] = sum;
+            }
         }
     }
 
@@ -208,6 +224,7 @@ int filter2D(const Image *inImg, Image *outImg, const float *kernel, int kernelS
         if (status != EMBEDDIP_OK) {
             return status;
         }
+        outImg->log = IMAGE_DATA_CH0;
     }
     else if (inImg->format == IMAGE_FORMAT_RGB888) {
         // Filter each RGB channel independently
@@ -217,6 +234,7 @@ int filter2D(const Image *inImg, Image *outImg, const float *kernel, int kernelS
         if (status != EMBEDDIP_OK) return status;
         status = filter2D_single_channel((Image *)inImg, outImg, 3, &context);  // B channel
         if (status != EMBEDDIP_OK) return status;
+        outImg->log = IMAGE_DATA_CH1; // Multi-channel RGB data processed
     }
     else {
         // Unsupported format
@@ -226,7 +244,7 @@ int filter2D(const Image *inImg, Image *outImg, const float *kernel, int kernelS
     return EMBEDDIP_OK;
 }
 
-int filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
+int sepfilter2D(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
 {
     if (!inImg || !outImg || !kernelX || !kernelY) {
         return EMBEDDIP_ERROR_NULL_PTR;
@@ -236,64 +254,79 @@ int filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, i
     }
 
     int half = sizeX / 2;
-
     int width = inImg->width;
     int height = inImg->height;
+    int num_pixels = width * height;
 
-    // Prepare input channel
+    // Ensure output has channels allocated
+    if (isChalsEmpty(outImg))
+    {
+        createChals(outImg, outImg->depth);
+        outImg->is_chals = 1;
+    }
+
     float *inCh = NULL;
 
-    if (!inImg->chals)
+    // Check where the valid input data is located based on log state
+    if (inImg->log == IMAGE_DATA_PIXELS)
     {
-        inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-        memset(inImg->chals, 0, sizeof(channels_t));
-    }
+        // Valid data is in pixels buffer - convert to float channel
+        if (isChalsEmpty(inImg))
+        {
+            createChals((Image *)inImg, inImg->depth);
+        }
 
-    if (inImg->is_chals & ~(channel_mask[0]))
-    {
+        if (inImg->chals->ch[0] == NULL)
+        {
+            inImg->chals->ch[0] = (float *)memory_alloc(num_pixels * sizeof(float));
+        }
+
         inCh = inImg->chals->ch[0];
-    }
-    else
-    {
-        inCh = (float *)memory_alloc(height * width * sizeof(float));
-        inImg->chals->ch[0] = inCh;
-        inImg->is_chals |= ~(channel_mask[0]);
-
         const uint8_t *raw = (const uint8_t *)inImg->pixels;
+
         if (inImg->format == IMAGE_FORMAT_GRAYSCALE)
         {
-            for (int i = 0; i < (int)inImg->size; ++i)
+            for (int i = 0; i < num_pixels; ++i)
                 inCh[i] = (float)raw[i];
         }
         else if (inImg->format == IMAGE_FORMAT_RGB888)
         {
-            for (int i = 0; i < (int)inImg->size; ++i)
-                inCh[i] = (float)raw[i * 3 + 0 - 1];
+            for (int i = 0; i < num_pixels; ++i)
+                inCh[i] = (float)raw[i * 3];
         }
-    }
-
-    // Temp buffer after vertical pass
-    float *temp = (float *)memory_alloc(width * height * sizeof(float));
-
-    // Horizontal kernel output
-    float *outCh = NULL;
-
-    if (!outImg->chals)
-    {
-        outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-        memset(outImg->chals, 0, sizeof(channels_t));
-    }
-
-    if (outImg->is_chals & ~(channel_mask[0]))
-    {
-        outCh = outImg->chals->ch[0];
     }
     else
     {
-        outCh = (float *)memory_alloc(height * width * sizeof(float));
-        outImg->chals->ch[0] = outCh;
-        outImg->is_chals |= ~(channel_mask[0]);
+        // Valid data is in chals - use appropriate channel
+        if (isChalsEmpty(inImg))
+        {
+            createChals((Image *)inImg, inImg->depth);
+        }
+
+        // Map log state to channel index
+        int ch_idx = 0;
+        if (inImg->log >= IMAGE_DATA_CH0 && inImg->log <= IMAGE_DATA_CH5)
+        {
+            ch_idx = inImg->log - IMAGE_DATA_CH0;
+        }
+        else if (inImg->log == IMAGE_DATA_MAGNITUDE || inImg->log == IMAGE_DATA_PHASE)
+        {
+            ch_idx = 0;
+        }
+
+        inCh = inImg->chals->ch[ch_idx];
     }
+
+    // Ensure output channel is allocated
+    if (outImg->chals->ch[0] == NULL)
+    {
+        outImg->chals->ch[0] = (float *)memory_alloc(num_pixels * sizeof(float));
+    }
+
+    float *outCh = outImg->chals->ch[0];
+
+    // Temp buffer for intermediate results
+    float *temp = (float *)memory_alloc(num_pixels * sizeof(float));
 
     // Vertical pass
     for (int y = 0; y < height; ++y)
@@ -324,12 +357,14 @@ int filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, i
                     sum += temp[y * width + ix] * kernelX[kx + half];
             }
 
-            sum = (float)(sum * delta); // Uncomment if delta is a normalization factor
-
+            sum = (float)(sum * delta);
             outCh[y * width + x] = sum;
         }
     }
 
+    memory_free(temp);
+
+    outImg->log = IMAGE_DATA_CH0;
     return EMBEDDIP_OK;
 }
 
@@ -393,14 +428,18 @@ int minFilter(const Image *inImg, Image *outImg, int kernelSize)
 
     int kernelRadius = kernelSize / 2;
 
+    // Ensure output has channels allocated
     if (isChalsEmpty(outImg))
     {
         createChals(outImg, outImg->depth);
         outImg->is_chals = 1;
     }
 
-    if (isChalsEmpty(inImg))
+    // Check where the valid input data is located based on log state
+    if (inImg->log == IMAGE_DATA_PIXELS)
     {
+        // Valid data is in pixels buffer - read as uint8_t
+        uint8_t *pixels = (uint8_t *)inImg->pixels;
 
         for (uint32_t y = 0; y < inImg->height; ++y)
         {
@@ -418,7 +457,7 @@ int minFilter(const Image *inImg, Image *outImg, int kernelSize)
                         if (offsetX >= 0 && offsetX < (int)inImg->width &&
                             offsetY >= 0 && offsetY < (int)inImg->height)
                         {
-                            uint8_t pixelValue = (uint8_t)((uint8_t *)inImg->pixels)[offsetY * inImg->width + offsetX];
+                            uint8_t pixelValue = pixels[offsetY * inImg->width + offsetX];
                             if (pixelValue < minPixelValue)
                             {
                                 minPixelValue = pixelValue;
@@ -427,12 +466,30 @@ int minFilter(const Image *inImg, Image *outImg, int kernelSize)
                     }
                 }
 
-                outImg->chals->ch[0][y * inImg->width + x] = minPixelValue;
+                outImg->chals->ch[0][y * inImg->width + x] = (float)minPixelValue;
             }
         }
     }
     else
     {
+        // Valid data is in chals - determine which channel based on log
+        if (isChalsEmpty(inImg))
+        {
+            createChals((Image *)inImg, inImg->depth);
+        }
+
+        // Map log state to channel index
+        int ch_idx = 0;
+        if (inImg->log >= IMAGE_DATA_CH0 && inImg->log <= IMAGE_DATA_CH5)
+        {
+            ch_idx = inImg->log - IMAGE_DATA_CH0;
+        }
+        else if (inImg->log == IMAGE_DATA_MAGNITUDE || inImg->log == IMAGE_DATA_PHASE)
+        {
+            ch_idx = 0;
+        }
+
+        float *inCh = inImg->chals->ch[ch_idx];
 
         for (uint32_t y = 0; y < inImg->height; ++y)
         {
@@ -450,7 +507,7 @@ int minFilter(const Image *inImg, Image *outImg, int kernelSize)
                         if (offsetX >= 0 && offsetX < (int)inImg->width &&
                             offsetY >= 0 && offsetY < (int)inImg->height)
                         {
-                            float pixelValue = inImg->chals->ch[0][offsetY * inImg->width + offsetX];
+                            float pixelValue = inCh[offsetY * inImg->width + offsetX];
                             if (pixelValue < minPixelValue)
                             {
                                 minPixelValue = pixelValue;
@@ -464,6 +521,7 @@ int minFilter(const Image *inImg, Image *outImg, int kernelSize)
         }
     }
 
+    outImg->log = IMAGE_DATA_CH0;
     return EMBEDDIP_OK;
 }
 
@@ -486,14 +544,19 @@ int maxFilter(const Image *inImg, Image *outImg, int kernelSize)
 
     int kernelRadius = kernelSize / 2;
 
+    // Ensure output has channels allocated
     if (isChalsEmpty(outImg))
     {
         createChals(outImg, outImg->depth);
         outImg->is_chals = 1;
     }
 
-    if (isChalsEmpty(inImg))
+    // Check where the valid input data is located based on log state
+    if (inImg->log == IMAGE_DATA_PIXELS)
     {
+        // Valid data is in pixels buffer - read as uint8_t
+        uint8_t *pixels = (uint8_t *)inImg->pixels;
+
         for (uint32_t y = 0; y < inImg->height; ++y)
         {
             for (uint32_t x = 0; x < inImg->width; ++x)
@@ -510,7 +573,7 @@ int maxFilter(const Image *inImg, Image *outImg, int kernelSize)
                         if (offsetX >= 0 && offsetX < (int)inImg->width &&
                             offsetY >= 0 && offsetY < (int)inImg->height)
                         {
-                            uint8_t pixelValue = (uint8_t)((uint8_t *)inImg->pixels)[offsetY * inImg->width + offsetX];
+                            uint8_t pixelValue = pixels[offsetY * inImg->width + offsetX];
                             if (pixelValue > maxPixelValue)
                             {
                                 maxPixelValue = pixelValue;
@@ -519,17 +582,36 @@ int maxFilter(const Image *inImg, Image *outImg, int kernelSize)
                     }
                 }
 
-                outImg->chals->ch[0][y * inImg->width + x] = maxPixelValue;
+                outImg->chals->ch[0][y * inImg->width + x] = (float)maxPixelValue;
             }
         }
     }
     else
     {
+        // Valid data is in chals - determine which channel based on log
+        if (isChalsEmpty(inImg))
+        {
+            createChals((Image *)inImg, inImg->depth);
+        }
+
+        // Map log state to channel index
+        int ch_idx = 0;
+        if (inImg->log >= IMAGE_DATA_CH0 && inImg->log <= IMAGE_DATA_CH5)
+        {
+            ch_idx = inImg->log - IMAGE_DATA_CH0;
+        }
+        else if (inImg->log == IMAGE_DATA_MAGNITUDE || inImg->log == IMAGE_DATA_PHASE)
+        {
+            ch_idx = 0;
+        }
+
+        float *inCh = inImg->chals->ch[ch_idx];
+
         for (uint32_t y = 0; y < inImg->height; ++y)
         {
             for (uint32_t x = 0; x < inImg->width; ++x)
             {
-                uint8_t maxPixelValue = 0;
+                float maxPixelValue = -FLT_MAX;
 
                 for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
                 {
@@ -541,7 +623,7 @@ int maxFilter(const Image *inImg, Image *outImg, int kernelSize)
                         if (offsetX >= 0 && offsetX < (int)inImg->width &&
                             offsetY >= 0 && offsetY < (int)inImg->height)
                         {
-                            float pixelValue = (float)inImg->chals->ch[0][offsetY * inImg->width + offsetX];
+                            float pixelValue = inCh[offsetY * inImg->width + offsetX];
                             if (pixelValue > maxPixelValue)
                             {
                                 maxPixelValue = pixelValue;
@@ -555,6 +637,7 @@ int maxFilter(const Image *inImg, Image *outImg, int kernelSize)
         }
     }
 
+    outImg->log = IMAGE_DATA_CH0;
     return EMBEDDIP_OK;
 }
 
@@ -579,6 +662,7 @@ int medianFilter(const Image *inImg, Image *outImg, int kernelSize)
     int kernelRadius = kernelSize / 2;
     int windowArea = kernelSize * kernelSize;
 
+    // Ensure output has channels allocated
     if (isChalsEmpty(outImg))
     {
         createChals(outImg, outImg->depth);
@@ -588,59 +672,125 @@ int medianFilter(const Image *inImg, Image *outImg, int kernelSize)
     // Temporary buffer to store window values
     float *window = (float *)memory_alloc(sizeof(float) * windowArea);
 
-    for (uint32_t y = 0; y < inImg->height; ++y)
+    // Check where the valid input data is located based on log state
+    if (inImg->log == IMAGE_DATA_PIXELS)
     {
-        for (uint32_t x = 0; x < inImg->width; ++x)
+        // Valid data is in pixels buffer - read as uint8_t
+        uint8_t *pixels = (uint8_t *)inImg->pixels;
+
+        for (uint32_t y = 0; y < inImg->height; ++y)
         {
-            int count = 0;
-
-            for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
+            for (uint32_t x = 0; x < inImg->width; ++x)
             {
-                for (int kx = -kernelRadius; kx <= kernelRadius; ++kx)
-                {
-                    int offsetX = x + kx;
-                    int offsetY = y + ky;
+                int count = 0;
 
-                    if (offsetX >= 0 && offsetX < (int)inImg->width &&
-                        offsetY >= 0 && offsetY < (int)inImg->height)
+                for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
+                {
+                    for (int kx = -kernelRadius; kx <= kernelRadius; ++kx)
                     {
-                        float val;
-                        if (isChalsEmpty(inImg))
+                        int offsetX = x + kx;
+                        int offsetY = y + ky;
+
+                        if (offsetX >= 0 && offsetX < (int)inImg->width &&
+                            offsetY >= 0 && offsetY < (int)inImg->height)
                         {
-                            val = (float)((uint8_t *)inImg->pixels)[offsetY * inImg->width + offsetX];
+                            window[count++] = (float)pixels[offsetY * inImg->width + offsetX];
                         }
-                        else
-                        {
-                            val = inImg->chals->ch[0][offsetY * inImg->width + offsetX];
-                        }
-                        window[count++] = val;
                     }
                 }
-            }
 
-            // Sort the window and take the median
-            for (int i = 0; i < count - 1; ++i)
-            {
-                for (int j = i + 1; j < count; ++j)
+                // Sort the window and take the median
+                for (int i = 0; i < count - 1; ++i)
                 {
-                    if (window[i] > window[j])
+                    for (int j = i + 1; j < count; ++j)
                     {
-                        float tmp = window[i];
-                        window[i] = window[j];
-                        window[j] = tmp;
+                        if (window[i] > window[j])
+                        {
+                            float tmp = window[i];
+                            window[i] = window[j];
+                            window[j] = tmp;
+                        }
                     }
                 }
+
+                float median;
+                if (count % 2 == 1)
+                    median = window[count / 2];
+                else
+                    median = (window[count / 2 - 1] + window[count / 2]) / 2.0f;
+
+                outImg->chals->ch[0][y * inImg->width + x] = median;
             }
-
-            float median;
-            if (count % 2 == 1)
-                median = window[count / 2];
-            else
-                median = (window[count / 2 - 1] + window[count / 2]) / 2.0f;
-
-            outImg->chals->ch[0][y * inImg->width + x] = median;
         }
     }
+    else
+    {
+        // Valid data is in chals - determine which channel based on log
+        if (isChalsEmpty(inImg))
+        {
+            createChals((Image *)inImg, inImg->depth);
+        }
+
+        // Map log state to channel index
+        int ch_idx = 0;
+        if (inImg->log >= IMAGE_DATA_CH0 && inImg->log <= IMAGE_DATA_CH5)
+        {
+            ch_idx = inImg->log - IMAGE_DATA_CH0;
+        }
+        else if (inImg->log == IMAGE_DATA_MAGNITUDE || inImg->log == IMAGE_DATA_PHASE)
+        {
+            ch_idx = 0;
+        }
+
+        float *inCh = inImg->chals->ch[ch_idx];
+
+        for (uint32_t y = 0; y < inImg->height; ++y)
+        {
+            for (uint32_t x = 0; x < inImg->width; ++x)
+            {
+                int count = 0;
+
+                for (int ky = -kernelRadius; ky <= kernelRadius; ++ky)
+                {
+                    for (int kx = -kernelRadius; kx <= kernelRadius; ++kx)
+                    {
+                        int offsetX = x + kx;
+                        int offsetY = y + ky;
+
+                        if (offsetX >= 0 && offsetX < (int)inImg->width &&
+                            offsetY >= 0 && offsetY < (int)inImg->height)
+                        {
+                            window[count++] = inCh[offsetY * inImg->width + offsetX];
+                        }
+                    }
+                }
+
+                // Sort the window and take the median
+                for (int i = 0; i < count - 1; ++i)
+                {
+                    for (int j = i + 1; j < count; ++j)
+                    {
+                        if (window[i] > window[j])
+                        {
+                            float tmp = window[i];
+                            window[i] = window[j];
+                            window[j] = tmp;
+                        }
+                    }
+                }
+
+                float median;
+                if (count % 2 == 1)
+                    median = window[count / 2];
+                else
+                    median = (window[count / 2 - 1] + window[count / 2]) / 2.0f;
+
+                outImg->chals->ch[0][y * inImg->width + x] = median;
+            }
+        }
+    }
+
+    memory_free(window);
 
     outImg->log = IMAGE_DATA_CH0;
     return EMBEDDIP_OK;
@@ -665,17 +815,46 @@ int rgbSplit(const Image *inImg, Image *rImg, Image *gImg, Image *bImg)
     CHECK_FORMAT_INT(gImg, IMAGE_FORMAT_GRAYSCALE);
     CHECK_FORMAT_INT(bImg, IMAGE_FORMAT_GRAYSCALE);
 
-    const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *r = (uint8_t *)rImg->pixels;
     uint8_t *g = (uint8_t *)gImg->pixels;
     uint8_t *b = (uint8_t *)bImg->pixels;
 
-    for (uint32_t i = 0; i < inImg->size; ++i)
+    // Check where the valid input data is located based on log state
+    if (inImg->log == IMAGE_DATA_PIXELS)
     {
-        r[i] = in[i * 3 + 0];
-        g[i] = in[i * 3 + 1];
-        b[i] = in[i * 3 + 2];
+        // Valid data is in pixels buffer - RGB888 interleaved
+        const uint8_t *in = (const uint8_t *)inImg->pixels;
+
+        for (uint32_t i = 0; i < inImg->size; ++i)
+        {
+            r[i] = in[i * 3 + 0];
+            g[i] = in[i * 3 + 1];
+            b[i] = in[i * 3 + 2];
+        }
     }
+    else
+    {
+        // Valid data is in chals - RGB in separate channels (ch[1]=R, ch[2]=G, ch[3]=B)
+        if (isChalsEmpty(inImg))
+        {
+            createChals((Image *)inImg, inImg->depth);
+        }
+
+        float *rCh = inImg->chals->ch[1];
+        float *gCh = inImg->chals->ch[2];
+        float *bCh = inImg->chals->ch[3];
+
+        for (uint32_t i = 0; i < inImg->size; ++i)
+        {
+            r[i] = (uint8_t)(rCh[i] > 255.0f ? 255 : (rCh[i] < 0.0f ? 0 : rCh[i]));
+            g[i] = (uint8_t)(gCh[i] > 255.0f ? 255 : (gCh[i] < 0.0f ? 0 : gCh[i]));
+            b[i] = (uint8_t)(bCh[i] > 255.0f ? 255 : (bCh[i] < 0.0f ? 0 : bCh[i]));
+        }
+    }
+
+    rImg->log = IMAGE_DATA_PIXELS;
+    gImg->log = IMAGE_DATA_PIXELS;
+    bImg->log = IMAGE_DATA_PIXELS;
 
     return EMBEDDIP_OK;
 }
@@ -700,17 +879,71 @@ int rgbMerge(const Image *rImg, const Image *gImg, const Image *bImg, Image *out
     CHECK_FORMAT_INT(bImg, IMAGE_FORMAT_GRAYSCALE);
 
     uint8_t *out = (uint8_t *)outImg->pixels;
-    const uint8_t *r = (const uint8_t *)rImg->pixels;
-    const uint8_t *g = (const uint8_t *)gImg->pixels;
-    const uint8_t *b = (const uint8_t *)bImg->pixels;
 
-    for (uint32_t i = 0; i < outImg->size; ++i)
+    // Check where the valid input data is located based on log state
+    // All three inputs should have the same state (pixels or channels)
+    if (rImg->log == IMAGE_DATA_PIXELS)
     {
-        out[i * 3 + 0] = r[i];
-        out[i * 3 + 1] = g[i];
-        out[i * 3 + 2] = b[i];
+        // Valid data is in pixels buffer
+        const uint8_t *r = (const uint8_t *)rImg->pixels;
+        const uint8_t *g = (const uint8_t *)gImg->pixels;
+        const uint8_t *b = (const uint8_t *)bImg->pixels;
+
+        for (uint32_t i = 0; i < outImg->size; ++i)
+        {
+            out[i * 3 + 0] = r[i];
+            out[i * 3 + 1] = g[i];
+            out[i * 3 + 2] = b[i];
+        }
+    }
+    else
+    {
+        // Valid data is in chals - grayscale in ch[0]
+        if (isChalsEmpty(rImg))
+        {
+            createChals((Image *)rImg, rImg->depth);
+        }
+        if (isChalsEmpty(gImg))
+        {
+            createChals((Image *)gImg, gImg->depth);
+        }
+        if (isChalsEmpty(bImg))
+        {
+            createChals((Image *)bImg, bImg->depth);
+        }
+
+        // Map log state to channel index for each input
+        int r_ch_idx = 0;
+        if (rImg->log >= IMAGE_DATA_CH0 && rImg->log <= IMAGE_DATA_CH5)
+        {
+            r_ch_idx = rImg->log - IMAGE_DATA_CH0;
+        }
+
+        int g_ch_idx = 0;
+        if (gImg->log >= IMAGE_DATA_CH0 && gImg->log <= IMAGE_DATA_CH5)
+        {
+            g_ch_idx = gImg->log - IMAGE_DATA_CH0;
+        }
+
+        int b_ch_idx = 0;
+        if (bImg->log >= IMAGE_DATA_CH0 && bImg->log <= IMAGE_DATA_CH5)
+        {
+            b_ch_idx = bImg->log - IMAGE_DATA_CH0;
+        }
+
+        float *rCh = rImg->chals->ch[r_ch_idx];
+        float *gCh = gImg->chals->ch[g_ch_idx];
+        float *bCh = bImg->chals->ch[b_ch_idx];
+
+        for (uint32_t i = 0; i < outImg->size; ++i)
+        {
+            out[i * 3 + 0] = (uint8_t)(rCh[i] > 255.0f ? 255 : (rCh[i] < 0.0f ? 0 : rCh[i]));
+            out[i * 3 + 1] = (uint8_t)(gCh[i] > 255.0f ? 255 : (gCh[i] < 0.0f ? 0 : gCh[i]));
+            out[i * 3 + 2] = (uint8_t)(bCh[i] > 255.0f ? 255 : (bCh[i] < 0.0f ? 0 : bCh[i]));
+        }
     }
 
+    outImg->log = IMAGE_DATA_PIXELS;
     return EMBEDDIP_OK;
 }
 
@@ -855,14 +1088,18 @@ int dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2)
  * @param[out] outImg  Pointer to output image (float convolution result).
  * @param[in]  sigma   Standard deviation of the Gaussian (controls smoothness).
  */
-int logFilter(const Image *inImg, Image *outImg, float sigma)
+embeddip_status_t logFilter(const Image *inImg, Image *outImg, float sigma)
 {
-    if (!inImg || !outImg) {
-        return EMBEDDIP_ERROR_NULL_PTR;
-    }
-    if (inImg->format != IMAGE_FORMAT_GRAYSCALE) {
-        return EMBEDDIP_ERROR_INVALID_FORMAT;
-    }
+    // Validate input pointers
+    CHECK_NULL_INT(inImg);
+    CHECK_NULL_INT(outImg);
+    CHECK_NULL_INT(inImg->pixels);
+
+    // Validate format and dimensions
+    CHECK_FORMAT_INT(inImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_CONDITION_INT(inImg->width > 0 && inImg->height > 0);
+    CHECK_CONDITION_INT(outImg->width == inImg->width && outImg->height == inImg->height);
+    CHECK_CONDITION_INT(sigma > 0.0f);
 
     int width = inImg->width;
     int height = inImg->height;
@@ -873,6 +1110,7 @@ int logFilter(const Image *inImg, Image *outImg, float sigma)
 
     // Allocate LoG kernel
     float *kernel = (float *)memory_alloc(ksize * ksize * sizeof(float));
+    if (!kernel) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
 
     float sum = 0.0f;
     for (int y = -half; y <= half; ++y)
@@ -895,6 +1133,11 @@ int logFilter(const Image *inImg, Image *outImg, float sigma)
 
     // Allocate float buffer and convert input
     float *src = (float *)memory_alloc(width * height * sizeof(float));
+    if (!src) {
+        memory_free(kernel);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
+
     const uint8_t *raw = (const uint8_t *)inImg->pixels;
     for (int i = 0; i < width * height; ++i)
         src[i] = (float)raw[i];
@@ -903,9 +1146,21 @@ int logFilter(const Image *inImg, Image *outImg, float sigma)
     if (!outImg->chals)
     {
         outImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (!outImg->chals) {
+            memory_free(kernel);
+            memory_free(src);
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
         memset(outImg->chals, 0, sizeof(channels_t));
     }
+
     outImg->chals->ch[0] = (float *)memory_alloc(width * height * sizeof(float));
+    if (!outImg->chals->ch[0]) {
+        memory_free(kernel);
+        memory_free(src);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
+
     outImg->is_chals |= channel_mask[0];
     float *outCh = outImg->chals->ch[0];
 
@@ -1180,18 +1435,29 @@ static void sep_conv_xy_f32(const float *src, float *dst,
  * Writes float results into outIx->chals->ch[0] and outIy->chals->ch[0],
  * mirroring your logFilter() “float in ch0” convention.
  */
-int gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma)
+embeddip_status_t gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma)
 {
+    // Validate input pointers
     CHECK_NULL_INT(inImg);
     CHECK_NULL_INT(outIx);
     CHECK_NULL_INT(outIy);
+    CHECK_NULL_INT(inImg->pixels);
+
+    // Validate format and dimensions
     CHECK_FORMAT_INT(inImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_CONDITION_INT(inImg->width > 0 && inImg->height > 0);
+    CHECK_CONDITION_INT(outIx->width == inImg->width && outIx->height == inImg->height);
+    CHECK_CONDITION_INT(outIy->width == inImg->width && outIy->height == inImg->height);
+    CHECK_CONDITION_INT(sigma > 0.0f);
+
     int width = inImg->width, height = inImg->height;
     int N = width * height;
 
     // input to float buffer
     const uint8_t *raw = (const uint8_t *)inImg->pixels;
     float *src = (float *)memory_alloc((size_t)N * sizeof(float));
+    if (!src) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+
     for (int i = 0; i < N; ++i)
         src[i] = (float)raw[i];
 
@@ -1199,20 +1465,54 @@ int gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigm
     float *G = NULL, *dG = NULL;
     int ksz = 0;
     make_gaussian_and_dgauss_1d(sigma, &G, &dG, &ksz);
+    if (!G || !dG) {
+        memory_free(src);
+        memory_free(G);
+        memory_free(dG);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
 
     // prepare outputs (float channels)
     if (!outIx->chals)
     {
         outIx->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (!outIx->chals) {
+            memory_free(G);
+            memory_free(dG);
+            memory_free(src);
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
         memset(outIx->chals, 0, sizeof(channels_t));
     }
     if (!outIy->chals)
     {
         outIy->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (!outIy->chals) {
+            memory_free(G);
+            memory_free(dG);
+            memory_free(src);
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
         memset(outIy->chals, 0, sizeof(channels_t));
     }
+
     outIx->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    if (!outIx->chals->ch[0]) {
+        memory_free(G);
+        memory_free(dG);
+        memory_free(src);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
+
     outIy->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    if (!outIy->chals->ch[0]) {
+        memory_free(outIx->chals->ch[0]);
+        memory_free(G);
+        memory_free(dG);
+        memory_free(src);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
+
     outIx->is_chals = 1;
     outIy->is_chals = 1;
     float *ix = outIx->chals->ch[0];
@@ -1237,29 +1537,42 @@ int gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigm
  * @brief Compute gradient magnitude sqrt(Ix^2 + Iy^2) from float ch0 of Ix, Iy.
  * Writes float magnitude to outMag->chals->ch[0].
  */
-int gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
+embeddip_status_t gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
 {
+    // Validate input pointers
     CHECK_NULL_INT(IxImg);
     CHECK_NULL_INT(IyImg);
     CHECK_NULL_INT(outMag);
+
+    // Validate dimensions
+    CHECK_CONDITION_INT(IxImg->width > 0 && IxImg->height > 0);
+    CHECK_CONDITION_INT(IxImg->width == IyImg->width && IxImg->height == IyImg->height);
+    CHECK_CONDITION_INT(outMag->width == IxImg->width && outMag->height == IxImg->height);
+
     uint32_t width = IxImg->width, height = IxImg->height;
-    CHECK_CONDITION_INT(width == IyImg->width && height == IyImg->height);
     uint32_t N = width * height;
 
+    // Validate channel data exists
     const float *ix = IxImg->chals ? IxImg->chals->ch[0] : NULL;
     const float *iy = IyImg->chals ? IyImg->chals->ch[0] : NULL;
     CHECK_NULL_INT(ix);
     CHECK_NULL_INT(iy);
 
+    // Allocate output channel
     if (!outMag->chals)
     {
         outMag->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (!outMag->chals) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
         memset(outMag->chals, 0, sizeof(channels_t));
     }
+
     outMag->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    if (!outMag->chals->ch[0]) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+
     outMag->is_chals = 1;
     float *mag = outMag->chals->ch[0];
 
+    // Compute magnitude
     for (uint32_t i = 0; i < N; ++i)
     {
         float gx = ix[i], gy = iy[i];
@@ -1275,29 +1588,42 @@ int gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag)
  * Writes float phase (in radians) to outPhase->chals->ch[0].
  * Range: [-π, π].
  */
-int gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase)
+embeddip_status_t gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase)
 {
+    // Validate input pointers
     CHECK_NULL_INT(IxImg);
     CHECK_NULL_INT(IyImg);
     CHECK_NULL_INT(outPhase);
-    uint32_t width = IxImg->width, height = IyImg->height;
-    CHECK_CONDITION_INT(width == IyImg->width && height == IyImg->height);
+
+    // Validate dimensions (fix bug: was using IyImg->height for width)
+    CHECK_CONDITION_INT(IxImg->width > 0 && IxImg->height > 0);
+    CHECK_CONDITION_INT(IxImg->width == IyImg->width && IxImg->height == IyImg->height);
+    CHECK_CONDITION_INT(outPhase->width == IxImg->width && outPhase->height == IxImg->height);
+
+    uint32_t width = IxImg->width, height = IxImg->height;
     uint32_t N = width * height;
 
+    // Validate channel data exists
     const float *ix = IxImg->chals ? IxImg->chals->ch[0] : NULL;
     const float *iy = IyImg->chals ? IyImg->chals->ch[0] : NULL;
     CHECK_NULL_INT(ix);
     CHECK_NULL_INT(iy);
 
+    // Allocate output channel
     if (!outPhase->chals)
     {
         outPhase->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (!outPhase->chals) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
         memset(outPhase->chals, 0, sizeof(channels_t));
     }
+
     outPhase->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    if (!outPhase->chals->ch[0]) return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+
     outPhase->is_chals = 1;
     float *phase = outPhase->chals->ch[0];
 
+    // Compute phase
     for (uint32_t i = 0; i < N; ++i)
     {
         float gx = ix[i], gy = iy[i];

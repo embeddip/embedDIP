@@ -694,11 +694,30 @@ embeddip_status_t hueThreshold(const Image *input, Image *output, float minHue, 
  */
 embeddip_status_t inRange(const Image *input, Image *mask, const uint8_t lower[3], const uint8_t upper[3])
 {
+    // Null pointer checks
     if (!input || !mask || !lower || !upper) {
         return EMBEDDIP_ERROR_NULL_PTR;
     }
-    if (mask->format != IMAGE_FORMAT_GRAYSCALE) {
+
+    if (!input->pixels || !mask->pixels) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+
+    // Format validation - input must be 3-channel
+    if (input->format != IMAGE_FORMAT_RGB888 &&
+        input->format != IMAGE_FORMAT_HSI &&
+        input->format != IMAGE_FORMAT_YUV) {
         return EMBEDDIP_ERROR_INVALID_FORMAT;
+    }
+
+    // Mask must be grayscale or mask format
+    if (mask->format != IMAGE_FORMAT_GRAYSCALE && mask->format != IMAGE_FORMAT_MASK) {
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    }
+
+    // Dimension validation
+    if (input->width != mask->width || input->height != mask->height) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
     }
 
     const uint8_t *in = (const uint8_t *)input->pixels;

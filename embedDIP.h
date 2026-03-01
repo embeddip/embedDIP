@@ -120,6 +120,7 @@ extern "C"
 #include "imgproc/histogram.h"    /**< Histogram ops and equalization. */
 #include "core/memory_manager.h"  /**< Allocators and memory helpers. */
 #include "imgproc/color.h"        /**< Color conversions and helpers. */
+#include "imgproc/pixel.h"        /**< Pixel operations (negative, etc). */
 #include "board/common.h"         /**< Board-level helpers and timing. */
 #include "device/serial/serial.h" /**< Serial I/O abstraction. */
 #include "imgproc/fft.h"          /**< Frequency-domain processing. */

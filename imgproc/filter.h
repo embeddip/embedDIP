@@ -31,7 +31,7 @@ extern "C"
 
     int filter2D(const Image *inImg, Image *outImg, const float *kernel, int kernelSize);
 
-    int filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta);
+    int sepfilter2D(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta);
 
     int minFilter(const Image *inImg, Image *outImg, int kernelSize);
 
@@ -45,13 +45,13 @@ extern "C"
 
     int dogFilter(const Image *inImg, Image *outImg, float sigma1, float sigma2);
 
-    int logFilter(const Image *inImg, Image *outImg, float sigma);
+    embeddip_status_t logFilter(const Image *inImg, Image *outImg, float sigma);
 
-    int gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma);
+    embeddip_status_t gaussianGradients(const Image *inImg, Image *outIx, Image *outIy, float sigma);
 
-    int gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag);
+    embeddip_status_t gradientMagnitude(const Image *IxImg, const Image *IyImg, Image *outMag);
 
-    int gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase);
+    embeddip_status_t gradientPhase(const Image *IxImg, const Image *IyImg, Image *outPhase);
 
     int Canny(const Image *inImg, Image *outImg, double threshold1, double threshold2, int apertureSize, bool L2gradient);
 #ifdef __cplusplus

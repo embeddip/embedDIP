@@ -98,6 +98,19 @@ extern "C"
      */
     embeddip_status_t createChals(Image *inImg, uint8_t numChals);
 
+    /**
+     * @brief Creates complex-valued channels for FFT operations.
+     *
+     * Allocates channels with 2× size to store interleaved complex data (real + imaginary).
+     * Used by FFT operations: width × height × 2 × sizeof(float) per channel.
+     *
+     * @param[in,out] inImg    Target image to allocate complex channels for.
+     * @param[in]     numChals Number of complex channels to allocate (max 3).
+     *
+     * @return EMBEDDIP_OK on success, error code on failure.
+     */
+    embeddip_status_t createChalsComplex(Image *inImg, uint8_t numChals);
+
     /* ========================================================================
      * Deprecated/Legacy Functions (for backward compatibility)
      * ======================================================================== */

@@ -140,13 +140,26 @@ static int serial_capture(Image *img)
     CHECK_NULL_INT(img);
     CHECK_NULL_INT(img->pixels);
 
+    // Abort any ongoing transfers from previous session
+    HAL_UART_Abort(&huart1);
+
+    // Clear all UART error flags
+    __HAL_UART_CLEAR_FLAG(&huart1, UART_CLEAR_OREF | UART_CLEAR_NEF | UART_CLEAR_FEF | UART_CLEAR_PEF);
+
+    // Flush RX buffer
+    __HAL_UART_SEND_REQ(&huart1, UART_RXDATA_FLUSH_REQUEST);
+
+    // Reset UART state to ready
+    huart1.RxState = HAL_UART_STATE_READY;
+    huart1.gState = HAL_UART_STATE_READY;
+
     // Calculate block parameters
     uint16_t blockSize = ((img->size * img->depth) < UART_BLOCK_SIZE_MAX) ? (img->size * img->depth) : UART_BLOCK_SIZE_MAX;
     uint32_t blockCount = (img->size * img->depth) / blockSize;
     uint16_t lastBlockSize = (img->size * img->depth) % blockSize;
 
     // Send capture request header
-    HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, request_start_sequence, 3, 5000);
     HAL_Delay(1); // Optional small delay
 
     // Send metadata as fixed-size uint32_t to match Python expectations
@@ -155,23 +168,35 @@ static int serial_capture(Image *img)
     uint32_t format_u32 = (uint32_t)img->format;
     uint32_t depth_u32 = (uint32_t)img->depth;
 
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&width_u32), sizeof(uint32_t), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&height_u32), sizeof(uint32_t), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&format_u32), sizeof(uint32_t), HAL_MAX_DELAY);
-    HAL_UART_Transmit(&huart1, (uint8_t *)(&depth_u32), sizeof(uint32_t), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&width_u32), sizeof(uint32_t), 1000);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&height_u32), sizeof(uint32_t), 1000);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&format_u32), sizeof(uint32_t), 1000);
+    HAL_UART_Transmit(&huart1, (uint8_t *)(&depth_u32), sizeof(uint32_t), 1000);
 
-    // Receive image data in blocks
+    // Receive image data in blocks with timeout
     uint8_t *pixelPtr = img->pixels;
+    HAL_StatusTypeDef status;
     for (uint32_t i = 0; i < blockCount; i++)
     {
-        HAL_UART_Receive(&huart1, pixelPtr, blockSize, HAL_MAX_DELAY);
+        status = HAL_UART_Receive(&huart1, pixelPtr, blockSize, 10000); // 10 second timeout per block
+        if (status != HAL_OK)
+        {
+            // Clear errors and return error code
+            __HAL_UART_CLEAR_FLAG(&huart1, UART_CLEAR_OREF | UART_CLEAR_NEF | UART_CLEAR_FEF);
+            return EMBEDDIP_ERROR_IO_ERROR;
+        }
         pixelPtr += blockSize;
     }
 
     // Receive remaining bytes
     if (lastBlockSize > 0)
     {
-        HAL_UART_Receive(&huart1, pixelPtr, lastBlockSize, HAL_MAX_DELAY);
+        status = HAL_UART_Receive(&huart1, pixelPtr, lastBlockSize, 10000);
+        if (status != HAL_OK)
+        {
+            __HAL_UART_CLEAR_FLAG(&huart1, UART_CLEAR_OREF | UART_CLEAR_NEF | UART_CLEAR_FEF);
+            return EMBEDDIP_ERROR_IO_ERROR;
+        }
     }
     return EMBEDDIP_OK;
 }
@@ -193,7 +218,8 @@ static int serial_send(const Image *img)
     // Step 2: Send image metadata as fixed-size uint32_t to match Python expectations
     uint32_t width_u32 = img->width;
     uint32_t height_u32 = img->height;
-    uint32_t format_u32 = (uint32_t)img->format;
+    // Convert IMAGE_FORMAT_MASK to IMAGE_FORMAT_GRAYSCALE for host compatibility
+    uint32_t format_u32 = (img->format == IMAGE_FORMAT_MASK) ? IMAGE_FORMAT_GRAYSCALE : (uint32_t)img->format;
     uint32_t depth_u32 = (uint32_t)img->depth;
 
     HAL_UART_Transmit(&huart1, (uint8_t *)(&width_u32), sizeof(uint32_t), HAL_MAX_DELAY);

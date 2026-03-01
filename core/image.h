@@ -186,7 +186,8 @@ typedef enum {
   IMAGE_FORMAT_RGB888,        /**< 3×8-bit RGB */
   IMAGE_FORMAT_RGB565,        /**< Packed 16-bit RGB */
   IMAGE_FORMAT_YUV,           /**< YUV (3 channels) */
-  IMAGE_FORMAT_HSI            /**< HSI color space, usually float */
+  IMAGE_FORMAT_HSI,           /**< HSI color space, usually float */
+  IMAGE_FORMAT_MASK           /**< 1 channel mask (trimap 0/1/2 or binary 0/255) */
 } ImageFormat;
 
 /**
@@ -310,6 +311,8 @@ static inline uint8_t image_num_channels(ImageFormat fmt) {
     return 3u;
   case IMAGE_FORMAT_HSI:
     return 3u;
+  case IMAGE_FORMAT_MASK:
+    return 1u;
   default:
     return 0u;
   }

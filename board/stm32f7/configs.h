@@ -3,6 +3,21 @@
 // #define CAMERA_FRAME_BUFFER               0xC0177000
 #define CAMERA_FRAME_BUFFER 0xC0000000
 
+#define QVGA_RES_X 320
+#define QVGA_RES_Y 240
+
+#define WQVGA_RES_X 480
+#define WQVGA_RES_Y 272
+
+#define VGA_RES_X 640
+#define VGA_RES_Y 480
+
+#define WVGA_RES_X 800
+#define WVGA_RES_Y 480
+
+#define ARGB8888_BYTE_PER_PIXEL 4
+#define RGB565_BYTE_PER_PIXEL 2
+
 /* --------------------------------RGB565 -------------------------------------*/
 #define LCD_RGB565_COLOR_BLUE 0x001F
 #define LCD_RGB565_COLOR_GREEN 0x07E0

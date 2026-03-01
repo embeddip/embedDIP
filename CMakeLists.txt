@@ -97,7 +97,14 @@ if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
     set(DEVICE_SOURCES
         ${DEVICE_COMMON_SOURCES}
         device/camera/ov5640/stm32_ov5640.c
+        device/camera/ov5640/ov5640.c
+        device/camera/ov5640/stm32746g_discovery.c
         device/display/rk043fn48h/stm32_rk043fn48h.c
+        device/display/rk043fn48h/font8.c
+        device/display/rk043fn48h/font12.c
+        device/display/rk043fn48h/font16.c
+        device/display/rk043fn48h/font20.c
+        device/display/rk043fn48h/font24.c
         device/serial/stm32_uart/stm32_uart.c
     )
 
@@ -218,6 +225,9 @@ elseif(EMBEDDIP_TARGET_PLATFORM STREQUAL "ESP32")
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/board/esp32>
     )
 endif()
+
+# === Link Libraries ===
+target_link_libraries(embedDIP PUBLIC m)  # Math library for powf(), etc.
 
 # === Compiler Warnings ===
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

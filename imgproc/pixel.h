@@ -60,21 +60,21 @@ extern "C"
 
     int grayscaleKMeans(const Image *inImg, Image *outImg, int k);
 
-    int grayscaleRegionGrowing(const Image *inImg,
-                                Image *outImg,
-                                const Point *seeds,
-                                int numSeeds,
-                                uint8_t tolerance);
+    embeddip_status_t grayscaleRegionGrowing(const Image *inImg,
+                                              Image *outImg,
+                                              const Point *seeds,
+                                              int numSeeds,
+                                              uint8_t tolerance);
 
-    int colorRegionGrowing(const Image *inImg, Image *outMask, int seedX, int seedY, float tolerance);
+    embeddip_status_t colorRegionGrowing_single(const Image *inImg, Image *outMask, int seedX, int seedY, float tolerance);
 
-    int colorRegionGrowing3(const Image *inImg,
-                             Image *outImg,
-                             const Point *seeds,
-                             int numSeeds,
-                             float tolerance);
+    embeddip_status_t colorRegionGrowing(const Image *inImg,
+                                          Image *outImg,
+                                          const Point *seeds,
+                                          int numSeeds,
+                                          float tolerance);
 
-    int colorKMeans3(const Image *inImg, Image *outImg, int k);
+    embeddip_status_t colorKMeans(const Image *inImg, Image *outImg, int k);
 
     int houghTransform(const Image *edgeImg, int **accumulator, int numRho, int numTheta,
                         float rhoRes, float thetaRes);
@@ -90,17 +90,17 @@ extern "C"
 
     int extractComponent(const Image *labeledImg, Image *objImg, int targetLabel);
 
-    int getStructuringElement(Kernel *kernel, MorphShape shape, uint8_t size);
+    embeddip_status_t getStructuringElement(Kernel *kernel, MorphShape shape, uint8_t size);
 
-    int erode(const Image *src, Image *dst, const Kernel *kernel, uint8_t iterations);
+    embeddip_status_t erode(const Image *src, Image *dst, const Kernel *kernel, uint8_t iterations);
 
-    int dilate(const Image *src, Image *dst, const Kernel *kernel, uint8_t iterations);
+    embeddip_status_t dilate(const Image *src, Image *dst, const Kernel *kernel, uint8_t iterations);
 
-    int opening(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t iterations);
+    embeddip_status_t opening(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t iterations);
 
-    int closing(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t iterations);
+    embeddip_status_t closing(const Image *inImg, Image *outImg, const Kernel *kernel, uint8_t iterations);
 
-    int _and(const Image *img1, const Image *img2, Image *outImg);
+    embeddip_status_t _and_(const Image *img1, const Image *img2, Image *outImg);
 
     int _or(const Image *img1, const Image *img2, Image *outImg);
 
@@ -108,7 +108,7 @@ extern "C"
 
     int _not(const Image *inImg, Image *outImg);
 
-    int grabCutLite(Image *inImg, Image *outImg, Rectangle roi, int iterations);
+    embeddip_status_t grabCutLite(Image *inImg, Image *outImg, Rectangle roi, int iterations);
 
     int grabCutLite888(Image *inImg, Image *outImg, Rectangle roi, int iterations);
 
@@ -119,7 +119,7 @@ extern "C"
     int grabCutRGB(const Image *inImg, Image *outMask, Rectangle roi, int max_iter);
 
     /**
-     * @brief Segments an HSI image using K-means clustering.
+     * @brief Segments an HSI image using K-means clustering (old implementation).
      *
      * This function applies K-means clustering to an HSI image by treating each pixel
      * as a 3D vector (Hue, Saturation, Intensity). It assigns each pixel to a cluster
@@ -129,7 +129,7 @@ extern "C"
      * @param[out] outImg  Pointer to output segmented HSI image.
      * @param[in]  k       Number of clusters.
      */
-    int colorKMeans(const Image *inImg, Image *outImg, int k);
+    embeddip_status_t colorKMeans_old(const Image *inImg, Image *outImg, int k);
 
     int resize(Image *inImg, Image *outImg, int outWidth, int outHeight);
 

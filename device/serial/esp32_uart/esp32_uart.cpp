@@ -49,7 +49,8 @@ int serial_capture(Image *img) {
 
   uint16_t w = img->width;
   uint16_t h = img->height;
-  uint16_t f = img->format;
+  // Convert IMAGE_FORMAT_MASK to IMAGE_FORMAT_GRAYSCALE for host compatibility
+  uint16_t f = (img->format == IMAGE_FORMAT_MASK) ? IMAGE_FORMAT_GRAYSCALE : img->format;
   uint16_t d = img->depth;
 
   Serial.write((uint8_t *)&w, sizeof(w));
@@ -102,7 +103,8 @@ int serial_send(const Image *img) {
 
   uint16_t w = img->width;
   uint16_t h = img->height;
-  uint16_t f = img->format;
+  // Convert IMAGE_FORMAT_MASK to IMAGE_FORMAT_GRAYSCALE for host compatibility
+  uint16_t f = (img->format == IMAGE_FORMAT_MASK) ? IMAGE_FORMAT_GRAYSCALE : img->format;
   uint16_t d = img->depth;
   // Remove or reduce the frequency of flush() calls.
   Serial.write((uint8_t *)&w, sizeof(w));

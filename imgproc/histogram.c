@@ -44,21 +44,23 @@ int histForm(const Image *inImg, int *histogram)
  */
 int histEq(const Image *inImg, Image *outImg)
 {
-
     int totalPixels = inImg->width * inImg->height;
 
+    // Ensure output has channels allocated
     if (isChalsEmpty(outImg))
     {
         createChals(outImg, outImg->depth);
         outImg->is_chals = 1;
     }
 
-    if (isChalsEmpty(inImg))
-    {
-        createChals((Image *)inImg, inImg->depth);
+    int histogram[256] = {0};
+    int cdf[256];
+    float cdfNormalized[256];
 
-        int histogram[256] = {0};
-        int totalPixels = inImg->width * inImg->height;
+    // Check where the valid input data is located based on log state
+    if (inImg->log == IMAGE_DATA_PIXELS)
+    {
+        // Valid data is in pixels buffer - read as uint8_t
         uint8_t *inputData = (uint8_t *)inImg->pixels;
 
         // Compute histogram
@@ -66,7 +68,6 @@ int histEq(const Image *inImg, Image *outImg)
             histogram[inputData[i]]++;
 
         // Compute CDF
-        int cdf[256];
         cdf[0] = histogram[0];
         for (int i = 1; i < 256; ++i)
             cdf[i] = cdf[i - 1] + histogram[i];
@@ -74,7 +75,6 @@ int histEq(const Image *inImg, Image *outImg)
         // Normalize CDF to [0.0, 1.0]
         float cdfMin = (float)cdf[0];
         float scale = 1.0f / (totalPixels - cdf[0]); // avoid zero division
-        float cdfNormalized[256];
         for (int i = 0; i < 256; ++i)
             cdfNormalized[i] = (cdf[i] - cdfMin) * scale;
 
@@ -87,17 +87,30 @@ int histEq(const Image *inImg, Image *outImg)
     }
     else
     {
+        // Valid data is in chals - determine which channel based on log
+        if (isChalsEmpty(inImg))
+        {
+            createChals((Image *)inImg, inImg->depth);
+        }
 
-        int histogram[256] = {0};
-        int totalPixels = inImg->width * inImg->height;
-        float *inputData = (float *)inImg->chals->ch[0];
+        // Map log state to channel index
+        int ch_idx = 0;
+        if (inImg->log >= IMAGE_DATA_CH0 && inImg->log <= IMAGE_DATA_CH5)
+        {
+            ch_idx = inImg->log - IMAGE_DATA_CH0;
+        }
+        else if (inImg->log == IMAGE_DATA_MAGNITUDE || inImg->log == IMAGE_DATA_PHASE)
+        {
+            ch_idx = 0; // MAGNITUDE and PHASE stored in ch[0]
+        }
+
+        float *inputData = (float *)inImg->chals->ch[ch_idx];
 
         // Compute histogram
         for (int i = 0; i < totalPixels; ++i)
             histogram[(uint8_t)inputData[i]]++;
 
         // Compute CDF
-        int cdf[256];
         cdf[0] = histogram[0];
         for (int i = 1; i < 256; ++i)
             cdf[i] = cdf[i - 1] + histogram[i];
@@ -105,7 +118,6 @@ int histEq(const Image *inImg, Image *outImg)
         // Normalize CDF to [0.0, 1.0]
         float cdfMin = (float)cdf[0];
         float scale = 1.0f / (totalPixels - cdf[0]); // avoid zero division
-        float cdfNormalized[256];
         for (int i = 0; i < 256; ++i)
             cdfNormalized[i] = (cdf[i] - cdfMin) * scale;
 
@@ -117,6 +129,7 @@ int histEq(const Image *inImg, Image *outImg)
         }
     }
 
+    outImg->log = IMAGE_DATA_CH0;
     return totalPixels;
 }
 
@@ -134,32 +147,31 @@ int histEq(const Image *inImg, Image *outImg)
  */
 int histSpec(const Image *inImg, Image *outImg, const int *targetHistogram)
 {
+    const int totalPixels = inImg->width * inImg->height;
 
-    int totalPixels = inImg->width * inImg->height;
-
+    // Ensure output has channels allocated
     if (isChalsEmpty(outImg))
     {
         createChals(outImg, outImg->depth);
         outImg->is_chals = 1;
     }
 
-    if (isChalsEmpty(inImg))
+    float *outputData = outImg->chals->ch[0];
+    int inputHistogram[256] = {0};
+    float inputCDF[256] = {0}, targetCDF[256] = {0};
+    uint8_t mapping[256];
+
+    // Check where the valid input data is located based on log state
+    if (inImg->log == IMAGE_DATA_PIXELS)
     {
-
-        createChals((Image *)inImg, inImg->depth);
-
-        const int totalPixels = inImg->width * inImg->height;
+        // Valid data is in pixels buffer - read as uint8_t
         const uint8_t *inputData = (uint8_t *)inImg->pixels;
-        float *outputData = outImg->chals->ch[0];
 
         // Step 1: Compute input histogram
-        int inputHistogram[256] = {0};
         for (int i = 0; i < totalPixels; ++i)
             inputHistogram[inputData[i]]++;
 
         // Step 2: Compute input and target CDFs
-        float inputCDF[256] = {0}, targetCDF[256] = {0};
-
         inputCDF[0] = (float)inputHistogram[0];
         targetCDF[0] = (float)targetHistogram[0];
         for (int i = 1; i < 256; ++i)
@@ -175,7 +187,6 @@ int histSpec(const Image *inImg, Image *outImg, const int *targetHistogram)
         }
 
         // Step 3: Build mapping from input levels to output levels
-        uint8_t mapping[256];
         for (int i = 0; i < 256; ++i)
         {
             float diffMin = 1.0f;
@@ -201,18 +212,30 @@ int histSpec(const Image *inImg, Image *outImg, const int *targetHistogram)
     }
     else
     {
-        const int totalPixels = inImg->width * inImg->height;
-        const float *inputData = (float *)inImg->chals->ch[0];
-        float *outputData = outImg->chals->ch[0];
+        // Valid data is in chals - determine which channel based on log
+        if (isChalsEmpty(inImg))
+        {
+            createChals((Image *)inImg, inImg->depth);
+        }
+
+        // Map log state to channel index
+        int ch_idx = 0;
+        if (inImg->log >= IMAGE_DATA_CH0 && inImg->log <= IMAGE_DATA_CH5)
+        {
+            ch_idx = inImg->log - IMAGE_DATA_CH0;
+        }
+        else if (inImg->log == IMAGE_DATA_MAGNITUDE || inImg->log == IMAGE_DATA_PHASE)
+        {
+            ch_idx = 0; // MAGNITUDE and PHASE stored in ch[0]
+        }
+
+        const float *inputData = (float *)inImg->chals->ch[ch_idx];
 
         // Step 1: Compute input histogram
-        int inputHistogram[256] = {0};
         for (int i = 0; i < totalPixels; ++i)
             inputHistogram[(uint8_t)inputData[i]]++;
 
         // Step 2: Compute input and target CDFs
-        float inputCDF[256] = {0}, targetCDF[256] = {0};
-
         inputCDF[0] = (float)inputHistogram[0];
         targetCDF[0] = (float)targetHistogram[0];
         for (int i = 1; i < 256; ++i)
@@ -228,7 +251,6 @@ int histSpec(const Image *inImg, Image *outImg, const int *targetHistogram)
         }
 
         // Step 3: Build mapping from input levels to output levels
-        uint8_t mapping[256];
         for (int i = 0; i < 256; ++i)
         {
             float diffMin = 1.0f;
@@ -253,5 +275,6 @@ int histSpec(const Image *inImg, Image *outImg, const int *targetHistogram)
         }
     }
 
+    outImg->log = IMAGE_DATA_CH0;
     return totalPixels;
 }

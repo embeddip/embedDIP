@@ -6,10 +6,18 @@
 #include <stdint.h>
 #include <string.h>
 
-#define SDRAM_BANK_ADDR ((uint32_t)0xC0100000)
+#define SDRAM_BANK_ADDR ((uint32_t)0xC0000000)
 
-#define MEMORY_POOL_SIZE (1024 * 1024 * 8) // 8MB
-static uint8_t *memory_pool = ((uint8_t *)SDRAM_BANK_ADDR + 0x1000);
+// Camera/LCD shared framebuffer at 0xC0000000
+// Size: 480×272×4 bytes (ARGB8888) = 522,240 bytes (~510KB)
+// Reserve 512KB (0x80000) to be safe
+#define CAMERA_LCD_FRAMEBUFFER_SIZE 0x80000  // 512KB reserved
+
+// Memory pool starts AFTER Camera/LCD framebuffer to avoid overlap
+// Camera writes to 0xC0000000, LCD reads from 0xC0000000 (shared)
+// Dynamic image allocations start from 0xC0080000 onwards
+#define MEMORY_POOL_SIZE (1024 * 1024 * 8 - CAMERA_LCD_FRAMEBUFFER_SIZE) // ~7.5MB
+static uint8_t *memory_pool = ((uint8_t *)SDRAM_BANK_ADDR + CAMERA_LCD_FRAMEBUFFER_SIZE);
 
 typedef struct MemoryBlock
 {
