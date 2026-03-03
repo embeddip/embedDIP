@@ -86,7 +86,7 @@ jobs:
                 -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
                 -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                 -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-                -DEMBEDDIP_TARGET_PLATFORM=HOST \
+                -DEMBEDDIP_BOARD=HOST \
                 -DEMBEDDIP_BUILD_TESTS=ON \
                 -DEMBEDDIP_BUILD_EXAMPLES=ON \
                 -DEMBEDDIP_ENABLE_COVERAGE=${{ matrix.build_type == 'Debug' && 'ON' || 'OFF' }} \
@@ -147,28 +147,24 @@ jobs:
   # EMBEDDED TARGET BUILDS (ARM & ESP32)
   # ============================================================================
   embedded-build:
-    name: ${{ matrix.platform }} Build
+    name: ${{ matrix.board.name }} Build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - name: STM32F7
+        board:
+          - name: STM32F746G_DISCOVERY
+            display_name: STM32F746G-Discovery
             arch: arm-none-eabi
             cpu: cortex-m7
             fpu: fpv5-d16
             float-abi: hard
-            defines: STM32F7xx ARM_MATH_CM7 __FPU_PRESENT=1 TARGET_BOARD_STM32F7=1
-          - name: STM32F4
-            arch: arm-none-eabi
-            cpu: cortex-m4
-            fpu: fpv4-sp-d16
-            float-abi: hard
-            defines: STM32F4xx ARM_MATH_CM4 __FPU_PRESENT=1 TARGET_BOARD_STM32F4=1
-          - name: ESP32
+            architecture: ARM_CORTEX_M7
+          - name: ESP32_CAM
+            display_name: ESP32-CAM
             arch: xtensa-esp32-elf
             cpu: esp32
-            defines: ARDUINO_ARCH_ESP32 TARGET_BOARD_ESP32=1
+            architecture: XTENSA_LX6
 
     steps:
       - name: Checkout repository
@@ -180,17 +176,17 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/toolchain
-          key: ${{ matrix.platform.arch }}-toolchain-${{ env.CACHE_VERSION }}
+          key: ${{ matrix.board.arch }}-toolchain-${{ env.CACHE_VERSION }}
 
       - name: Install ARM toolchain
-        if: contains(matrix.platform.arch, 'arm-none-eabi')
+        if: contains(matrix.board.arch, 'arm-none-eabi')
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi \
             libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
 
       - name: Install ESP32 toolchain
-        if: contains(matrix.platform.arch, 'xtensa-esp32-elf')
+        if: contains(matrix.board.arch, 'xtensa-esp32-elf')
         run: |
           mkdir -p ~/toolchain
           cd ~/toolchain
@@ -202,17 +198,17 @@ jobs:
 
       - name: Verify toolchain
         run: |
-          ${{ matrix.platform.arch }}-gcc --version
-          ${{ matrix.platform.arch }}-size --version
+          ${{ matrix.board.arch }}-gcc --version
+          ${{ matrix.board.arch }}-size --version
 
       - name: Compile library sources
         run: |
-          echo "🔨 Building embedDIP for ${{ matrix.platform.name }}..."
+          echo "🔨 Building embedDIP for ${{ matrix.board.display_name }} (${{ matrix.board.architecture }})..."
 
           # Set compiler flags
-          if [[ "${{ matrix.platform.arch }}" == "arm-none-eabi" ]]; then
-            FLAGS="-mthumb -mcpu=${{ matrix.platform.cpu }}"
-            FLAGS="$FLAGS -mfloat-abi=${{ matrix.platform.float-abi }} -mfpu=${{ matrix.platform.fpu }}"
+          if [[ "${{ matrix.board.arch }}" == "arm-none-eabi" ]]; then
+            FLAGS="-mthumb -mcpu=${{ matrix.board.cpu }}"
+            FLAGS="$FLAGS -mfloat-abi=${{ matrix.board.float-abi }} -mfpu=${{ matrix.board.fpu }}"
           else
             FLAGS="-mlongcalls"
           fi
@@ -221,20 +217,49 @@ jobs:
           FLAGS="$FLAGS -Os -ffunction-sections -fdata-sections"
           FLAGS="$FLAGS -std=c11"
 
-          # Add platform defines
-          for def in ${{ matrix.platform.defines }}; do
-            FLAGS="$FLAGS -D$def"
-          done
+          # Add architecture defines (from board config)
+          FLAGS="$FLAGS -DARCH_${{ matrix.board.architecture }}=1"
+          FLAGS="$FLAGS -DBOARD_${{ matrix.board.name }}=1"
 
-          FLAGS="$FLAGS -I. -Icore -Iimgproc -Iboard -Idevice -Iwrapper"
+          # Add include paths (new structure)
+          FLAGS="$FLAGS -I. -Icore -Iimgproc -Iwrapper"
+          FLAGS="$FLAGS -Iarch -Iarch/$(echo ${{ matrix.board.architecture }} | tr '[:upper:]' '[:lower:]')"
+          FLAGS="$FLAGS -Iboards/$(echo ${{ matrix.board.name }} | tr '[:upper:]' '[:lower:]')"
+          FLAGS="$FLAGS -Idevice -Idevice/camera -Idevice/display -Idevice/serial"
+          FLAGS="$FLAGS -Iboard"  # Legacy compatibility
 
-          # Compile all core sources
+          # Compile sources based on board architecture
           mkdir -p build_embedded
-          for src in core/*.c board/common.c board/${{ matrix.platform.name == 'ESP32' && 'esp32' || 'stm32f7' }}/*.c imgproc/*.c; do
+
+          # Core portable layer
+          for src in core/*.c imgproc/*.c; do
             if [ -f "$src" ]; then
               echo "Compiling $src..."
               obj="build_embedded/$(basename ${src%.c}.o)"
-              ${{ matrix.platform.arch }}-gcc $FLAGS -c "$src" -o "$obj" || exit 1
+              ${{ matrix.board.arch }}-gcc $FLAGS -c "$src" -o "$obj" || exit 1
+            fi
+          done
+
+          # Architecture layer (new)
+          arch_dir="arch/$(echo ${{ matrix.board.architecture }} | tr '[:upper:]' '[:lower:]')"
+          for src in ${arch_dir}/*.c ${arch_dir}/*.cpp; do
+            if [ -f "$src" ]; then
+              echo "Compiling $src..."
+              obj="build_embedded/$(basename ${src%.*}.o)"
+              if [[ "$src" == *.cpp ]]; then
+                ${{ matrix.board.arch }}-g++ $FLAGS -c "$src" -o "$obj" || exit 1
+              else
+                ${{ matrix.board.arch }}-gcc $FLAGS -c "$src" -o "$obj" || exit 1
+              fi
+            fi
+          done
+
+          # Legacy board files (backward compatibility)
+          for src in board/common.c; do
+            if [ -f "$src" ]; then
+              echo "Compiling $src..."
+              obj="build_embedded/$(basename ${src%.c}.o)"
+              ${{ matrix.board.arch }}-gcc $FLAGS -c "$src" -o "$obj" || exit 1
             fi
           done
 
@@ -242,18 +267,20 @@ jobs:
 
           # Show size analysis
           echo "📊 Size analysis:"
-          ${{ matrix.platform.arch }}-size build_embedded/*.o | tee size_report.txt
+          ${{ matrix.board.arch }}-size build_embedded/*.o | tee size_report.txt
 
           # Calculate total sizes
-          total_text=$(${{ matrix.platform.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$1} END {print sum}')
-          total_data=$(${{ matrix.platform.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$2} END {print sum}')
-          total_bss=$(${{ matrix.platform.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$3} END {print sum}')
+          total_text=$(${{ matrix.board.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$1} END {print sum}')
+          total_data=$(${{ matrix.board.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$2} END {print sum}')
+          total_bss=$(${{ matrix.board.arch }}-size build_embedded/*.o | awk 'NR>1 {sum+=$3} END {print sum}')
 
           echo "Total TEXT: $total_text bytes"
           echo "Total DATA: $total_data bytes"
           echo "Total BSS:  $total_bss bytes"
 
-          # Save metrics
+          # Save metrics with board name
+          echo "board=${{ matrix.board.display_name }}" >> size_metrics.txt
+          echo "architecture=${{ matrix.board.architecture }}" >> size_metrics.txt
           echo "text=$total_text" >> size_metrics.txt
           echo "data=$total_data" >> size_metrics.txt
           echo "bss=$total_bss" >> size_metrics.txt
@@ -261,7 +288,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: embedded-build-${{ matrix.platform.name }}
+          name: embedded-build-${{ matrix.board.name }}
           path: |
             build_embedded/*.o
             size_report.txt
@@ -497,7 +524,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake
-          cmake -B build -DEMBEDDIP_TARGET_PLATFORM=HOST
+          cmake -B build -DEMBEDDIP_BOARD=HOST
           cmake --build build
 
       - name: Perform CodeQL Analysis
@@ -581,10 +608,17 @@ jobs:
           EOF
 
           # Add embedded build sizes if available
-          if [ -d "artifacts/embedded-build-STM32F7" ]; then
-            echo "### STM32F7 Build Size" >> $GITHUB_STEP_SUMMARY
+          if [ -d "artifacts/embedded-build-STM32F746G_DISCOVERY" ]; then
+            echo "### STM32F746G-Discovery Build Size" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat artifacts/embedded-build-STM32F7/size_report.txt >> $GITHUB_STEP_SUMMARY
+            cat artifacts/embedded-build-STM32F746G_DISCOVERY/size_report.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -d "artifacts/embedded-build-ESP32_CAM" ]; then
+            echo "### ESP32-CAM Build Size" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat artifacts/embedded-build-ESP32_CAM/size_report.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 

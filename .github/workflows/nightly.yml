@@ -173,7 +173,7 @@ jobs:
         run: |
           cmake -B build -G Ninja \
                 -DCMAKE_BUILD_TYPE=Debug \
-                -DEMBEDDIP_TARGET_PLATFORM=HOST \
+                -DEMBEDDIP_BOARD=HOST \
                 -DEMBEDDIP_BUILD_TESTS=ON \
                 -DEMBEDDIP_ENABLE_ASAN=ON
 
@@ -247,7 +247,7 @@ jobs:
 
           cmake -B build -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
-                -DEMBEDDIP_TARGET_PLATFORM=HOST
+                -DEMBEDDIP_BOARD=HOST
 
           cmake --build build -j$(nproc)
 
@@ -279,7 +279,7 @@ jobs:
         run: |
           cmake -B build \
                 -DCMAKE_BUILD_TYPE=Debug \
-                -DEMBEDDIP_TARGET_PLATFORM=HOST \
+                -DEMBEDDIP_BOARD=HOST \
                 -DEMBEDDIP_BUILD_TESTS=ON \
                 -DCMAKE_C_FLAGS="-O0 -g -fprofile-arcs -ftest-coverage"
 

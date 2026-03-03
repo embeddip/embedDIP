@@ -40,7 +40,7 @@ jobs:
         run: |
           cmake -B build -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
-                -DEMBEDDIP_TARGET_PLATFORM=HOST \
+                -DEMBEDDIP_BOARD=HOST \
                 -DEMBEDDIP_BUILD_BENCHMARKS=ON \
                 -DCMAKE_C_FLAGS="-O3 -march=native -DNDEBUG"
 

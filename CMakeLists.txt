@@ -20,9 +20,16 @@ option(EMBEDDIP_BUILD_TESTS "Build unit tests" OFF)
 option(EMBEDDIP_BUILD_EXAMPLES "Build example projects" OFF)
 option(EMBEDDIP_BUILD_DOCS "Build documentation with Doxygen" OFF)
 
-# Target platform selection
-set(EMBEDDIP_TARGET_PLATFORM "STM32F7" CACHE STRING "Target platform: STM32F7, ESP32, or HOST")
-set_property(CACHE EMBEDDIP_TARGET_PLATFORM PROPERTY STRINGS "STM32F7" "ESP32" "HOST")
+# Board selection (replaces old EMBEDDIP_TARGET_PLATFORM)
+# Board selection automatically determines architecture (CPU type)
+set(EMBEDDIP_BOARD "STM32F746G_DISCOVERY" CACHE STRING "Target board: STM32F746G_DISCOVERY, ESP32_CAM, or HOST")
+set_property(CACHE EMBEDDIP_BOARD PROPERTY STRINGS "STM32F746G_DISCOVERY" "ESP32_CAM" "HOST")
+
+# Include board configuration mappings
+# This file sets: EMBEDDIP_ARCH, ARCH_SOURCES, BOARD_SOURCES, DEVICE_SOURCES,
+#                 ARCH_INCLUDE_DIRS, BOARD_INCLUDE_DIRS, DEVICE_INCLUDE_DIRS,
+#                 ARCH_DEFINES, BOARD_DEFINES, ARCH_LIBRARIES
+include(cmake/BoardConfigs.cmake)
 
 # Feature flags (can be overridden)
 option(EMBEDDIP_ENABLE_UART_LOGGING "Enable UART logging" ON)
@@ -78,99 +85,40 @@ set(WRAPPER_SOURCES
     wrapper/SerialWrapper.hpp
 )
 
-# === Board-Specific Source Files ===
+# === Legacy Board Source Files ===
+# Keep backward compatibility with old board/ structure during migration
 set(BOARD_COMMON_SOURCES
     board/common.c
     board/common.h
 )
 
-# Platform-specific sources
-if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
-    set(BOARD_SOURCES
-        ${BOARD_COMMON_SOURCES}
-        board/stm32f7/board_stm32f7_common.c
-        board/stm32f7/board_stm32f7_fft.c
-        board/stm32f7/board_stm32f7_memory.c
-        board/stm32f7/configs.h
-    )
+# Note: Board-specific sources, architecture sources, and device sources
+# are now configured in cmake/BoardConfigs.cmake based on EMBEDDIP_BOARD
+# The following variables are set by BoardConfigs.cmake:
+#   - ARCH_SOURCES: Architecture-specific implementations (FFT, memory)
+#   - BOARD_SOURCES: Board-specific initialization and configuration
+#   - DEVICE_SOURCES: Device drivers for peripherals on this board
+#   - ARCH_DEFINES: Architecture compile definitions
+#   - BOARD_DEFINES: Board-specific compile definitions
 
-    set(DEVICE_SOURCES
-        ${DEVICE_COMMON_SOURCES}
-        device/camera/ov5640/stm32_ov5640.c
-        device/camera/ov5640/ov5640.c
-        device/camera/ov5640/stm32746g_discovery.c
-        device/display/rk043fn48h/stm32_rk043fn48h.c
-        device/display/rk043fn48h/font8.c
-        device/display/rk043fn48h/font12.c
-        device/display/rk043fn48h/font16.c
-        device/display/rk043fn48h/font20.c
-        device/display/rk043fn48h/font24.c
-        device/serial/stm32_uart/stm32_uart.c
-    )
-
-    set(PLATFORM_DEFINES
-        STM32F7xx
-        ARM_MATH_CM7
-        __FPU_PRESENT=1
-        TARGET_BOARD_STM32F7=1
-    )
-
-elseif(EMBEDDIP_TARGET_PLATFORM STREQUAL "ESP32")
-    set(BOARD_SOURCES
-        ${BOARD_COMMON_SOURCES}
-        board/esp32/board_esp32_common.cpp
-        board/esp32/board_esp32_fft.cpp
-        board/esp32/board_esp32_memory.cpp
-    )
-
-    set(DEVICE_SOURCES
-        ${DEVICE_COMMON_SOURCES}
-        device/camera/ov2640/esp32_ov2640.cpp
-        device/serial/esp32_uart/esp32_uart.cpp
-    )
-
-    set(PLATFORM_DEFINES
-        ARDUINO_ARCH_ESP32
-        TARGET_BOARD_ESP32=1
-    )
-
-elseif(EMBEDDIP_TARGET_PLATFORM STREQUAL "HOST")
-    set(BOARD_SOURCES
-        ${BOARD_COMMON_SOURCES}
-        board/host/memory_host.c
-    )
-
-    set(DEVICE_SOURCES
-        ${DEVICE_COMMON_SOURCES}
-        device/camera/host/host_camera.c
-        device/display/host/host_display.c
-        device/serial/host/host_uart.c
-    )
-
-    set(PLATFORM_DEFINES
-        TARGET_BOARD_HOST=1
-    )
-
-    message(STATUS "HOST build: Using standard malloc/free for memory management")
-    message(STATUS "HOST build: File-based camera/display, stdin/stdout serial")
-
-else()
-    message(FATAL_ERROR "Unknown platform: ${EMBEDDIP_TARGET_PLATFORM}. Must be STM32F7, ESP32, or HOST")
-endif()
+# Combine with legacy sources for backward compatibility
+list(APPEND BOARD_SOURCES ${BOARD_COMMON_SOURCES})
 
 # === Create Library Target ===
 add_library(embedDIP STATIC
     ${CORE_SOURCES}
     ${IMGPROC_SOURCES}
-    ${BOARD_SOURCES}
-    ${DEVICE_SOURCES}
+    ${ARCH_SOURCES}      # Architecture layer (CPU-specific: FFT, memory)
+    ${BOARD_SOURCES}     # Board layer (hardware config and init)
+    ${DEVICE_SOURCES}    # Device drivers (peripherals)
     ${WRAPPER_SOURCES}
 )
 
 # === Compiler Definitions ===
 target_compile_definitions(embedDIP PUBLIC
     USE_EMBED_DIP
-    ${PLATFORM_DEFINES}
+    ${ARCH_DEFINES}      # Architecture-specific defines (from BoardConfigs.cmake)
+    ${BOARD_DEFINES}     # Board-specific defines (from BoardConfigs.cmake)
     $<$<BOOL:${EMBEDDIP_ENABLE_UART_LOGGING}>:ENABLE_UART_LOGGING=1>
     $<$<BOOL:${EMBEDDIP_ENABLE_IMAGE_PROCESSING}>:ENABLE_IMAGE_PROCESSING=1>
     $<$<BOOL:${EMBEDDIP_ENABLE_CAMERA_INPUT}>:ENABLE_CAMERA_INPUT=1>
@@ -179,55 +127,59 @@ target_compile_definitions(embedDIP PUBLIC
 
 # === Include Directories ===
 target_include_directories(embedDIP PUBLIC
+    # Core library includes
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/core>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/imgproc>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/wrapper>
+
+    # Legacy board includes (for backward compatibility during migration)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/board>
+
+    # Device driver includes (common)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/camera>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/camera/ov5640>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/display>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/serial>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/wrapper>
+
+    # Install interface
     $<INSTALL_INTERFACE:include/embedDIP>
 )
 
-# Platform-specific includes
-if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
-    # Try to find CMSIS and HAL includes relative to project
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../Drivers")
+# Add architecture-specific includes (set by BoardConfigs.cmake)
+if(ARCH_INCLUDE_DIRS)
+    foreach(dir IN LISTS ARCH_INCLUDE_DIRS)
         target_include_directories(embedDIP PUBLIC
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/STM32F7xx_HAL_Driver/Inc>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Device/ST/STM32F7xx/Include>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Core/Include>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Include>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Core/Inc>
+            $<BUILD_INTERFACE:${dir}>
         )
+    endforeach()
+endif()
 
-        # CMSIS-DSP sources for STM32 (C and assembly files)
-        file(GLOB_RECURSE CMSIS_DSP_SOURCES
-            ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Source/*.c
-            ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Source/*.S
+# Add board-specific includes (set by BoardConfigs.cmake)
+if(BOARD_INCLUDE_DIRS)
+    foreach(dir IN LISTS BOARD_INCLUDE_DIRS)
+        target_include_directories(embedDIP PUBLIC
+            $<BUILD_INTERFACE:${dir}>
         )
-        if(CMSIS_DSP_SOURCES)
-            target_sources(embedDIP PRIVATE ${CMSIS_DSP_SOURCES})
-            message(STATUS "Added CMSIS-DSP sources (C + ASM)")
-        endif()
-    else()
-        message(WARNING "CMSIS/HAL drivers not found. You may need to specify include paths manually.")
-    endif()
+    endforeach()
+endif()
 
-    target_include_directories(embedDIP PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/board/stm32f7>
-    )
-
-elseif(EMBEDDIP_TARGET_PLATFORM STREQUAL "ESP32")
-    target_include_directories(embedDIP PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/board/esp32>
-    )
+# Add device-specific includes (set by BoardConfigs.cmake)
+if(DEVICE_INCLUDE_DIRS)
+    foreach(dir IN LISTS DEVICE_INCLUDE_DIRS)
+        target_include_directories(embedDIP PUBLIC
+            $<BUILD_INTERFACE:${dir}>
+        )
+    endforeach()
 endif()
 
 # === Link Libraries ===
 target_link_libraries(embedDIP PUBLIC m)  # Math library for powf(), etc.
+
+# Add architecture-specific libraries (set by BoardConfigs.cmake)
+if(ARCH_LIBRARIES)
+    target_link_libraries(embedDIP PUBLIC ${ARCH_LIBRARIES})
+endif()
 
 # === Compiler Warnings ===
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -314,7 +266,8 @@ message(STATUS "=================================")
 message(STATUS "embedDIP Configuration Summary")
 message(STATUS "=================================")
 message(STATUS "Version:            ${PROJECT_VERSION}")
-message(STATUS "Target Platform:    ${EMBEDDIP_TARGET_PLATFORM}")
+message(STATUS "Target Board:       ${EMBEDDIP_BOARD}")
+message(STATUS "Architecture:       ${EMBEDDIP_ARCH}")
 message(STATUS "Build Tests:        ${EMBEDDIP_BUILD_TESTS}")
 message(STATUS "Build Examples:     ${EMBEDDIP_BUILD_EXAMPLES}")
 message(STATUS "Build Docs:         ${EMBEDDIP_BUILD_DOCS}")
