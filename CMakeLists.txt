@@ -186,6 +186,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(embedDIP PRIVATE
         -Wall
         -Wextra
+        -Werror          # Treat warnings as errors (matches CI behavior)
         -Wpedantic
         -Wno-unused-parameter
     )

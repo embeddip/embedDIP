@@ -6,6 +6,7 @@
 #include <string.h> /* For memset, memcpy */
 
 // Validation macros to replace assert()
+// For void functions
 #define CHECK_NULL_VOID(ptr)                                                                       \
     do {                                                                                           \
         if (!(ptr))                                                                                \
@@ -22,6 +23,25 @@
     do {                                                                                           \
         if (!(cond))                                                                               \
             return;                                                                                \
+    } while (0)
+
+// For int-returning functions
+#define CHECK_NULL_RET(ptr)                                                                        \
+    do {                                                                                           \
+        if (!(ptr))                                                                                \
+            return -1;                                                                             \
+    } while (0)
+
+#define CHECK_FORMAT_RET(img, expected_fmt)                                                        \
+    do {                                                                                           \
+        if ((img)->format != (expected_fmt))                                                       \
+            return -1;                                                                             \
+    } while (0)
+
+#define CHECK_CONDITION_RET(cond)                                                                  \
+    do {                                                                                           \
+        if (!(cond))                                                                               \
+            return -1;                                                                             \
     } while (0)
 
 #ifndef M_PI
@@ -196,7 +216,7 @@ int grayscaleThresholdLocalOtsu(const Image *inImg, Image *outImg, int blockSize
     return EMBEDDIP_OK;
 }
 
-#define MAX_ITER 10
+#define MAX_ITER_KMEANS 10
 #define CLAMP(v, lo, hi) ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
 
 /**
@@ -242,7 +262,7 @@ int grayscaleKMeans(const Image *inImg, Image *outImg, int k)
     for (int i = 0; i < k; ++i)
         centers[i] = (255.0f / (k - 1)) * i;
 
-    for (int iter = 0; iter < MAX_ITER; ++iter) {
+    for (int iter = 0; iter < MAX_ITER_KMEANS; ++iter) {
         // Reset accumulators
         for (int j = 0; j < k; ++j) {
             counts[j] = 0;
@@ -368,7 +388,7 @@ embeddip_status_t colorKMeans_old(const Image *inImg, Image *outImg, int k)
         centers[i].c2 = (255.0f / (k - 1)) * i;
     }
 
-    for (int iter = 0; iter < MAX_ITER; ++iter) {
+    for (int iter = 0; iter < MAX_ITER_KMEANS; ++iter) {
         // Reset sums and counts
         for (int j = 0; j < k; ++j) {
             counts[j] = 0;
@@ -624,7 +644,7 @@ embeddip_status_t colorKMeans(const Image *inImg, Image *outImg, int k)
     }
 
     /* --- Iterations --- */
-    for (int iter = 0; iter < MAX_ITER; ++iter) {
+    for (int iter = 0; iter < MAX_ITER_KMEANS; ++iter) {
         /* reset sums/counts */
         for (int j = 0; j < k; ++j) {
             counts[j] = 0;
@@ -689,7 +709,7 @@ int grayscaleKMeans(const Image *inImg, Image *outImg, int k)
     if (!inImg || !outImg || !inImg->pixels || !outImg->pixels || k <= 0)
     {
         printf("Invalid input\n");
-        return;
+        return -1;
     }
 
     if (isChalsEmpty(outImg))
@@ -711,7 +731,7 @@ int grayscaleKMeans(const Image *inImg, Image *outImg, int k)
     if (!M || !S || !T || !C)
     {
         printf("Memory allocation failed\n");
-        return;
+        return -1;
     }
 
     // Step 2: Randomly select K initial means from data
@@ -721,8 +741,8 @@ int grayscaleKMeans(const Image *inImg, Image *outImg, int k)
         M[i] = (float)X[r];
     }
 
-    // Step 3: Repeat until convergence (we use MAX_ITER as approximation)
-    for (int iter = 0; iter < MAX_ITER; ++iter)
+    // Step 3: Repeat until convergence (we use MAX_ITER_KMEANS as approximation)
+    for (int iter = 0; iter < MAX_ITER_KMEANS; ++iter)
     {
         // Reset sums and counts
         for (int j = 0; j < k; ++j)
@@ -791,7 +811,7 @@ tolerance)
     if (!visited)
     {
         printf("Memory allocation failed\n");
-        return;
+        return -1;
     }
     memset(visited, 0, inImg->size);
 
@@ -832,7 +852,7 @@ tolerance)
                     if (top >= STACK_SIZE)
                     {
                         printf("Region stack overflow\n");
-                        return;
+                        return -1;
                     }
                 }
             }
@@ -1322,8 +1342,8 @@ int extractLines(int **accumulator,
  */
 int drawLine(Image *img, uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1, uint8_t color)
 {
-    int dx = abs((int64_t)x1 - (int64_t)x0);
-    int dy = abs((int64_t)y1 - (int64_t)y0);
+    int dx = (int)llabs((int64_t)x1 - (int64_t)x0);
+    int dy = (int)llabs((int64_t)y1 - (int64_t)y0);
 
     int sx = (x0 < x1) ? 1 : -1;
     int sy = (y0 < y1) ? 1 : -1;
@@ -1501,9 +1521,9 @@ embeddip_status_t getStructuringElement(Kernel *kernel, MorphShape shape, uint8_
  */
 int extractComponent(const Image *labeledImg, Image *objImg, int targetLabel)
 {
-    CHECK_NULL_VOID(labeledImg);
-    CHECK_NULL_VOID(objImg);
-    CHECK_CONDITION_VOID(labeledImg->width == objImg->width &&
+    CHECK_NULL_RET(labeledImg);
+    CHECK_NULL_RET(objImg);
+    CHECK_CONDITION_RET(labeledImg->width == objImg->width &&
                          labeledImg->height == objImg->height);
 
     uint8_t *inData = labeledImg->pixels;
@@ -1515,6 +1535,7 @@ int extractComponent(const Image *labeledImg, Image *objImg, int targetLabel)
         else
             outData[i] = 0;  // Background → black (or 0)
     }
+    return 0;
 }
 
 /**
@@ -1939,7 +1960,7 @@ int piecewiseTransform(const Image *inImg,
 {
     if (inImg->depth != 1) {
         // Only GRAYSCALE is supported
-        return;
+        return -1;
     }
 
     if (isChalsEmpty(inImg)) {
@@ -1979,6 +2000,7 @@ int piecewiseTransform(const Image *inImg,
             }
         }
     }
+    return 0;
 }
 
 embeddip_status_t _and_(const Image *img1, const Image *img2, Image *outImg)
@@ -2040,13 +2062,13 @@ embeddip_status_t _and_(const Image *img1, const Image *img2, Image *outImg)
  */
 int _or(const Image *img1, const Image *img2, Image *outImg)
 {
-    CHECK_NULL_VOID(img1);
-    CHECK_NULL_VOID(img2);
-    CHECK_NULL_VOID(outImg);
-    CHECK_FORMAT_VOID(img1, IMAGE_FORMAT_GRAYSCALE);
-    CHECK_FORMAT_VOID(img2, IMAGE_FORMAT_GRAYSCALE);
-    CHECK_FORMAT_VOID(outImg, IMAGE_FORMAT_GRAYSCALE);
-    CHECK_CONDITION_VOID(img1->size == img2->size && img2->size == outImg->size);
+    CHECK_NULL_RET(img1);
+    CHECK_NULL_RET(img2);
+    CHECK_NULL_RET(outImg);
+    CHECK_FORMAT_RET(img1, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_RET(img2, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_FORMAT_RET(outImg, IMAGE_FORMAT_GRAYSCALE);
+    CHECK_CONDITION_RET(img1->size == img2->size && img2->size == outImg->size);
 
     const uint8_t *pa = (const uint8_t *)img1->pixels;
     const uint8_t *pb = (const uint8_t *)img2->pixels;
@@ -2055,13 +2077,14 @@ int _or(const Image *img1, const Image *img2, Image *outImg)
     for (uint32_t i = 0; i < img1->size; ++i) {
         po[i] = pa[i] | pb[i];
     }
+    return 0;
 }
 
 int _xor(const Image *img1, const Image *img2, Image *outImg)
 {
     if (!img1 || !img2 || !outImg || img1->width != img2->width || img1->height != img2->height ||
         img1->log != IMAGE_DATA_PIXELS || img2->log != IMAGE_DATA_PIXELS)
-        return;
+        return -1;
 
     int size = img1->width * img1->height;
 
@@ -2076,12 +2099,13 @@ int _xor(const Image *img1, const Image *img2, Image *outImg)
 
     for (int i = 0; i < size; ++i)
         outData[i] = data1[i] ^ data2[i];
+    return 0;
 }
 
 int _not(const Image *inImg, Image *outImg)
 {
     if (!inImg || !outImg || inImg->log != IMAGE_DATA_PIXELS)
-        return;
+        return -1;
 
     int size = inImg->width * inImg->height;
 
@@ -2095,6 +2119,7 @@ int _not(const Image *inImg, Image *outImg)
 
     for (int i = 0; i < size; ++i)
         outData[i] = ~data[i];
+    return 0;
 }
 
 /**
@@ -2349,7 +2374,7 @@ embeddip_status_t grabCutLite(Image *inImg, Image *outImg, Rectangle roi, int it
 #define FOREGROUND 255
 #define BACKGROUND 0
 #define GMM_COMPONENTS 2
-#define MAX_ITER 5
+#define MAX_ITER_GRABCUT 5
 
 typedef struct {
     float weight;
@@ -2366,7 +2391,7 @@ static float gaussian_prob(float x, float mean, float var)
 int grabCutGrayscaleRealistic(const Image *inImg, Image *outMask, Rectangle roi, int max_iter)
 {
     if (!inImg || !outMask || !inImg->pixels || inImg->format != IMAGE_FORMAT_GRAYSCALE)
-        return;
+        return -1;
 
     int width = inImg->width;
     int height = inImg->height;
@@ -2501,6 +2526,7 @@ int grabCutGrayscaleRealistic(const Image *inImg, Image *outMask, Rectangle roi,
     memory_free(labels);
     memory_free(fg_resp);
     memory_free(bg_resp);
+    return 0;
 }
 
 typedef struct {
@@ -2523,7 +2549,7 @@ float gaussian_prob_rgb(const uint8_t *pixel, const GMMComponentRGB *comp)
 int grabCutRGB(const Image *inImg, Image *outMask, Rectangle roi, int max_iter)
 {
     if (!inImg || !outMask || !inImg->pixels || inImg->format != IMAGE_FORMAT_RGB888)
-        return;
+        return -1;
 
     int width = inImg->width;
     int height = inImg->height;
@@ -2655,6 +2681,7 @@ int grabCutRGB(const Image *inImg, Image *outMask, Rectangle roi, int max_iter)
 
     memory_free(labels);
     memory_free(fg_resp);
+    return 0;
     memory_free(bg_resp);
 }
 
@@ -2674,13 +2701,13 @@ int grabCutRGB(const Image *inImg, Image *outMask, Rectangle roi, int max_iter)
 int resize(Image *inImg, Image *outImg, int outWidth, int outHeight)
 {
     if (inImg == NULL || outImg == NULL || outWidth <= 0 || outHeight <= 0) {
-        return;  // invalid parameters
+        return -1;  // invalid parameters
     }
 
     // Allocate channels if missing
     if (isChalsEmpty(outImg)) {
         if (!createChals(outImg, 1)) {  // only 1 channel for grayscale
-            return;                     // allocation failed
+            return -1;                     // allocation failed
         }
         outImg->is_chals = 1;
     }
@@ -2711,6 +2738,7 @@ int resize(Image *inImg, Image *outImg, int outWidth, int outHeight)
 
     // Update output image metadata
     outImg->width = (uint32_t)outWidth;
+    return 0;
     outImg->height = (uint32_t)outHeight;
     outImg->size = (uint32_t)(outWidth * outHeight);
 }
