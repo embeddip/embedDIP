@@ -11,10 +11,10 @@ namespace embedDIP
     public:
         explicit Camera(camera_t *driver);
 
-        bool init(ImageResolution res);
+        bool init(ImageResolution resolution);
         bool capture(captureMode mode, Image &img);
         bool stop();
-        bool setRes(ImageResolution res);
+        bool setRes(ImageResolution resolution);
 
     private:
         camera_t *driver_;

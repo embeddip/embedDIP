@@ -104,6 +104,8 @@ void filter2D_single_channel(Image *inImg, Image *outImg, int ch_idx, void *ctx)
             outCh[y * width + x] = sum;
         }
     }
+
+    outImg->log = IMAGE_DATA_CH0;
 }
 
 void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, int sizeY, float *kernelY, float delta)
@@ -205,6 +207,8 @@ void filter2D_separable(Image *inImg, Image *outImg, int sizeX, float *kernelX, 
             outCh[y * width + x] = sum;
         }
     }
+
+        outImg->log = IMAGE_DATA_CH0;
 }
 
 /*
