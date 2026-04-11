@@ -17,16 +17,8 @@
     // Reserve 512KB (0x80000) to be safe
     #define CAMERA_LCD_FRAMEBUFFER_SIZE 0x80000  // 512KB reserved
 
-    // AI activations buffer at 0xC0080000 - 0xC01FFFFF (~1.5MB reserved)
-    // #define AI_ACTIVATIONS_RESERVED_SIZE 0x180000  // 1.5MB for AI model
-    #define AI_ACTIVATIONS_RESERVED_SIZE 0x0  // 0MB for AI model
-
-    // Memory pool starts AFTER Camera/LCD framebuffer AND AI activations to avoid overlap
-    // Memory layout: 0xC0000000: LCD (512KB) | 0xC0080000: AI (1.5MB) | 0xC0200000: embedDIP pool
-    // Dynamic image allocations start from 0xC0200000 onwards (~6MB remaining)
-    #define MEMORY_POOL_START_OFFSET (CAMERA_LCD_FRAMEBUFFER_SIZE + AI_ACTIVATIONS_RESERVED_SIZE)
-    #define MEMORY_POOL_SIZE (1024 * 1024 * 8 - MEMORY_POOL_START_OFFSET)  // ~6MB
-static uint8_t *memory_pool = ((uint8_t *)SDRAM_BANK_ADDR + MEMORY_POOL_START_OFFSET);
+    #define MEMORY_POOL_SIZE (1024 * 1024 * 8 - CAMERA_LCD_FRAMEBUFFER_SIZE)  // ~6MB
+static uint8_t *memory_pool = ((uint8_t *)SDRAM_BANK_ADDR + CAMERA_LCD_FRAMEBUFFER_SIZE);
 
 typedef struct MemoryBlock {
     size_t size;
