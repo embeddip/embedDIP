@@ -16,9 +16,11 @@ extern "C" {
  *
  * @param[in]  src  Pointer to input binary image.
  * @param[out] dst  Pointer to output labeled image.
+ * @param[out] label_count Optional output pointer for number of connected
+ *                         labels present in output (including background).
  * @return EMBEDDIP_OK on success, error code otherwise.
  */
-embeddip_status_t connectedComponents(const Image *src, Image *dst);
+embeddip_status_t connectedComponents(const Image *src, Image *dst, uint32_t *label_count);
 
 /**
  * @brief Extracts a specific connected component from a labeled image.

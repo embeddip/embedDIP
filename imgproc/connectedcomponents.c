@@ -2,25 +2,17 @@
 // Copyright (c) 2025 EmbedDIP
 
 #include "connectedcomponents.h"
-
-#include "board/common.h"
-#include "core/memory_manager.h"
-
 #include <string.h> /* For memset */
 
-embeddip_status_t connectedComponents(const Image *src, Image *dst)
+embeddip_status_t connectedComponents(const Image *src, Image *dst, uint32_t *label_count)
 {
     int label = 1;
     uint8_t *src_data = src->pixels;
     uint8_t *dst_data = dst->pixels;
 
-    Image *equivalences = (Image *)createImage_legacy(IMAGE_RES_WQVGA, IMAGE_FORMAT_GRAYSCALE);
-    uint8_t *equvData = equivalences->pixels;
+    uint8_t equvData[256] = {0};
+    memset(dst_data, 0x00, src->size);
 
-    for (uint32_t i = 0; i < src->size; i++)
-        equvData[i] = 0x00;
-    for (uint32_t i = 0; i < src->size; i++)
-        dst_data[i] = 0x00;
     // First pass
     for (uint32_t y = 0; y < src->height; y++) {
         for (uint32_t x = 0; x < src->width; x++) {
@@ -40,6 +32,9 @@ embeddip_status_t connectedComponents(const Image *src, Image *dst)
                 } else if (left || up) {                       // One neighbor is labeled
                     dst_data[index] = (left > 0) ? left : up;  // Assign the labeled label
                 } else {
+                    if (label >= 255) {
+                        return EMBEDDIP_ERROR_OVERFLOW;
+                    }
                     dst_data[index] = label++;  // Assign a new label
                 }
             }
@@ -71,13 +66,11 @@ embeddip_status_t connectedComponents(const Image *src, Image *dst)
         }
     }
 
-    // Assign background (0) the highest label so it becomes white after normalization
-    int maxLabel = newLabel;  // newLabel is now one past the last used label
-    for (uint32_t i = 0; i < src->size; i++) {
-        if (dst_data[i] == 0) {
-            dst_data[i] = maxLabel;
-        }
+    if (label_count) {
+        *label_count = (uint32_t)newLabel;
     }
+
+    dst->log = IMAGE_DATA_PIXELS;
 
     return EMBEDDIP_OK;
 }

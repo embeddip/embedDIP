@@ -865,7 +865,7 @@ class Image
     /**
      * @brief Labels connected components.
      */
-    void connectedComponents(Image &outImg);
+    void connectedComponents(Image &outImg, uint32_t *labelCount = nullptr);
 
     /**
      * @brief Extracts one connected-component label as a mask.

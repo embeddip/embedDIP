@@ -837,9 +837,9 @@ void Image::Canny(Image &outImg,
 /**
  * @brief Labels connected components.
  */
-void Image::connectedComponents(Image &outImg)
+void Image::connectedComponents(Image &outImg, uint32_t *labelCount)
 {
-    ::connectedComponents(raw(), outImg.raw());
+    ::connectedComponents(raw(), outImg.raw(), labelCount);
 }
 
 /**
