@@ -35,7 +35,7 @@ extern "C" {
 /**
  * @brief OV5640 pixel format constants
  */
-#define OV5640_PIXEL_FORMAT_Y8     0x00  /**< 8-bit grayscale */
+#define OV5640_PIXEL_FORMAT_Y8     0x10  /**< 8-bit grayscale */
 #define OV5640_PIXEL_FORMAT_RGB565 0x6F  /**< RGB565 format */
 #define OV5640_PIXEL_FORMAT_RGB888 0x23  /**< RGB888 format */
 #define OV5640_PIXEL_FORMAT_YUV422 0x30  /**< YUV422 format */

@@ -331,7 +331,7 @@ uint16_t ov5640_ReadID(uint16_t DeviceAddr)
 int OV5640_SetPixelFormat(uint16_t DeviceAddr, uint32_t format)
 {
     /* Validate format */
-    if (format != 0x00 && format != 0x6F && format != 0x23 && format != 0x30) {
+    if (format != 0x10 && format != 0x6F && format != 0x23 && format != 0x30) {
         return -1;  /* Invalid format */
     }
 
