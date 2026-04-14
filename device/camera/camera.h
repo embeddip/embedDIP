@@ -5,6 +5,7 @@
 #define CAMERA_H
 
 #include "core/image.h"
+
 #include <stddef.h>
 #include <stdint.h>
 

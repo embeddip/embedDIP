@@ -324,13 +324,15 @@ embeddip_status_t convertTo(Image *img)
  * image to a given reference color.
  *
  * @param[in] inImg Pointer to the input RGB image (3 channels, interleaved as RGBRGB...).
- * @param[out] outImg Pointer to the output grayscale image (1 channel, same width and height as input).
+ * @param[out] outImg Pointer to the output grayscale image (1 channel, same width and height as
+ * input).
  * @param[in] R_ref Reference Red channel value (0–255).
  * @param[in] G_ref Reference Green channel value (0–255).
  * @param[in] B_ref Reference Blue channel value (0–255).
  * @return EMBEDDIP_OK on success, error code on failure
  */
-embeddip_status_t dist(const Image *inImg, Image *outImg, uint8_t R_ref, uint8_t G_ref, uint8_t B_ref)
+embeddip_status_t
+dist(const Image *inImg, Image *outImg, uint8_t R_ref, uint8_t G_ref, uint8_t B_ref)
 {
     int totalPixels = inImg->width * inImg->height;
 

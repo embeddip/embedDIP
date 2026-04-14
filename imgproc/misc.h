@@ -47,7 +47,8 @@ embeddip_status_t convertTo(Image *img);
  * @param B_ref Reference Blue channel value (0–255)
  * @return EMBEDDIP_OK on success, error code on failure
  */
-embeddip_status_t dist(const Image *inImg, Image *outImg, uint8_t R_ref, uint8_t G_ref, uint8_t B_ref);
+embeddip_status_t
+dist(const Image *inImg, Image *outImg, uint8_t R_ref, uint8_t G_ref, uint8_t B_ref);
 
 /**
  * @brief Bitwise AND operation on binary masks

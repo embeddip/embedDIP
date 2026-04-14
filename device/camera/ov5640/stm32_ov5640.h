@@ -13,37 +13,38 @@
 
 #ifdef DEVICE_OV5640
 
-#ifndef __OV5640_H
-#define __OV5640_H
+    #ifndef __OV5640_H
+        #define __OV5640_H
 
-#ifdef __cplusplus
+        #ifdef __cplusplus
 extern "C" {
-#endif
+        #endif
 
-#include "device/camera/camera.h"
+        #include "device/camera/camera.h"
 
-/**
- * @brief OV5640 chip ID
- */
-#define OV5640_ID 0x5640
+        /**
+         * @brief OV5640 chip ID
+         */
+        #define OV5640_ID 0x5640
 
-/**
- * @brief OV5640 I2C address (7-bit address shifted left by 1)
- */
-#define CAMERA_I2C_ADDRESS 0x78
+        /**
+         * @brief OV5640 I2C address (7-bit address shifted left by 1)
+         */
+        #define CAMERA_I2C_ADDRESS 0x78
 
-/**
- * @brief OV5640 pixel format constants
- */
-#define OV5640_PIXEL_FORMAT_Y8     0x10  /**< 8-bit grayscale */
-#define OV5640_PIXEL_FORMAT_RGB565 0x6F  /**< RGB565 format */
-#define OV5640_PIXEL_FORMAT_RGB888 0x23  /**< RGB888 format */
-#define OV5640_PIXEL_FORMAT_YUV422 0x30  /**< YUV422 format */
+        /**
+         * @brief OV5640 pixel format constants
+         */
+        #define OV5640_PIXEL_FORMAT_Y8 0x10     /**< 8-bit grayscale */
+        #define OV5640_PIXEL_FORMAT_RGB565 0x6F /**< RGB565 format */
+        #define OV5640_PIXEL_FORMAT_RGB888 0x23 /**< RGB888 format */
+        #define OV5640_PIXEL_FORMAT_YUV422 0x30 /**< YUV422 format */
 
 /**
  * @brief Initialize OV5640 camera
  * @param DeviceAddr: I2C device address (typically 0x78)
- * @param resolution: Camera resolution (CAMERA_R160x120, CAMERA_R320x240, CAMERA_R480x272, CAMERA_R640x480)
+ * @param resolution: Camera resolution (CAMERA_R160x120, CAMERA_R320x240, CAMERA_R480x272,
+ * CAMERA_R640x480)
  */
 void ov5640_Init(uint16_t DeviceAddr, uint32_t resolution);
 
@@ -77,10 +78,10 @@ extern camera_t stm32_ov5640;
  */
 extern volatile uint8_t frame_capture_complete;
 
-#ifdef __cplusplus
+        #ifdef __cplusplus
 }
-#endif
+        #endif
 
-#endif /* __OV5640_H */
+    #endif /* __OV5640_H */
 
 #endif /* DEVICE_OV5640 */

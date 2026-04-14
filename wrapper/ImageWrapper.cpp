@@ -571,8 +571,9 @@ void Image::add(const Image &other, Image &out) const
 /**
  * @brief Computes color distance from this RGB image to a reference color.
  */
-void Image::dist(Image &out, uint8_t r, uint8_t g, uint8_t b) const {
-  ::dist(raw(), out.raw(), r, g, b);
+void Image::dist(Image &out, uint8_t r, uint8_t g, uint8_t b) const
+{
+    ::dist(raw(), out.raw(), r, g, b);
 }
 
 /**

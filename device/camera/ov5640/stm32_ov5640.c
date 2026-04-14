@@ -11,22 +11,23 @@
 
 #ifdef DEVICE_OV5640
 
-#include "stm32_ov5640.h"
-#include "board/stm32f7/configs.h"
-#include "device/camera/camera.h"
-#include "device/serial/serial.h"
-#include "stm32f7xx_hal.h"
+    #include "board/stm32f7/configs.h"
+    #include "device/camera/camera.h"
+    #include "device/serial/serial.h"
 
-#include <stdarg.h>
-#include <stdint.h>
-#include <stdio.h>
+    #include <stdarg.h>
+    #include <stdint.h>
+    #include <stdio.h>
 
-/* ============================================================================
- * I2C COMMUNICATION LAYER (Internal - Static Functions)
- * ============================================================================ */
+    #include "stm32_ov5640.h"
+    #include "stm32f7xx_hal.h"
 
-/* Private defines */
-#define I2C1_TIMING ((uint32_t)0x40912732)  /**< I2C timing for 100kHz at 216MHz */
+    /* ============================================================================
+     * I2C COMMUNICATION LAYER (Internal - Static Functions)
+     * ============================================================================ */
+
+    /* Private defines */
+    #define I2C1_TIMING ((uint32_t)0x40912732) /**< I2C timing for 100kHz at 216MHz */
 
 /* Private variables */
 static I2C_HandleTypeDef hI2cCamera = {0};
@@ -68,8 +69,7 @@ static void CAMERA_IO_Write(uint16_t DeviceAddr, uint16_t Reg, uint8_t Value)
 {
     HAL_StatusTypeDef status;
 
-    status = HAL_I2C_Mem_Write(&hI2cCamera, DeviceAddr, Reg, I2C_MEMADD_SIZE_16BIT,
-                               &Value, 1, 100);
+    status = HAL_I2C_Mem_Write(&hI2cCamera, DeviceAddr, Reg, I2C_MEMADD_SIZE_16BIT, &Value, 1, 100);
 
     if (status != HAL_OK) {
         I2C_Error(DeviceAddr);
@@ -87,8 +87,7 @@ static uint8_t CAMERA_IO_Read(uint16_t DeviceAddr, uint16_t Reg)
     uint8_t value = 0;
     HAL_StatusTypeDef status;
 
-    status = HAL_I2C_Mem_Read(&hI2cCamera, DeviceAddr, Reg, I2C_MEMADD_SIZE_16BIT,
-                              &value, 1, 100);
+    status = HAL_I2C_Mem_Read(&hI2cCamera, DeviceAddr, Reg, I2C_MEMADD_SIZE_16BIT, &value, 1, 100);
 
     if (status != HAL_OK) {
         I2C_Error(DeviceAddr);
@@ -151,7 +150,7 @@ static void I2C_MspInit(void)
  */
 static void I2C_Error(uint8_t Addr)
 {
-    (void)Addr;  /* Unused parameter */
+    (void)Addr; /* Unused parameter */
 
     /* De-initialize and re-initialize I2C to recover from error */
     HAL_I2C_DeInit(&hI2cCamera);
@@ -216,32 +215,52 @@ const uint16_t OV5640_Init[][2] = {
  * @brief Resolution configuration for 640x480 (VGA)
  */
 const uint16_t OV5640_VGA[][2] = {
-    {0x3808, 0x02}, {0x3809, 0x80}, {0x380a, 0x01}, {0x380b, 0xE0},
-    {0x4300, 0x6F}, {0x4740, 0x22}, {0x501F, 0x01},
+    {0x3808, 0x02},
+    {0x3809, 0x80},
+    {0x380a, 0x01},
+    {0x380b, 0xE0},
+    {0x4300, 0x6F},
+    {0x4740, 0x22},
+    {0x501F, 0x01},
 };
 
 /**
  * @brief Resolution configuration for 480x272
  */
 const uint16_t OV5640_480x272[][2] = {
-    {0x3808, 0x01}, {0x3809, 0xE0}, {0x380a, 0x01}, {0x380b, 0x10},
-    {0x4300, 0x6F}, {0x4740, 0x22}, {0x501f, 0x01},
+    {0x3808, 0x01},
+    {0x3809, 0xE0},
+    {0x380a, 0x01},
+    {0x380b, 0x10},
+    {0x4300, 0x6F},
+    {0x4740, 0x22},
+    {0x501f, 0x01},
 };
 
 /**
  * @brief Resolution configuration for 320x240 (QVGA)
  */
 const uint16_t OV5640_QVGA[][2] = {
-    {0x3808, 0x01}, {0x3809, 0x40}, {0x380a, 0x00}, {0x380b, 0xF0},
-    {0x4300, 0x6F}, {0x4740, 0x22}, {0x501f, 0x01},
+    {0x3808, 0x01},
+    {0x3809, 0x40},
+    {0x380a, 0x00},
+    {0x380b, 0xF0},
+    {0x4300, 0x6F},
+    {0x4740, 0x22},
+    {0x501f, 0x01},
 };
 
 /**
  * @brief Resolution configuration for 160x120 (QQVGA)
  */
 const uint16_t OV5640_QQVGA[][2] = {
-    {0x3808, 0x00}, {0x3809, 0xA0}, {0x380a, 0x00}, {0x380b, 0x78},
-    {0x4300, 0x6F}, {0x4740, 0x22}, {0x501f, 0x01},
+    {0x3808, 0x00},
+    {0x3809, 0xA0},
+    {0x380a, 0x00},
+    {0x380b, 0x78},
+    {0x4300, 0x6F},
+    {0x4740, 0x22},
+    {0x501f, 0x01},
 };
 
 /**
@@ -250,7 +269,7 @@ const uint16_t OV5640_QQVGA[][2] = {
 CAMERA_DrvTypeDef ov5640_drv = {
     ov5640_Init,
     ov5640_ReadID,
-    NULL,  /* Config function removed */
+    NULL, /* Config function removed */
 };
 
 /**
@@ -332,7 +351,7 @@ int OV5640_SetPixelFormat(uint16_t DeviceAddr, uint32_t format)
 {
     /* Validate format */
     if (format != 0x10 && format != 0x6F && format != 0x23 && format != 0x30) {
-        return -1;  /* Invalid format */
+        return -1; /* Invalid format */
     }
 
     /* Write format to register 0x4300 (format control) */
@@ -610,12 +629,10 @@ static int camera_setRes(ImageResolution resolution)
 /**
  * @brief STM32 OV5640 camera interface structure
  */
-camera_t stm32_ov5640 = {
-    .init = camera_init,
-    .capture = camera_capture,
-    .stop = camera_stop,
-    .setRes = camera_setRes
-};
+camera_t stm32_ov5640 = {.init = camera_init,
+                         .capture = camera_capture,
+                         .stop = camera_stop,
+                         .setRes = camera_setRes};
 
 /**
  * @brief DCMI frame event callback - called when a complete frame is captured

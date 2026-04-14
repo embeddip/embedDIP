@@ -2,6 +2,7 @@
 // Copyright (c) 2025 EmbedDIP
 
 #include "connectedcomponents.h"
+
 #include <string.h> /* For memset */
 
 embeddip_status_t connectedComponents(const Image *src, Image *dst, uint32_t *label_count)
