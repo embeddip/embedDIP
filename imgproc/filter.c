@@ -36,6 +36,15 @@ uint8_t channel_mask[] = {
     0xF7,
 };
 
+static inline int clamp_index(int idx, int limit)
+{
+    if (idx < 0)
+        return 0;
+    if (idx >= limit)
+        return limit - 1;
+    return idx;
+}
+
 // i am not sure about the kernel.
 embeddip_status_t filter2D_single_channel(Image *src, Image *dst, int ch_idx, void *ctx)
 {
@@ -79,16 +88,14 @@ embeddip_status_t filter2D_single_channel(Image *src, Image *dst, int ch_idx, vo
 
                 for (int fy = -k; fy <= k; ++fy) {
                     for (int fx = -k; fx <= k; ++fx) {
-                        int iy = y + fy;
-                        int ix = x + fx;
+                        int iy = clamp_index(y + fy, height);
+                        int ix = clamp_index(x + fx, width);
 
                         float val = 0.0f;
-                        if (iy >= 0 && iy < height && ix >= 0 && ix < width) {
-                            if (src->format == IMAGE_FORMAT_GRAYSCALE) {
-                                val = (float)raw[iy * width + ix];
-                            } else if (src->format == IMAGE_FORMAT_RGB888) {
-                                val = (float)raw[(iy * width + ix) * 3 + ch_idx - 1];
-                            }
+                        if (src->format == IMAGE_FORMAT_GRAYSCALE) {
+                            val = (float)raw[iy * width + ix];
+                        } else if (src->format == IMAGE_FORMAT_RGB888) {
+                            val = (float)raw[(iy * width + ix) * 3 + ch_idx - 1];
                         }
 
                         sum += val * kernel[(fy + k) * size + (fx + k)];
@@ -120,13 +127,10 @@ embeddip_status_t filter2D_single_channel(Image *src, Image *dst, int ch_idx, vo
 
                 for (int fy = -k; fy <= k; ++fy) {
                     for (int fx = -k; fx <= k; ++fx) {
-                        int iy = y + fy;
-                        int ix = x + fx;
+                        int iy = clamp_index(y + fy, height);
+                        int ix = clamp_index(x + fx, width);
 
-                        float val = 0.0f;
-                        if (iy >= 0 && iy < height && ix >= 0 && ix < width)
-                            val = inCh[iy * width + ix];
-
+                        float val = inCh[iy * width + ix];
                         sum += val * kernel[(fy + k) * size + (fx + k)];
                     }
                 }
@@ -286,9 +290,8 @@ embeddip_status_t sepfilter2D(Image *src,
         for (int x = 0; x < width; ++x) {
             float sum = 0.0f;
             for (int ky = -half; ky <= half; ++ky) {
-                int iy = y + ky;
-                if (iy >= 0 && iy < height)
-                    sum += inCh[iy * width + x] * kernel_y[ky + half];
+                int iy = clamp_index(y + ky, height);
+                sum += inCh[iy * width + x] * kernel_y[ky + half];
             }
             temp[y * width + x] = sum;
         }
@@ -299,9 +302,8 @@ embeddip_status_t sepfilter2D(Image *src,
         for (int x = 0; x < width; ++x) {
             float sum = 0.0f;
             for (int kx = -half; kx <= half; ++kx) {
-                int ix = x + kx;
-                if (ix >= 0 && ix < width)
-                    sum += temp[y * width + ix] * kernel_x[kx + half];
+                int ix = clamp_index(x + kx, width);
+                sum += temp[y * width + ix] * kernel_x[kx + half];
             }
 
             sum = (float)(sum * delta);
@@ -877,11 +879,9 @@ embeddip_status_t dogFilter(const Image *src, Image *dst, float sigma1, float si
             float sum = 0.0f;
             for (int fy = -half1; fy <= half1; ++fy) {
                 for (int fx = -half1; fx <= half1; ++fx) {
-                    int iy = y + fy;
-                    int ix = x + fx;
-                    if (iy >= 0 && iy < height && ix >= 0 && ix < width)
-                        sum +=
-                            src_buf[iy * width + ix] * kernel1[(fy + half1) * size1 + (fx + half1)];
+                    int iy = clamp_index(y + fy, height);
+                    int ix = clamp_index(x + fx, width);
+                    sum += src_buf[iy * width + ix] * kernel1[(fy + half1) * size1 + (fx + half1)];
                 }
             }
             blur1[y * width + x] = sum;
@@ -894,11 +894,9 @@ embeddip_status_t dogFilter(const Image *src, Image *dst, float sigma1, float si
             float sum = 0.0f;
             for (int fy = -half2; fy <= half2; ++fy) {
                 for (int fx = -half2; fx <= half2; ++fx) {
-                    int iy = y + fy;
-                    int ix = x + fx;
-                    if (iy >= 0 && iy < height && ix >= 0 && ix < width)
-                        sum +=
-                            src_buf[iy * width + ix] * kernel2[(fy + half2) * size2 + (fx + half2)];
+                    int iy = clamp_index(y + fy, height);
+                    int ix = clamp_index(x + fx, width);
+                    sum += src_buf[iy * width + ix] * kernel2[(fy + half2) * size2 + (fx + half2)];
                 }
             }
             blur2[y * width + x] = sum;
@@ -1020,10 +1018,9 @@ embeddip_status_t logFilter(const Image *src, Image *dst, float sigma)
             float sum = 0.0f;
             for (int fy = -half; fy <= half; ++fy) {
                 for (int fx = -half; fx <= half; ++fx) {
-                    int iy = y + fy;
-                    int ix = x + fx;
-                    if (iy >= 0 && iy < height && ix >= 0 && ix < width)
-                        sum += src_buf[iy * width + ix] * kernel[(fy + half) * ksize + (fx + half)];
+                    int iy = clamp_index(y + fy, height);
+                    int ix = clamp_index(x + fx, width);
+                    sum += src_buf[iy * width + ix] * kernel[(fy + half) * ksize + (fx + half)];
                 }
             }
             outCh[y * width + x] = sum;
@@ -1228,11 +1225,7 @@ static void sep_conv_xy_f32(const float *src,
         for (int x = 0; x < width; ++x) {
             float acc = 0.f;
             for (int i = -rx; i <= rx; ++i) {
-                int xx = x + i;
-                if (xx < 0)
-                    xx = 0;
-                if (xx >= width)
-                    xx = width - 1;
+                int xx = clamp_index(x + i, width);
                 acc += row[xx] * kx[i + rx];
             }
             trow[x] = acc;
@@ -1245,11 +1238,7 @@ static void sep_conv_xy_f32(const float *src,
         for (int x = 0; x < width; ++x) {
             float acc = 0.f;
             for (int j = -ry; j <= ry; ++j) {
-                int yy = y + j;
-                if (yy < 0)
-                    yy = 0;
-                if (yy >= height)
-                    yy = height - 1;
+                int yy = clamp_index(y + j, height);
                 acc += tmp[yy * width + x] * ky[j + ry];
             }
             drow[x] = acc;
