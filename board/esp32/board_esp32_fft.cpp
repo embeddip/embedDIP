@@ -21,6 +21,10 @@ static bool isValidFFTSize(int w, int h)
 
 embeddip_status_t fft(const Image *inImg, Image *outImg)
 {
+    if (!inImg || !outImg || !inImg->pixels) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+
     int N = inImg->width;
     if (!isValidFFTSize(N, N)) {
         // Serial.println("[ERROR] Invalid FFT size. Only powers of 2 are supported.");
@@ -35,12 +39,6 @@ embeddip_status_t fft(const Image *inImg, Image *outImg)
     // Serial.println("[ERROR] 1pixels are null.");
     float *buf0 = outImg->chals->ch[0];
     float *buf1 = outImg->chals->ch[1];
-    // Serial.println("[ERROR] 2or pixels are null.");
-    if (!inImg || !inImg->pixels) {
-        // Serial.println("[ERROR]3 or pixels are null.");
-        return EMBEDDIP_ERROR_NULL_PTR;
-    }
-
     uint8_t *input = static_cast<uint8_t *>(inImg->pixels);
     for (int i = 0; i < N * N; i++) {
         buf0[2 * i] = (float)input[i];  // real part
@@ -233,12 +231,12 @@ embeddip_status_t fftshift(Image *img)
 
 embeddip_status_t _abs_(const Image *fftImg, Image *magImg)
 {
-    int size = fftImg->width * fftImg->height;
-
-    if (!fftImg || !fftImg->chals) {
+    if (!fftImg || !fftImg->chals || !magImg) {
         // Serial.println("[ERROR] Input FFT image or its channels are null.");
         return EMBEDDIP_ERROR_NULL_PTR;
     }
+
+    int size = fftImg->width * fftImg->height;
 
     float *fft = (fftImg->log == IMAGE_DATA_COMPLEX) ? fftImg->chals->ch[1] : fftImg->chals->ch[0];
 
