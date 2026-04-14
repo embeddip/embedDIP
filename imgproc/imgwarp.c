@@ -51,6 +51,7 @@ embeddip_status_t resize(Image *src, Image *dst, int width, int height)
     dst->width = (uint32_t)width;
     dst->height = (uint32_t)height;
     dst->size = (uint32_t)(width * height);
+    dst->log = IMAGE_DATA_CH0;
 
     return EMBEDDIP_OK;
 }
