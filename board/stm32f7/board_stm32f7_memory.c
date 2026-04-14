@@ -21,6 +21,7 @@
 static uint8_t *memory_pool = ((uint8_t *)SDRAM_BANK_ADDR + CAMERA_LCD_FRAMEBUFFER_SIZE);
 
 typedef struct MemoryBlock {
+    uint32_t magic;
     size_t size;
     struct MemoryBlock *next;
     int is_free;
@@ -28,9 +29,35 @@ typedef struct MemoryBlock {
 
     #define ALIGN4(s) (((s) + 3) & ~3)
     #define BLOCK_SIZE sizeof(MemoryBlock)
+    #define MEMBLOCK_MAGIC 0xB10C4EADu
 
 static MemoryBlock *free_list = NULL;
 static int initialized = 0;
+
+static inline uintptr_t pool_start_addr(void)
+{
+    return (uintptr_t)memory_pool;
+}
+
+static inline uintptr_t pool_end_addr(void)
+{
+    return (uintptr_t)memory_pool + MEMORY_POOL_SIZE;
+}
+
+static inline int ptr_in_pool(const void *p)
+{
+    uintptr_t a = (uintptr_t)p;
+    return a >= pool_start_addr() && a < pool_end_addr();
+}
+
+static inline int block_header_valid(const MemoryBlock *b)
+{
+    if (!b || !ptr_in_pool(b))
+        return 0;
+    if ((uintptr_t)b + BLOCK_SIZE > pool_end_addr())
+        return 0;
+    return (b->magic == MEMBLOCK_MAGIC);
+}
 
 void memory_init()
 {
@@ -38,6 +65,7 @@ void memory_init()
         return;
 
     free_list = (MemoryBlock *)memory_pool;
+    free_list->magic = MEMBLOCK_MAGIC;
     free_list->size = MEMORY_POOL_SIZE - BLOCK_SIZE;
     free_list->next = NULL;
     free_list->is_free = 1;
@@ -54,14 +82,15 @@ void *memory_alloc(size_t size)
 
     MemoryBlock *curr = free_list;
 
-    while (curr) {
+    while (curr && block_header_valid(curr)) {
         if (curr->is_free && curr->size >= size) {
             uintptr_t curr_addr = (uintptr_t)curr;
-            uintptr_t pool_end = (uintptr_t)memory_pool + MEMORY_POOL_SIZE;
+            uintptr_t pool_end = pool_end_addr();
             uintptr_t next_block_addr = curr_addr + BLOCK_SIZE + size;
 
             if (curr->size >= size + BLOCK_SIZE + 4 && next_block_addr + BLOCK_SIZE < pool_end) {
                 MemoryBlock *new_block = (MemoryBlock *)(next_block_addr);
+                new_block->magic = MEMBLOCK_MAGIC;
                 new_block->size = curr->size - size - BLOCK_SIZE;
                 new_block->next = curr->next;
                 new_block->is_free = 1;
@@ -85,8 +114,8 @@ void memory_free(void *ptr)
     if (!ptr)
         return;
 
-    uintptr_t pool_start = (uintptr_t)memory_pool;
-    uintptr_t pool_end = pool_start + MEMORY_POOL_SIZE;
+    uintptr_t pool_start = pool_start_addr();
+    uintptr_t pool_end = pool_end_addr();
     uintptr_t addr = (uintptr_t)ptr;
 
     if (addr < pool_start || addr >= pool_end)
@@ -96,12 +125,28 @@ void memory_free(void *ptr)
         memory_init();
 
     MemoryBlock *block = (MemoryBlock *)((uint8_t *)ptr - BLOCK_SIZE);
+
+    if (!block_header_valid(block))
+        return;
+
+    // Ignore double free.
+    if (block->is_free)
+        return;
+
+    // Ensure the pointer corresponds exactly to block payload start.
+    if ((void *)((uint8_t *)block + BLOCK_SIZE) != ptr)
+        return;
+
     block->is_free = 1;
 
-    // Merge adjacent free blocks
+    // Merge only physically adjacent free blocks.
     MemoryBlock *curr = free_list;
-    while (curr && curr->next) {
-        if (curr->is_free && curr->next->is_free) {
+    while (curr && block_header_valid(curr) && curr->next) {
+        if (!block_header_valid(curr->next)) {
+            break;
+        }
+        uintptr_t curr_end = (uintptr_t)curr + BLOCK_SIZE + curr->size;
+        if (curr->is_free && curr->next->is_free && curr_end == (uintptr_t)curr->next) {
             curr->size += BLOCK_SIZE + curr->next->size;
             curr->next = curr->next->next;
         } else {
@@ -119,6 +164,10 @@ void *memory_realloc(void *ptr, size_t new_size)
         memory_init();
 
     MemoryBlock *block = (MemoryBlock *)((uint8_t *)ptr - BLOCK_SIZE);
+    if (!block_header_valid(block))
+        return NULL;
+
+    new_size = ALIGN4(new_size);
 
     if (block->size >= new_size)
         return ptr;

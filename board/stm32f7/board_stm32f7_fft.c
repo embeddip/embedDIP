@@ -96,11 +96,20 @@ embeddip_status_t fourierInv(const Image *inImg, Image *outImg)
  */
 embeddip_status_t polarToCart(const Image *mag_img, const Image *phase_img, Image *dst)
 {
+    if (!mag_img || !phase_img || !dst)
+        return EMBEDDIP_ERROR_NULL_PTR;
+
     int size = mag_img->width * mag_img->height;
 
-    if (isChalsEmpty(dst)) {
-        createChalsComplex(dst, 1);  // Complex channel for interleaved (Re, Im)
-        dst->is_chals = 1;
+    if (!isChalsEmpty(dst) && dst->chals && dst->chals->ch[0]) {
+        // Ensure output buffer has complex capacity (2*N floats).
+        memory_free(dst->chals->ch[0]);
+        dst->chals->ch[0] = NULL;
+    }
+
+    embeddip_status_t status = createChalsComplex(dst, 1);
+    if (status != EMBEDDIP_OK) {
+        return status;
     }
 
     float *mag = mag_img->chals->ch[0];
@@ -553,7 +562,7 @@ embeddip_status_t ifft__(const Image *inImg, Image *outImg)
     float *buf0;
 
     if (isChalsEmpty(outImg)) {
-        createChals(outImg, 2);
+        createChalsComplex(outImg, 1);
         outImg->is_chals = 1;
         buf0 = outImg->chals->ch[0];
     } else {
