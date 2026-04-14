@@ -982,7 +982,7 @@ embeddip_status_t logFilter(const Image *src, Image *dst, float sigma)
 
     // Allocate float buffer and convert input
     float *src_buf = (float *)memory_alloc(width * height * sizeof(float));
-    if (!src) {
+    if (!src_buf) {
         memory_free(kernel);
         return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
