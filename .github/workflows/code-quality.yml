@@ -2,7 +2,9 @@ name: Code Quality
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
   quality:
@@ -22,6 +24,20 @@ jobs:
       - name: Run Cppcheck
         run: |
           echo "Running cppcheck static analysis..."
+          SRC_DIRS=()
+          for d in core imgproc board device wrapper; do
+            [ -d "$d" ] && SRC_DIRS+=("$d")
+          done
+          if [ ${#SRC_DIRS[@]} -eq 0 ]; then
+            echo "No source directories found for cppcheck"
+            exit 1
+          fi
+
+          INCLUDE_ARGS=()
+          for d in "${SRC_DIRS[@]}"; do
+            INCLUDE_ARGS+=("-I" "$d")
+          done
+
           cppcheck \
             --enable=warning,style,performance,portability \
             --error-exitcode=1 \
@@ -31,16 +47,8 @@ jobs:
             --suppress=unmatchedSuppression \
             --std=c11 \
             --force \
-            -I embedDIP/core \
-            -I embedDIP/imgproc \
-            -I embedDIP/board \
-            -I embedDIP/device \
-            -I embedDIP/wrapper \
-            -I Drivers/STM32F7xx_HAL_Driver/Inc \
-            -I Drivers/CMSIS/Device/ST/STM32F7xx/Include \
-            -I Drivers/CMSIS/Core/Include \
-            -I Core/Inc \
-            embedDIP/ Core/ \
+            "${INCLUDE_ARGS[@]}" \
+            "${SRC_DIRS[@]}" \
             --xml \
             2> cppcheck-report.xml
 
@@ -63,8 +71,16 @@ jobs:
           fi
 
           # Fail if any file is not properly formatted
-          find embedDIP Core \( -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) \
-            -not -path "*/Drivers/*" \
+          SRC_DIRS=()
+          for d in core imgproc board device wrapper; do
+            [ -d "$d" ] && SRC_DIRS+=("$d")
+          done
+          if [ ${#SRC_DIRS[@]} -eq 0 ]; then
+            echo "No source directories found for format check"
+            exit 1
+          fi
+
+          find "${SRC_DIRS[@]}" \( -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) \
             -print0 | xargs -0 clang-format --dry-run --Werror
 
       - name: Upload Cppcheck Report

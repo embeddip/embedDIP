@@ -10,7 +10,7 @@ on:
       - '**/*.hpp'
       - '**/*.c'
       - '**/*.cpp'
-      - 'Doxyfile'
+      - 'docs/Doxyfile'
       - '.github/workflows/doxygen-gh-pages.yml'
   workflow_dispatch: # Allow manual trigger
 
@@ -46,7 +46,7 @@ jobs:
 
       - name: Generate Doxygen documentation
         run: |
-          doxygen Doxyfile
+          doxygen docs/Doxyfile
 
       - name: Check generated documentation
         run: |
