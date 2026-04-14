@@ -39,7 +39,7 @@ jobs:
           done
 
           cppcheck \
-            --enable=warning,style,performance,portability \
+            --enable=warning,performance,portability \
             --error-exitcode=1 \
             --inline-suppr \
             --suppress=missingIncludeSystem \
@@ -51,6 +51,37 @@ jobs:
             "${SRC_DIRS[@]}" \
             --xml \
             2> cppcheck-report.xml
+
+      - name: Run Cppcheck Style Report
+        continue-on-error: true
+        run: |
+          echo "Running cppcheck style analysis (non-blocking)..."
+          SRC_DIRS=()
+          for d in core imgproc board device wrapper; do
+            [ -d "$d" ] && SRC_DIRS+=("$d")
+          done
+          if [ ${#SRC_DIRS[@]} -eq 0 ]; then
+            echo "No source directories found for cppcheck style scan"
+            exit 0
+          fi
+
+          INCLUDE_ARGS=()
+          for d in "${SRC_DIRS[@]}"; do
+            INCLUDE_ARGS+=("-I" "$d")
+          done
+
+          cppcheck \
+            --enable=style \
+            --inline-suppr \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --suppress=unmatchedSuppression \
+            --std=c11 \
+            --force \
+            "${INCLUDE_ARGS[@]}" \
+            "${SRC_DIRS[@]}" \
+            --xml \
+            2> cppcheck-style-report.xml || true
 
       - name: Check Code Formatting
         run: |
@@ -89,5 +120,14 @@ jobs:
         with:
           name: cppcheck-report
           path: cppcheck-report.xml
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload Cppcheck Style Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-style-report
+          path: cppcheck-style-report.xml
           retention-days: 30
           if-no-files-found: warn

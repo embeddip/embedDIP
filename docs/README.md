@@ -30,7 +30,7 @@ sudo pacman -S doxygen graphviz
 From the repository root:
 
 ```bash
-doxygen Doxyfile
+doxygen docs/Doxyfile
 ```
 
 The HTML documentation will be generated in `docs/html/`.
@@ -53,7 +53,7 @@ start docs/html/index.html
 ## Documentation Structure
 
 - **HTML Output:** `docs/html/` - Main HTML documentation
-- **Configuration:** `Doxyfile` - Doxygen configuration file (at repository root)
+- **Configuration:** `docs/Doxyfile` - Doxygen configuration file
 - **Warnings Log:** `doxygen_warnings.log` - Build warnings (generated during build)
 
 ## Automatic Deployment
