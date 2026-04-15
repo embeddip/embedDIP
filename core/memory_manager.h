@@ -38,12 +38,14 @@ extern "C" {
 #endif
 
 /**
- * @brief Initialize the memory manager.
+ * @brief Initialize the memory manager with default backend settings.
  *
  * Should be called once at startup before any other memory functions.
- * If using a pool allocator, this function sets up the pool.
+ * For pool allocators, this uses the board-specific default pool address.
+ *
+ * @param pool_start_addr Start address of the memory pool.
  */
-void memory_init(void);
+void memory_init(uintptr_t pool_start_addr);
 
 /**
  * @brief Allocate a block of memory.
