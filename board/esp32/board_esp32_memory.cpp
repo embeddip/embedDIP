@@ -14,8 +14,10 @@
 
     #define ps_malloc(size) heap_caps_malloc((size), MALLOC_CAP_SPIRAM)
 
-void memory_init(void)
+void memory_init(uintptr_t pool_start_addr)
 {
+    (void)pool_start_addr;
+    
     // Check if PSRAM is available
     if (ESP.getPsramSize() > 0) {
         Serial.printf("[MEMORY] PSRAM available: %u bytes\n", ESP.getPsramSize());

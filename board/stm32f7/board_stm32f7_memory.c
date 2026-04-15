@@ -18,7 +18,9 @@
     #define CAMERA_LCD_FRAMEBUFFER_SIZE 0x80000  // 512KB reserved
 
     #define MEMORY_POOL_SIZE (1024 * 1024 * 8 - CAMERA_LCD_FRAMEBUFFER_SIZE)  // ~6MB
-static uint8_t *memory_pool = ((uint8_t *)SDRAM_BANK_ADDR + CAMERA_LCD_FRAMEBUFFER_SIZE);
+    #define DEFAULT_MEMORY_POOL_ADDR (SDRAM_BANK_ADDR + CAMERA_LCD_FRAMEBUFFER_SIZE)
+
+static uint8_t *memory_pool = (uint8_t *)DEFAULT_MEMORY_POOL_ADDR;
 
 typedef struct MemoryBlock {
     uint32_t magic;
@@ -59,7 +61,7 @@ static inline int block_header_valid(const MemoryBlock *b)
     return (b->magic == MEMBLOCK_MAGIC);
 }
 
-void memory_init()
+void memory_init(uintptr_t pool_start_addr)
 {
     if (initialized)
         return;
@@ -76,7 +78,7 @@ void memory_init()
 void *memory_alloc(size_t size)
 {
     if (!initialized)
-        memory_init();
+        memory_init((uintptr_t)DEFAULT_MEMORY_POOL_ADDR);
 
     size = ALIGN4(size);
 
@@ -122,7 +124,7 @@ void memory_free(void *ptr)
         return;
 
     if (!initialized)
-        memory_init();
+        memory_init((uintptr_t)DEFAULT_MEMORY_POOL_ADDR);
 
     MemoryBlock *block = (MemoryBlock *)((uint8_t *)ptr - BLOCK_SIZE);
 
@@ -161,7 +163,7 @@ void *memory_realloc(void *ptr, size_t new_size)
         return memory_alloc(new_size);
 
     if (!initialized)
-        memory_init();
+        memory_init((uintptr_t)DEFAULT_MEMORY_POOL_ADDR);
 
     MemoryBlock *block = (MemoryBlock *)((uint8_t *)ptr - BLOCK_SIZE);
     if (!block_header_valid(block))
