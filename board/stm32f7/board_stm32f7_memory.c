@@ -3,7 +3,7 @@
 
 #include <embedDIP_configs.h>
 
-#ifdef TARGET_BOARD_STM32F7
+#ifdef EMBED_DIP_BOARD_STM32F7
 
     #include <stdint.h>
     #include <string.h>
@@ -182,4 +182,4 @@ void *memory_realloc(void *ptr, size_t new_size)
     return new_ptr;
 }
 
-#endif  // TARGET_BOARD_STM32F7
+#endif  // EMBED_DIP_BOARD_STM32F7

@@ -3,7 +3,7 @@
 
 #include <embedDIP_configs.h>
 
-#ifdef TARGET_BOARD_ESP32
+#ifdef EMBED_DIP_BOARD_ESP32
 
     #include <stdlib.h>
     #include <string.h>
