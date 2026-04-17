@@ -3,7 +3,7 @@
 
 #include <embedDIP_configs.h>
 
-#ifdef TARGET_BOARD_ESP32
+#ifdef EMBED_DIP_ARCH_XTENSA
 
     #ifndef ESP32_COMMON_H
         #define ESP32_COMMON_H

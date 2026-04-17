@@ -3,7 +3,7 @@
 
 #include <embedDIP_configs.h>
 
-#ifdef TARGET_BOARD_STM32F7
+#if defined(EMBED_DIP_ARCH_ARM) && defined(EMBED_DIP_CPU_CORTEX_M7)
 
     #include "core/image.h"
 
