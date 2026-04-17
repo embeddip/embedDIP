@@ -5,9 +5,8 @@
 
 #ifdef EMBED_DIP_ARCH_XTENSA
 
-    #include <arch/fft_backend.h>
-
     #include "esp_dsp.h"
+    #include <arch/fft_backend.h>
 
 embeddip_status_t embeddip_fft_backend_init(int n)
 {

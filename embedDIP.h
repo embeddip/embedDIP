@@ -46,7 +46,7 @@ extern "C" {
  */
 
 /** @brief Major version (breaking changes). */
-#define EMBED_DIP_VERSION_MAJOR 0U
+#define EMBED_DIP_VERSION_MAJOR 1U
 /** @brief Minor version (new features, backward compatible). */
 #define EMBED_DIP_VERSION_MINOR 1U
 /** @brief Patch version (bug fixes, no API changes). */

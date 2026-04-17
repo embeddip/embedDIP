@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 EmbedDIP
 
-#include <embedDIP_configs.h>
-
 #include <arch/fft_backend.h>
 #include <board/common.h>
 #include <core/memory_manager.h>
+#include <embedDIP_configs.h>
 #include <imgproc/fft.h>
 
 static bool isValidFFTSize(int w, int h)

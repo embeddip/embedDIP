@@ -17,7 +17,7 @@
 void memory_init(uintptr_t pool_start_addr)
 {
     (void)pool_start_addr;
-    
+
     // Check if PSRAM is available
     if (ESP.getPsramSize() > 0) {
         Serial.printf("[MEMORY] PSRAM available: %u bytes\n", ESP.getPsramSize());
