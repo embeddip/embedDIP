@@ -15,14 +15,51 @@ project(embedDIP
     DESCRIPTION "Portable embedded digital image processing library"
 )
 
-set(EMBEDDIP_TARGET_PLATFORM "STM32F7" CACHE STRING "Target platform: STM32F7, ESP32, or HOST")
-set_property(CACHE EMBEDDIP_TARGET_PLATFORM PROPERTY STRINGS "STM32F7" "ESP32" "HOST")
+set(EMBEDDIP_TARGET_BOARD "" CACHE STRING "Target board (required): STM32F7 or ESP32")
+set_property(CACHE EMBEDDIP_TARGET_BOARD PROPERTY STRINGS "STM32F7" "ESP32")
+
+set(EMBEDDIP_ARCH "" CACHE STRING "Architecture family (required): ARM or XTENSA")
+set_property(CACHE EMBEDDIP_ARCH PROPERTY STRINGS "ARM" "XTENSA")
+
+set(EMBEDDIP_CPU "" CACHE STRING "CPU variant (required): CORTEX_M7, LX6, LX7")
+set_property(CACHE EMBEDDIP_CPU PROPERTY STRINGS "CORTEX_M7" "LX6" "LX7")
 
 option(EMBEDDIP_ENABLE_UART_LOGGING "Enable UART logging" ON)
 option(EMBEDDIP_ENABLE_IMAGE_PROCESSING "Enable image processing modules" ON)
 option(EMBEDDIP_ENABLE_CAMERA_INPUT "Enable camera input interfaces" ON)
 option(EMBEDDIP_ENABLE_DISPLAY_OUTPUT "Enable display output interfaces" ON)
 option(EMBEDDIP_BUILD_DOCS "Build documentation with Doxygen" OFF)
+
+if(EMBEDDIP_TARGET_BOARD STREQUAL "")
+    message(FATAL_ERROR "EMBEDDIP_TARGET_BOARD is required. Supported values: STM32F7, ESP32")
+endif()
+
+if(EMBEDDIP_ARCH STREQUAL "")
+    message(FATAL_ERROR "EMBEDDIP_ARCH is required. Supported values: ARM, XTENSA")
+endif()
+
+if(EMBEDDIP_CPU STREQUAL "")
+    message(FATAL_ERROR "EMBEDDIP_CPU is required. Supported values: CORTEX_M7, LX6, LX7")
+endif()
+
+# Explicit compatibility matrix between board, architecture family and CPU
+set(_embeddip_pair_valid FALSE)
+if(EMBEDDIP_TARGET_BOARD STREQUAL "STM32F7")
+    if(EMBEDDIP_ARCH STREQUAL "ARM" AND EMBEDDIP_CPU STREQUAL "CORTEX_M7")
+        set(_embeddip_pair_valid TRUE)
+    endif()
+elseif(EMBEDDIP_TARGET_BOARD STREQUAL "ESP32")
+    if(EMBEDDIP_ARCH STREQUAL "XTENSA" AND (EMBEDDIP_CPU STREQUAL "LX6" OR EMBEDDIP_CPU STREQUAL "LX7"))
+        set(_embeddip_pair_valid TRUE)
+    endif()
+endif()
+
+if(NOT _embeddip_pair_valid)
+    message(FATAL_ERROR
+        "Invalid board/arch/cpu combination: ${EMBEDDIP_TARGET_BOARD} + ${EMBEDDIP_ARCH} + ${EMBEDDIP_CPU}. "
+        "Supported: STM32F7+ARM+CORTEX_M7, ESP32+XTENSA+LX6, ESP32+XTENSA+LX7"
+    )
+endif()
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -85,6 +122,7 @@ set(IMGPROC_SOURCES
     imgproc/misc.h
 
     # FFT operations
+    imgproc/fft.c
     imgproc/fft.h
 )
 
@@ -111,70 +149,52 @@ set(BOARD_COMMON_SOURCES
     board/common.h
 )
 
-# Platform-specific sources
-if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
-    set(BOARD_SOURCES
-        ${BOARD_COMMON_SOURCES}
-        board/stm32f7/board_stm32f7_common.c
-        board/stm32f7/board_stm32f7_fft.c
-        board/stm32f7/board_stm32f7_memory.c
-        board/stm32f7/configs.h
-    )
+# Load board and architecture profiles (kept next to board/arch source trees
+# to make onboarding new ports straightforward).
+string(TOLOWER "${EMBEDDIP_TARGET_BOARD}" EMBEDDIP_BOARD_PROFILE)
+string(TOLOWER "${EMBEDDIP_ARCH}" EMBEDDIP_ARCH_PROFILE)
 
-    set(DEVICE_SOURCES
-        ${DEVICE_COMMON_SOURCES}
-        device/camera/ov5640/stm32_ov5640.c
-        device/display/rk043fn48h/stm32_rk043fn48h.c
-        device/serial/stm32_uart/stm32_uart.c
-    )
+set(EMBEDDIP_BOARD_PROFILE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/board/${EMBEDDIP_BOARD_PROFILE}/board_profile.cmake")
+set(EMBEDDIP_ARCH_PROFILE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/arch/${EMBEDDIP_ARCH_PROFILE}/arch_profile.cmake")
 
-    set(PLATFORM_DEFINES
-        STM32F7xx
-        ARM_MATH_CM7
-        TARGET_BOARD_STM32F7=1
-    )
-
-elseif(EMBEDDIP_TARGET_PLATFORM STREQUAL "ESP32")
-    set(BOARD_SOURCES
-        ${BOARD_COMMON_SOURCES}
-        board/esp32/board_esp32_common.cpp
-        board/esp32/board_esp32_fft.cpp
-        board/esp32/board_esp32_memory.cpp
-    )
-
-    set(DEVICE_SOURCES
-        ${DEVICE_COMMON_SOURCES}
-        device/camera/ov2640/esp32_ov2640.cpp
-        device/serial/esp32_uart/esp32_uart.cpp
-    )
-
-    set(PLATFORM_DEFINES
-        ARDUINO_ARCH_ESP32
-        TARGET_BOARD_ESP32=1
-    )
-
-else()
-    message(FATAL_ERROR "Unknown platform: ${EMBEDDIP_TARGET_PLATFORM}. Must be STM32F7, ESP32, or HOST")
+if(NOT EXISTS "${EMBEDDIP_BOARD_PROFILE_FILE}")
+    message(FATAL_ERROR "Board profile not found: ${EMBEDDIP_BOARD_PROFILE_FILE}")
 endif()
+if(NOT EXISTS "${EMBEDDIP_ARCH_PROFILE_FILE}")
+    message(FATAL_ERROR "Architecture profile not found: ${EMBEDDIP_ARCH_PROFILE_FILE}")
+endif()
+
+include("${EMBEDDIP_BOARD_PROFILE_FILE}")
+include("${EMBEDDIP_ARCH_PROFILE_FILE}")
 
 # === Create Library Target ===
 add_library(embedDIP STATIC
     ${CORE_SOURCES}
     ${IMGPROC_SOURCES}
-    ${BOARD_SOURCES}
-    ${DEVICE_SOURCES}
+    ${EMBEDDIP_BOARD_SOURCES}
+    ${EMBEDDIP_ARCH_SOURCES}
+    ${EMBEDDIP_DEVICE_SOURCES}
     ${WRAPPER_SOURCES}
 )
 
 # === Compiler Definitions ===
 target_compile_definitions(embedDIP PUBLIC
     USE_EMBED_DIP
-    ${PLATFORM_DEFINES}
+    ${EMBEDDIP_BOARD_DEFINES}
+    ${EMBEDDIP_ARCH_DEFINES}
     $<$<BOOL:${EMBEDDIP_ENABLE_UART_LOGGING}>:ENABLE_UART_LOGGING=1>
     $<$<BOOL:${EMBEDDIP_ENABLE_IMAGE_PROCESSING}>:ENABLE_IMAGE_PROCESSING=1>
     $<$<BOOL:${EMBEDDIP_ENABLE_CAMERA_INPUT}>:ENABLE_CAMERA_INPUT=1>
     $<$<BOOL:${EMBEDDIP_ENABLE_DISPLAY_OUTPUT}>:ENABLE_DISPLAY_OUTPUT=1>
 )
+
+if(EMBEDDIP_ARCH_PRIVATE_DEFINES)
+    target_compile_definitions(embedDIP PRIVATE ${EMBEDDIP_ARCH_PRIVATE_DEFINES})
+endif()
+
+if(EMBEDDIP_ARCH_COMPILE_OPTIONS)
+    target_compile_options(embedDIP PUBLIC ${EMBEDDIP_ARCH_COMPILE_OPTIONS})
+endif()
 
 # === Include Directories ===
 target_include_directories(embedDIP PUBLIC
@@ -189,9 +209,16 @@ target_include_directories(embedDIP PUBLIC
     $<INSTALL_INTERFACE:include/embedDIP>
 )
 
-# Platform-specific includes
-if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
-    # Try to find CMSIS and HAL includes relative to project
+if(EMBEDDIP_BOARD_INCLUDE_DIRS)
+    foreach(_embeddip_board_inc IN LISTS EMBEDDIP_BOARD_INCLUDE_DIRS)
+        target_include_directories(embedDIP PUBLIC
+            $<BUILD_INTERFACE:${_embeddip_board_inc}>
+        )
+    endforeach()
+endif()
+
+# Board-specific include dependencies from parent project layout
+if(EMBEDDIP_TARGET_BOARD STREQUAL "STM32F7")
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../Drivers")
         target_include_directories(embedDIP PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/STM32F7xx_HAL_Driver/Inc>
@@ -208,7 +235,6 @@ if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
         )
         if(CMSIS_DSP_SOURCES)
             target_sources(embedDIP PRIVATE ${CMSIS_DSP_SOURCES})
-            # CMSIS-DSP needs __FPU_PRESENT defined
             set_source_files_properties(${CMSIS_DSP_SOURCES}
                 PROPERTIES COMPILE_DEFINITIONS "__FPU_PRESENT=1"
             )
@@ -217,15 +243,6 @@ if(EMBEDDIP_TARGET_PLATFORM STREQUAL "STM32F7")
     else()
         message(WARNING "CMSIS/HAL drivers not found. You may need to specify include paths manually.")
     endif()
-
-    target_include_directories(embedDIP PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/board/stm32f7>
-    )
-
-elseif(EMBEDDIP_TARGET_PLATFORM STREQUAL "ESP32")
-    target_include_directories(embedDIP PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/board/esp32>
-    )
 endif()
 
 # === Link Libraries ===
@@ -270,7 +287,7 @@ install(EXPORT embedDIPTargets
 include(CMakePackageConfigHelpers)
 
 configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embedDIPConfig.cmake.in
+    ${CMAKE_CURRENT_SOURCE_DIR}/embedDIPConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/embedDIPConfig.cmake
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/embedDIP
 )
