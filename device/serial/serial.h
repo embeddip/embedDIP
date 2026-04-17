@@ -37,11 +37,11 @@ typedef struct serial_interface {
 int _write(int file, char *ptr, int len);
 
 // External declaration of STM32 implementation
-#ifdef TARGET_BOARD_STM32F7
+#ifdef EMBED_DIP_BOARD_STM32F7
 extern serial_t stm32_uart;
 #endif
 
-#ifdef TARGET_BOARD_ESP32
+#ifdef EMBED_DIP_BOARD_ESP32
 extern serial_t esp32_uart;
 #endif
 
