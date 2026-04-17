@@ -16,7 +16,10 @@ embeddip_status_t embeddip_fft_backend_init(int n)
     }
 
     esp_err_t err = dsps_fft2r_init_fc32(NULL, CONFIG_DSP_MAX_FFT_SIZE);
-    return (err == ESP_OK) ? EMBEDDIP_OK : EMBEDDIP_ERROR_INTERNAL;
+    if (err == ESP_OK || err == ESP_ERR_DSP_REINITIALIZED) {
+        return EMBEDDIP_OK;
+    }
+    return EMBEDDIP_ERROR_DEVICE_ERROR;
 }
 
 embeddip_status_t embeddip_fft_backend_forward_1d(float *data, int n)

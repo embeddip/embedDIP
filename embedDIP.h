@@ -91,11 +91,11 @@ extern "C" {
  * @{
  */
 
-#if defined(TARGET_BOARD_ESP32)
+#if defined(EMBED_DIP_BOARD_ESP32)
     #include "device/camera/camera.h" /**< Camera abstraction. */
 #endif
 
-#if defined(TARGET_BOARD_STM32F7)
+#if defined(EMBED_DIP_BOARD_STM32F7)
     #include "device/camera/camera.h"   /**< Camera abstraction. */
     #include "device/display/display.h" /**< Display abstraction. */
 #endif

@@ -9,54 +9,74 @@
  * @file embedDIP_configs.h
  * @brief User-editable build configuration for EmbedDIP.
  *
- * Define exactly **one** target board and (optionally) override feature flags
- * and device selections.
+ * Select exactly one board, one architecture family, and one CPU variant via
+ * compiler defines.
+ * Typical usage with CMake: set EMBEDDIP_TARGET_BOARD, EMBEDDIP_ARCH, EMBEDDIP_CPU.
  */
 
 /* -------------------------------------------------------------------------- */
-/* Target selection */
+/* Hard-switch guard (legacy macros removed)                                   */
 /* -------------------------------------------------------------------------- */
-/**
- * @defgroup embedDIP_cfg_target Target selection
- * @brief Choose exactly one target platform.
- * @{
- *
- */
-
-/* Uncomment **one** of the following, or define via compiler flags. */
-#define TARGET_BOARD_STM32F7 1
-// #define TARGET_BOARD_ESP32   1
-/* #define TARGET_BOARD_OTHER   1 */
-
-/* Sanity check: ensure exactly one target is selected. */
-#if ((defined(TARGET_BOARD_STM32F7) ? 1 : 0) + (defined(TARGET_BOARD_ESP32) ? 1 : 0) +             \
-     (defined(TARGET_BOARD_OTHER) ? 1 : 0)) == 0
-    #error                                                                                         \
-        "No target selected: define exactly one of TARGET_BOARD_STM32F7, TARGET_BOARD_ESP32, TARGET_BOARD_OTHER."
-#elif ((defined(TARGET_BOARD_STM32F7) ? 1 : 0) + (defined(TARGET_BOARD_ESP32) ? 1 : 0) +           \
-       (defined(TARGET_BOARD_OTHER) ? 1 : 0)) > 1
-    #error                                                                                         \
-        "Multiple targets selected: define **only one** of TARGET_BOARD_STM32F7, TARGET_BOARD_ESP32, TARGET_BOARD_OTHER."
+#if defined(TARGET_BOARD_STM32F7) || defined(TARGET_BOARD_ESP32) || defined(TARGET_BOARD_OTHER)
+    #error "Legacy TARGET_BOARD_* macros are not supported. Use EMBED_DIP_BOARD_* and EMBED_DIP_ARCH_* instead."
 #endif
-/** @} */ /* end of embedDIP_cfg_target */
+
+/* -------------------------------------------------------------------------- */
+/* Target selection                                                            */
+/* -------------------------------------------------------------------------- */
+/* Uncomment only if you do not provide these from the build system. */
+/* #define EMBED_DIP_BOARD_STM32F7 1 */
+/* #define EMBED_DIP_BOARD_ESP32   1 */
+
+/* #define EMBED_DIP_ARCH_ARM     1 */
+/* #define EMBED_DIP_ARCH_XTENSA  1 */
+
+/* #define EMBED_DIP_CPU_CORTEX_M7 1 */
+/* #define EMBED_DIP_CPU_LX6       1 */
+/* #define EMBED_DIP_CPU_LX7       1 */
+
+/* Sanity check: exactly one board. */
+#if ((defined(EMBED_DIP_BOARD_STM32F7) ? 1 : 0) + (defined(EMBED_DIP_BOARD_ESP32) ? 1 : 0)) == 0
+    #error "No board selected: define exactly one of EMBED_DIP_BOARD_STM32F7 or EMBED_DIP_BOARD_ESP32."
+#elif ((defined(EMBED_DIP_BOARD_STM32F7) ? 1 : 0) + (defined(EMBED_DIP_BOARD_ESP32) ? 1 : 0)) > 1
+    #error "Multiple boards selected: define only one of EMBED_DIP_BOARD_STM32F7 or EMBED_DIP_BOARD_ESP32."
+#endif
+
+/* Sanity check: exactly one architecture family. */
+#if ((defined(EMBED_DIP_ARCH_ARM) ? 1 : 0) + (defined(EMBED_DIP_ARCH_XTENSA) ? 1 : 0)) == 0
+    #error "No architecture family selected: define exactly one of EMBED_DIP_ARCH_ARM or EMBED_DIP_ARCH_XTENSA."
+#elif ((defined(EMBED_DIP_ARCH_ARM) ? 1 : 0) + (defined(EMBED_DIP_ARCH_XTENSA) ? 1 : 0)) > 1
+    #error "Multiple architecture families selected: define only one EMBED_DIP_ARCH_* macro."
+#endif
+
+/* Sanity check: exactly one CPU variant. */
+#if ((defined(EMBED_DIP_CPU_CORTEX_M7) ? 1 : 0) + (defined(EMBED_DIP_CPU_LX6) ? 1 : 0) + \
+     (defined(EMBED_DIP_CPU_LX7) ? 1 : 0)) == 0
+    #error "No CPU selected: define exactly one of EMBED_DIP_CPU_CORTEX_M7, EMBED_DIP_CPU_LX6, EMBED_DIP_CPU_LX7."
+#elif ((defined(EMBED_DIP_CPU_CORTEX_M7) ? 1 : 0) + (defined(EMBED_DIP_CPU_LX6) ? 1 : 0) + \
+       (defined(EMBED_DIP_CPU_LX7) ? 1 : 0)) > 1
+    #error "Multiple CPUs selected: define only one EMBED_DIP_CPU_* macro."
+#endif
+
+/* Board/architecture/CPU compatibility matrix. */
+#if defined(EMBED_DIP_BOARD_STM32F7)
+    #if !(defined(EMBED_DIP_ARCH_ARM) && defined(EMBED_DIP_CPU_CORTEX_M7))
+        #error "Invalid combination: EMBED_DIP_BOARD_STM32F7 requires EMBED_DIP_ARCH_ARM + EMBED_DIP_CPU_CORTEX_M7."
+    #endif
+#elif defined(EMBED_DIP_BOARD_ESP32)
+    #if !(defined(EMBED_DIP_ARCH_XTENSA) && (defined(EMBED_DIP_CPU_LX6) || defined(EMBED_DIP_CPU_LX7)))
+        #error "Invalid combination: EMBED_DIP_BOARD_ESP32 requires EMBED_DIP_ARCH_XTENSA + (EMBED_DIP_CPU_LX6 or EMBED_DIP_CPU_LX7)."
+    #endif
+#endif
 
 /**
  * @defgroup embedDIP_cfg_features Feature flags
  * @brief Enable/disable optional subsystems.
  * @{
- *
- * Each flag defaults to 1 (enabled) when applicable for the target. Define
- * as 0 to disable at compile time.
- *
- * - `ENABLE_UART_LOGGING` : UART-based logging helpers
- * - `ENABLE_IMAGE_PROCESSING` : image processing modules
- * - `ENABLE_CAMERA_INPUT` : camera capture interfaces
- * - `ENABLE_DISPLAY_OUTPUT` : display output interfaces
  */
 
 /* ============================== STM32F7 =================================== */
-#if defined(TARGET_BOARD_STM32F7)
-    /** @brief Vendor-family define for STM32F7. */
+#if defined(EMBED_DIP_BOARD_STM32F7)
     #ifndef STM32F7xx
         #define STM32F7xx 1
     #endif
@@ -74,20 +94,18 @@
         #define ENABLE_DISPLAY_OUTPUT 1
     #endif
 
-    /* Devices available on STM32F7 builds (overridable) */
     #ifndef DEVICE_OV5640
-        #define DEVICE_OV5640 1 /**< OV5640 camera module present. */
+        #define DEVICE_OV5640 1
     #endif
     #ifndef DEVICE_RK043FN48H
-        #define DEVICE_RK043FN48H 1 /**< RK043FN48H display panel present. */
+        #define DEVICE_RK043FN48H 1
     #endif
     #ifndef DEVICE_STM32_UART
-        #define DEVICE_STM32_UART 1 /**< Use STM32 HAL UART backend. */
+        #define DEVICE_STM32_UART 1
     #endif
 
 /* =============================== ESP32 ==================================== */
-#elif defined(TARGET_BOARD_ESP32)
-    /** @brief Arduino-style arch define for ESP32 builds. */
+#elif defined(EMBED_DIP_BOARD_ESP32)
     #ifndef ARDUINO_ARCH_ESP32
         #define ARDUINO_ARCH_ESP32 1
     #endif
@@ -102,48 +120,17 @@
         #define ENABLE_CAMERA_INPUT 1
     #endif
     #ifndef ENABLE_DISPLAY_OUTPUT
-        #define ENABLE_DISPLAY_OUTPUT 0 /* default off unless a display is wired */
-    #endif
-
-    /* Devices available on ESP32 builds (overridable) */
-    #ifndef DEVICE_OV2640
-        #define DEVICE_OV2640 1 /**< OV2640 camera module present. */
-    #endif
-    #ifndef DEVICE_ESP32_UART
-        #define DEVICE_ESP32_UART 1 /**< Use ESP32 UART backend. */
-    #endif
-
-/* ============================== OTHER ===================================== */
-#elif defined(TARGET_BOARD_OTHER)
-    /**
-     * @brief Generic/other target: start with minimal defaults and enable what you
-     * need.
-     * @note Adjust device macros below to match your board.
-     */
-    #ifndef ENABLE_UART_LOGGING
-        #define ENABLE_UART_LOGGING 0
-    #endif
-    #ifndef ENABLE_IMAGE_PROCESSING
-        #define ENABLE_IMAGE_PROCESSING 1
-    #endif
-    #ifndef ENABLE_CAMERA_INPUT
-        #define ENABLE_CAMERA_INPUT 0
-    #endif
-    #ifndef ENABLE_DISPLAY_OUTPUT
         #define ENABLE_DISPLAY_OUTPUT 0
     #endif
 
-    /* Example device toggles (customize for your platform) */
-    #ifndef DEVICE_OV5640
-        #define DEVICE_OV5640 0
-    #endif
     #ifndef DEVICE_OV2640
-        #define DEVICE_OV2640 0
+        #define DEVICE_OV2640 1
     #endif
-
-#else
-    #error "Unexpected configuration state. This should be unreachable."
+    #ifndef DEVICE_ESP32_UART
+        #define DEVICE_ESP32_UART 1
+    #endif
 #endif
+
 /** @} */ /* end of embedDIP_cfg_features */
 
 /**
