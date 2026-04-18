@@ -36,9 +36,7 @@ CMakeFiles/
 cmake_install.cmake
 CTestTestfile.cmake
 Makefile
-*.cmake
 !CMakeLists.txt
-!cmake/*.cmake
 compile_commands.json
 .ninja_deps
 .ninja_log
