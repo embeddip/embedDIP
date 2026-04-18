@@ -649,14 +649,6 @@ void Image::ifft(Image &out) const
 }
 
 /**
- * @brief Reverses FFT quadrant shift.
- */
-void Image::ifftshift()
-{
-    ::fftshift(raw());
-}
-
-/**
  * @brief Converts polar components to complex/cartesian form.
  */
 void Image::polarToCart(const Image &magnitude, Image &phase) const

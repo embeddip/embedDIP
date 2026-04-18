@@ -703,12 +703,6 @@ class Image
     void fftshift();
 
     /**
-     * @brief Reverses frequency shift operation.
-     * @see ::ifftshift For underlying C implementation
-     */
-    void ifftshift();
-
-    /**
      * @brief Builds frequency-domain mask in this image.
      * @param[in] type Filter type (lowpass, highpass, bandpass)
      * @param[in] cutoff1 Primary cutoff frequency in pixels
