@@ -77,6 +77,10 @@ set(IMGPROC_SOURCES
     # Main header (includes all sub-modules)
     imgproc/pixel.h
 
+    # Compression
+    imgproc/compress.c
+    imgproc/compress.h
+
     # Color operations
     imgproc/color.c
     imgproc/color.h
@@ -221,12 +225,20 @@ endif()
 if(EMBEDDIP_TARGET_BOARD STREQUAL "STM32F7")
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../Drivers")
         target_include_directories(embedDIP PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Middlewares/Third_Party/LibJPEG/include>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../LIBJPEG/Target>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/STM32F7xx_HAL_Driver/Inc>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Device/ST/STM32F7xx/Include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/Core/Include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP/Include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Core/Inc>
         )
+
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../Middlewares/Third_Party/LibJPEG/include/jpeglib.h")
+            target_compile_definitions(embedDIP PUBLIC EMBEDDIP_HAVE_LIBJPEG=1)
+        else()
+            message(WARNING "LibJPEG headers not found for embedDIP compression module.")
+        endif()
 
         # CMSIS-DSP sources for STM32 (C and assembly files)
         file(GLOB_RECURSE CMSIS_DSP_SOURCES

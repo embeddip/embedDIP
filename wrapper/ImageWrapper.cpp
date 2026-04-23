@@ -109,6 +109,14 @@ bool Image::isChalsEmpty() const noexcept
 }
 
 /**
+ * @brief Compresses this image into JPEG format.
+ */
+int Image::compressJPEG(Image &out, int quality) const noexcept
+{
+    return ::compress(raw(), out.raw(), IMAGE_COMP_JPEG, quality);
+}
+
+/**
  * @brief Applies negative transform.
  */
 void Image::negative(Image &out) const noexcept

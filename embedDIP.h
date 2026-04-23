@@ -71,6 +71,7 @@ extern "C" {
 #include "core/image.h"                  /**< Image type and utilities. */
 #include "core/memory_manager.h"         /**< Allocators and memory helpers. */
 #include "device/serial/serial.h"        /**< Serial I/O abstraction. */
+#include "imgproc/compress.h"            /**< JPEG compression helper. */
 #include "imgproc/color.h"               /**< Color conversions and helpers. */
 #include "imgproc/connectedcomponents.h" /**< Connected components labeling. */
 #include "imgproc/drawing.h"             /**< Drawing primitives and shapes. */

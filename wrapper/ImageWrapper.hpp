@@ -15,6 +15,7 @@ extern "C" {
 #include "device/serial/serial.h"        /**< Serial I/O abstraction. */
 #include "imgproc/color.h"               /**< Color conversions and helpers. */
 #include "imgproc/connectedcomponents.h" /**< Connected components labeling. */
+#include "imgproc/compress.h"            /**< JPEG compression helper. */
 #include "imgproc/drawing.h"             /**< Drawing primitives and shapes. */
 #include "imgproc/fft.h"                 /**< Frequency-domain processing. */
 #include "imgproc/filter.h"              /**< Spatial filtering and kernels. */
@@ -290,6 +291,15 @@ class Image
     bool isChalsEmpty() const noexcept;
 
     // Pixel operations
+    /**
+     * @brief Compress this image into JPEG payload stored in output image.
+     * @param[out] out Destination image buffer that will hold JPEG bytes.
+     * @param[in] quality JPEG quality in range [1, 100].
+     * @return 0 on success, -1 on error.
+     * @see ::compress For underlying C implementation
+     */
+    int compressJPEG(Image &out, int quality = 75) const noexcept;
+
     /**
      * @brief Computes negative image transform.
      * @param[out] out Output image for inverted result
