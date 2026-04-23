@@ -14,8 +14,8 @@ extern "C" {
 #include "core/memory_manager.h"         /**< Allocators and memory helpers. */
 #include "device/serial/serial.h"        /**< Serial I/O abstraction. */
 #include "imgproc/color.h"               /**< Color conversions and helpers. */
-#include "imgproc/connectedcomponents.h" /**< Connected components labeling. */
 #include "imgproc/compress.h"            /**< JPEG compression helper. */
+#include "imgproc/connectedcomponents.h" /**< Connected components labeling. */
 #include "imgproc/drawing.h"             /**< Drawing primitives and shapes. */
 #include "imgproc/fft.h"                 /**< Frequency-domain processing. */
 #include "imgproc/filter.h"              /**< Spatial filtering and kernels. */

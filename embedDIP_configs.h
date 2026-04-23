@@ -18,7 +18,8 @@
 /* Hard-switch guard (legacy macros removed)                                   */
 /* -------------------------------------------------------------------------- */
 #if defined(TARGET_BOARD_STM32F7) || defined(TARGET_BOARD_ESP32) || defined(TARGET_BOARD_OTHER)
-    #error "Legacy TARGET_BOARD_* macros are not supported. Use EMBED_DIP_BOARD_* and EMBED_DIP_ARCH_* instead."
+    #error                                                                                         \
+        "Legacy TARGET_BOARD_* macros are not supported. Use EMBED_DIP_BOARD_* and EMBED_DIP_ARCH_* instead."
 #endif
 
 /* -------------------------------------------------------------------------- */
@@ -37,23 +38,27 @@
 
 /* Sanity check: exactly one board. */
 #if ((defined(EMBED_DIP_BOARD_STM32F7) ? 1 : 0) + (defined(EMBED_DIP_BOARD_ESP32) ? 1 : 0)) == 0
-    #error "No board selected: define exactly one of EMBED_DIP_BOARD_STM32F7 or EMBED_DIP_BOARD_ESP32."
+    #error                                                                                         \
+        "No board selected: define exactly one of EMBED_DIP_BOARD_STM32F7 or EMBED_DIP_BOARD_ESP32."
 #elif ((defined(EMBED_DIP_BOARD_STM32F7) ? 1 : 0) + (defined(EMBED_DIP_BOARD_ESP32) ? 1 : 0)) > 1
-    #error "Multiple boards selected: define only one of EMBED_DIP_BOARD_STM32F7 or EMBED_DIP_BOARD_ESP32."
+    #error                                                                                         \
+        "Multiple boards selected: define only one of EMBED_DIP_BOARD_STM32F7 or EMBED_DIP_BOARD_ESP32."
 #endif
 
 /* Sanity check: exactly one architecture family. */
 #if ((defined(EMBED_DIP_ARCH_ARM) ? 1 : 0) + (defined(EMBED_DIP_ARCH_XTENSA) ? 1 : 0)) == 0
-    #error "No architecture family selected: define exactly one of EMBED_DIP_ARCH_ARM or EMBED_DIP_ARCH_XTENSA."
+    #error                                                                                         \
+        "No architecture family selected: define exactly one of EMBED_DIP_ARCH_ARM or EMBED_DIP_ARCH_XTENSA."
 #elif ((defined(EMBED_DIP_ARCH_ARM) ? 1 : 0) + (defined(EMBED_DIP_ARCH_XTENSA) ? 1 : 0)) > 1
     #error "Multiple architecture families selected: define only one EMBED_DIP_ARCH_* macro."
 #endif
 
 /* Sanity check: exactly one CPU variant. */
-#if ((defined(EMBED_DIP_CPU_CORTEX_M7) ? 1 : 0) + (defined(EMBED_DIP_CPU_LX6) ? 1 : 0) + \
+#if ((defined(EMBED_DIP_CPU_CORTEX_M7) ? 1 : 0) + (defined(EMBED_DIP_CPU_LX6) ? 1 : 0) +           \
      (defined(EMBED_DIP_CPU_LX7) ? 1 : 0)) == 0
-    #error "No CPU selected: define exactly one of EMBED_DIP_CPU_CORTEX_M7, EMBED_DIP_CPU_LX6, EMBED_DIP_CPU_LX7."
-#elif ((defined(EMBED_DIP_CPU_CORTEX_M7) ? 1 : 0) + (defined(EMBED_DIP_CPU_LX6) ? 1 : 0) + \
+    #error                                                                                         \
+        "No CPU selected: define exactly one of EMBED_DIP_CPU_CORTEX_M7, EMBED_DIP_CPU_LX6, EMBED_DIP_CPU_LX7."
+#elif ((defined(EMBED_DIP_CPU_CORTEX_M7) ? 1 : 0) + (defined(EMBED_DIP_CPU_LX6) ? 1 : 0) +         \
        (defined(EMBED_DIP_CPU_LX7) ? 1 : 0)) > 1
     #error "Multiple CPUs selected: define only one EMBED_DIP_CPU_* macro."
 #endif
@@ -61,11 +66,14 @@
 /* Board/architecture/CPU compatibility matrix. */
 #if defined(EMBED_DIP_BOARD_STM32F7)
     #if !(defined(EMBED_DIP_ARCH_ARM) && defined(EMBED_DIP_CPU_CORTEX_M7))
-        #error "Invalid combination: EMBED_DIP_BOARD_STM32F7 requires EMBED_DIP_ARCH_ARM + EMBED_DIP_CPU_CORTEX_M7."
+        #error                                                                                     \
+            "Invalid combination: EMBED_DIP_BOARD_STM32F7 requires EMBED_DIP_ARCH_ARM + EMBED_DIP_CPU_CORTEX_M7."
     #endif
 #elif defined(EMBED_DIP_BOARD_ESP32)
-    #if !(defined(EMBED_DIP_ARCH_XTENSA) && (defined(EMBED_DIP_CPU_LX6) || defined(EMBED_DIP_CPU_LX7)))
-        #error "Invalid combination: EMBED_DIP_BOARD_ESP32 requires EMBED_DIP_ARCH_XTENSA + (EMBED_DIP_CPU_LX6 or EMBED_DIP_CPU_LX7)."
+    #if !(defined(EMBED_DIP_ARCH_XTENSA) &&                                                        \
+          (defined(EMBED_DIP_CPU_LX6) || defined(EMBED_DIP_CPU_LX7)))
+        #error                                                                                     \
+            "Invalid combination: EMBED_DIP_BOARD_ESP32 requires EMBED_DIP_ARCH_XTENSA + (EMBED_DIP_CPU_LX6 or EMBED_DIP_CPU_LX7)."
     #endif
 #endif
 
