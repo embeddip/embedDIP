@@ -17,10 +17,12 @@
     // Reserve 512KB (0x80000) to be safe
     #define CAMERA_LCD_FRAMEBUFFER_SIZE 0x80000  // 512KB reserved
 
-    #define MEMORY_POOL_SIZE (1024 * 1024 * 8 - CAMERA_LCD_FRAMEBUFFER_SIZE)  // ~6MB
+    #define SDRAM_TOTAL_SIZE (1024 * 1024 * 8)
+    #define MEMORY_POOL_SIZE (SDRAM_TOTAL_SIZE - CAMERA_LCD_FRAMEBUFFER_SIZE)  // ~6MB
     #define DEFAULT_MEMORY_POOL_ADDR (SDRAM_BANK_ADDR + CAMERA_LCD_FRAMEBUFFER_SIZE)
 
 static uint8_t *memory_pool = (uint8_t *)DEFAULT_MEMORY_POOL_ADDR;
+static size_t memory_pool_size = MEMORY_POOL_SIZE;
 
 typedef struct MemoryBlock {
     uint32_t magic;
@@ -43,7 +45,7 @@ static inline uintptr_t pool_start_addr(void)
 
 static inline uintptr_t pool_end_addr(void)
 {
-    return (uintptr_t)memory_pool + MEMORY_POOL_SIZE;
+    return (uintptr_t)memory_pool + memory_pool_size;
 }
 
 static inline int ptr_in_pool(const void *p)
@@ -66,9 +68,36 @@ void memory_init(uintptr_t pool_start_addr)
     if (initialized)
         return;
 
+    // Accept both:
+    // 1) offset from SDRAM base (preferred),
+    // 2) absolute SDRAM address for backward compatibility.
+    uintptr_t offset = pool_start_addr;
+    if (pool_start_addr >= SDRAM_BANK_ADDR) {
+        offset = pool_start_addr - SDRAM_BANK_ADDR;
+    }
+    if (offset > SDRAM_TOTAL_SIZE - BLOCK_SIZE) {
+        // Invalid offset: fall back to default reserved location.
+        offset = CAMERA_LCD_FRAMEBUFFER_SIZE;
+    }
+
+    uintptr_t start = (uintptr_t)SDRAM_BANK_ADDR + offset;
+    uintptr_t end = (uintptr_t)SDRAM_BANK_ADDR + SDRAM_TOTAL_SIZE;
+
+    if (start + BLOCK_SIZE >= end) {
+        // Not enough room for allocator metadata; fall back to default.
+        start = DEFAULT_MEMORY_POOL_ADDR;
+    }
+
+    memory_pool = (uint8_t *)start;
+    memory_pool_size = (size_t)(end - start);
+    if (memory_pool_size <= BLOCK_SIZE) {
+        memory_pool = (uint8_t *)DEFAULT_MEMORY_POOL_ADDR;
+        memory_pool_size = MEMORY_POOL_SIZE;
+    }
+
     free_list = (MemoryBlock *)memory_pool;
     free_list->magic = MEMBLOCK_MAGIC;
-    free_list->size = MEMORY_POOL_SIZE - BLOCK_SIZE;
+    free_list->size = memory_pool_size - BLOCK_SIZE;
     free_list->next = NULL;
     free_list->is_free = 1;
 
