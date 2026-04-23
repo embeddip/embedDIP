@@ -1046,6 +1046,8 @@ void nonMaximumSuppression(const Image *magImg, const Image *phaseImg, Image *ds
     uint32_t w = magImg->width, h = magImg->height;
     if (w != phaseImg->width || h != phaseImg->height)
         return;
+    if (!magImg->chals || !magImg->chals->ch[0] || !phaseImg->chals || !phaseImg->chals->ch[0])
+        return;
     uint32_t N = w * h;
 
     const float *mag = magImg->chals->ch[0];
@@ -1053,14 +1055,18 @@ void nonMaximumSuppression(const Image *magImg, const Image *phaseImg, Image *ds
 
     if (!dst->chals) {
         dst->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (!dst->chals)
+            return;
         memset(dst->chals, 0, sizeof(channels_t));
     }
     dst->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    if (!dst->chals->ch[0])
+        return;
     dst->is_chals = 1;
     float *dst_data = dst->chals->ch[0];
 
     // Initialize all to zero (including borders)
-    memset(dst, 0, N * sizeof(float));
+    memset(dst_data, 0, (size_t)N * sizeof(float));
 
     // Iterate, skip borders
     for (uint32_t y = 1; y < h - 1; y++) {
@@ -1110,14 +1116,25 @@ void doubleThreshold(const Image *src,
 {
     if (!src || !dst)
         return;
+    if (!src->chals || !src->chals->ch[0])
+        return;
     uint32_t N = src->width * src->height;
     const float *src_data = src->chals->ch[0];
+    if (lowThresh > highThresh) {
+        float tmp = lowThresh;
+        lowThresh = highThresh;
+        highThresh = tmp;
+    }
 
     if (!dst->chals) {
         dst->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (!dst->chals)
+            return;
         memset(dst->chals, 0, sizeof(channels_t));
     }
     dst->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    if (!dst->chals->ch[0])
+        return;
     dst->is_chals = 1;
     float *dst_data = dst->chals->ch[0];
 
@@ -1142,32 +1159,60 @@ void hysteresis(const Image *src, Image *dst, float weakVal, float strongVal)
     if (!src || !dst)
         return;
     uint32_t w = src->width, h = src->height;
+    uint32_t N = w * h;
+    if (!src->chals || !src->chals->ch[0] || N == 0)
+        return;
+    const float *src_data = src->chals->ch[0];
 
     if (!dst->chals) {
         dst->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+        if (!dst->chals)
+            return;
         memset(dst->chals, 0, sizeof(channels_t));
     }
-    dst->chals->ch[0] = (float *)memory_alloc((size_t)w * h * sizeof(float));
+    dst->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+    if (!dst->chals->ch[0])
+        return;
     dst->is_chals = 1;
     float *dst_data = dst->chals->ch[0];
-    memcpy(dst, src, (size_t)w * h * sizeof(float));
+    memset(dst_data, 0, (size_t)N * sizeof(float));
 
-    for (uint32_t y = 1; y < h - 1; y++) {
-        for (uint32_t x = 1; x < w - 1; x++) {
-            uint32_t idx = y * w + x;
-            if (dst_data[idx] == weakVal) {
-                bool connected = false;
-                for (int j = -1; j <= 1; j++) {
-                    for (int i = -1; i <= 1; i++) {
-                        if (dst_data[(y + j) * w + (x + i)] == strongVal) {
-                            connected = true;
-                        }
-                    }
+    int *stack = (int *)memory_alloc((size_t)N * sizeof(int));
+    if (!stack)
+        return;
+    uint32_t sp = 0;
+
+    for (uint32_t i = 0; i < N; ++i) {
+        if (src_data[i] == strongVal) {
+            dst_data[i] = strongVal;
+            stack[sp++] = (int)i;
+        }
+    }
+
+    while (sp > 0) {
+        int idx = stack[--sp];
+        uint32_t x = (uint32_t)idx % w;
+        uint32_t y = (uint32_t)idx / w;
+
+        int y0 = (y > 0) ? (int)y - 1 : 0;
+        int y1 = (y + 1 < h) ? (int)y + 1 : (int)h - 1;
+        int x0 = (x > 0) ? (int)x - 1 : 0;
+        int x1 = (x + 1 < w) ? (int)x + 1 : (int)w - 1;
+
+        for (int ny = y0; ny <= y1; ++ny) {
+            for (int nx = x0; nx <= x1; ++nx) {
+                uint32_t nidx = (uint32_t)ny * w + (uint32_t)nx;
+                if (dst_data[nidx] == strongVal)
+                    continue;
+                if (src_data[nidx] == weakVal) {
+                    dst_data[nidx] = strongVal;
+                    stack[sp++] = (int)nidx;
                 }
-                dst_data[idx] = connected ? strongVal : 0.0f;
             }
         }
     }
+
+    memory_free(stack);
     dst->log = IMAGE_DATA_CH0;
 }
 
@@ -1465,17 +1510,92 @@ embeddip_status_t Canny(const Image *src,
     CHECK_NULL_INT(dst);
 
     // --- Step 1: Gaussian smoothing + gradients ---
-    float sigma =
-        1.0;  // 0.3 * ((aperture_size - 1) * 0.5 - 1) + 0.8; // could derive from aperture_size
+    int k = (aperture_size < 3) ? 3 : aperture_size;
+    if ((k & 1) == 0)
+        ++k;
+    if (k > 7)
+        k = 7;
+    float sigma = 0.3f * ((float)(k - 1) * 0.5f - 1.0f) + 0.8f;
+
     Image *Ix = createImageWH_legacy(src->width, src->height, src->format);
     Image *Iy = createImageWH_legacy(src->width, src->height, src->format);
-    gaussianGradients(src, Ix, Iy, sigma);
+    if (!Ix || !Iy) {
+        deleteImage(Ix);
+        deleteImage(Iy);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
+    embeddip_status_t st = gaussianGradients(src, Ix, Iy, sigma);
+    if (st != EMBEDDIP_OK) {
+        deleteImage(Ix);
+        deleteImage(Iy);
+        return st;
+    }
 
     // --- Step 2: magnitude + phase ---
     Image *Mag = createImageWH_legacy(src->width, src->height, src->format);
     Image *Phase = createImageWH_legacy(src->width, src->height, src->format);
-    gradientMagnitude(Ix, Iy, Mag);
-    gradientPhase(Ix, Iy, Phase);
+    if (!Mag || !Phase) {
+        deleteImage(Ix);
+        deleteImage(Iy);
+        deleteImage(Mag);
+        deleteImage(Phase);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
+
+    if (l2_gradient) {
+        st = gradientMagnitude(Ix, Iy, Mag);
+    } else {
+        uint32_t N = src->size;
+        if (!Mag->chals) {
+            Mag->chals = (channels_t *)memory_alloc(sizeof(channels_t));
+            if (!Mag->chals) {
+                deleteImage(Ix);
+                deleteImage(Iy);
+                deleteImage(Mag);
+                deleteImage(Phase);
+                return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+            }
+            memset(Mag->chals, 0, sizeof(channels_t));
+        }
+        Mag->chals->ch[0] = (float *)memory_alloc((size_t)N * sizeof(float));
+        if (!Mag->chals->ch[0]) {
+            deleteImage(Ix);
+            deleteImage(Iy);
+            deleteImage(Mag);
+            deleteImage(Phase);
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
+        const float *ix = Ix->chals ? Ix->chals->ch[0] : NULL;
+        const float *iy = Iy->chals ? Iy->chals->ch[0] : NULL;
+        if (!ix || !iy) {
+            deleteImage(Ix);
+            deleteImage(Iy);
+            deleteImage(Mag);
+            deleteImage(Phase);
+            return EMBEDDIP_ERROR_INVALID_ARG;
+        }
+        for (uint32_t i = 0; i < N; ++i) {
+            Mag->chals->ch[0][i] = fabsf(ix[i]) + fabsf(iy[i]);
+        }
+        Mag->is_chals = 1;
+        Mag->log = IMAGE_DATA_CH0;
+        st = EMBEDDIP_OK;
+    }
+    if (st != EMBEDDIP_OK) {
+        deleteImage(Ix);
+        deleteImage(Iy);
+        deleteImage(Mag);
+        deleteImage(Phase);
+        return st;
+    }
+    st = gradientPhase(Ix, Iy, Phase);
+    if (st != EMBEDDIP_OK) {
+        deleteImage(Ix);
+        deleteImage(Iy);
+        deleteImage(Mag);
+        deleteImage(Phase);
+        return st;
+    }
 
     float *data = Mag->chals->ch[0];
 
@@ -1503,10 +1623,25 @@ embeddip_status_t Canny(const Image *src,
 
     // --- Step 3: NMS ---
     Image *Nms = createImageWH_legacy(src->width, src->height, src->format);
+    if (!Nms) {
+        deleteImage(Ix);
+        deleteImage(Iy);
+        deleteImage(Mag);
+        deleteImage(Phase);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
     nonMaximumSuppression(Mag, Phase, Nms);
 
     // --- Step 4: Double threshold ---
     Image *Dt = createImageWH_legacy(src->width, src->height, src->format);
+    if (!Dt) {
+        deleteImage(Ix);
+        deleteImage(Iy);
+        deleteImage(Mag);
+        deleteImage(Phase);
+        deleteImage(Nms);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
     doubleThreshold(Nms, Dt, (float)threshold1, (float)threshold2, 50.0f, 255.0f);
 
     // --- Step 5: Hysteresis ---
