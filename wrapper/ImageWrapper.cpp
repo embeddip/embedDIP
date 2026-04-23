@@ -752,12 +752,12 @@ void Image::bitwiseNot(Image &out) const
 }
 
 /**
- * @brief Runs simplified GrabCut workflow that outputs a mask.
+ * @brief Runs grayscale graph-cut GrabCut.
  */
-// TODO
-// void Image::grabCutLitesd(Image &maskImg, int iterations) const {
-//  ::grabCutLite_working(raw(), maskImg.raw(), iterations);
-//}
+embeddip_status_t Image::grabCut(Image &maskImg, Rectangle roi, int iterations) const
+{
+    return ::grabCut(raw(), maskImg.raw(), roi, iterations);
+}
 
 /**
  * @brief Runs simplified GrabCut within ROI.
@@ -765,22 +765,6 @@ void Image::bitwiseNot(Image &out) const
 void Image::grabCutLite(Image &outImg, Rectangle roi, int iterations) const
 {
     ::grabCutLite(raw(), outImg.raw(), roi, iterations);
-}
-
-/**
- * @brief Runs simplified GrabCut for RGB888 data.
- */
-void Image::grabCutLite888(Image &outImg, Rectangle roi, int iterations) const
-{
-    ::grabCutRGB(raw(), outImg.raw(), roi, iterations);
-}
-
-/**
- * @brief Runs RGB graph-cut segmentation.
- */
-void Image::grabCutRGB(Image &outMask, Rectangle roi, int max_iter) const
-{
-    ::grabCutRGB(raw(), outMask.raw(), roi, max_iter);
 }
 
 /**

@@ -910,121 +910,6 @@ static float gaussian_prob(float x, float mean, float var)
     return (1.0f / sqrtf(2.0f * M_PI * var)) * expf(-(diff * diff) / (2.0f * var));
 }
 
-embeddip_status_t grabCutLite_working(const Image *src, Image *mask, Rectangle roi, int iterations)
-{
-    const int size = src->width * src->height;
-    const uint8_t *img1 = src->pixels;
-    uint8_t *mask_data = (uint8_t *)mask->pixels;
-
-    for (int iter = 0; iter < iterations; ++iter) {
-        uint32_t fgSum = 0, fgCount = 0;
-        uint32_t bgSum = 0, bgCount = 0;
-
-        // Step 1: Compute foreground and background means
-        for (int i = 0; i < size; ++i) {
-            if (mask_data[i] == 2) {
-                fgSum += img1[i];
-                fgCount++;
-            } else if (mask_data[i] == 0) {
-                bgSum += img1[i];
-                bgCount++;
-            }
-        }
-
-        // Fallback if no foreground was found (bootstrap)
-        if (fgCount == 0) {
-            for (int i = 0; i < size; ++i) {
-                if (mask_data[i] == 1) {
-                    fgSum += img1[i];
-                    fgCount++;
-                }
-            }
-        }
-
-        if (fgCount == 0 || bgCount == 0)
-            break;  // Not enough info to proceed
-
-        uint8_t fgMean = fgSum / fgCount;
-        uint8_t bgMean = bgSum / bgCount;
-
-        // Debug
-        // printf("Iter %d: fgMean=%d, bgMean=%d\n", iter, fgMean, bgMean);
-
-        // Step 2: Update probable region
-        for (int i = 0; i < size; ++i) {
-            if (mask_data[i] == 1) {
-                int distFg = abs((int)img1[i] - (int)fgMean);
-                int distBg = abs((int)img1[i] - (int)bgMean);
-
-                // Reclassify as closer to fg or bg
-                if (distFg < distBg)
-                    mask_data[i] = 2;  // Becomes foreground
-                else
-                    mask_data[i] = 0;  // Becomes background
-            }
-        }
-    }
-    return EMBEDDIP_OK;
-}
-
-embeddip_status_t grabCutLitesd(const Image *src, Image *mask, Rectangle roi, int iterations)
-{
-    const int size = src->width * src->height;
-    const uint8_t *inImg_pixels = src->pixels;
-    uint8_t *mask_data = (uint8_t *)mask->pixels;
-
-    for (int iter = 0; iter < iterations; ++iter) {
-        uint32_t fgSum = 0, fgCount = 0;
-        uint32_t bgSum = 0, bgCount = 0;
-
-        // Step 1: Compute foreground and background means
-        for (int i = 0; i < size; ++i) {
-            if (mask_data[i] == 2) {
-                fgSum += inImg_pixels[i];
-                fgCount++;
-            } else if (mask_data[i] == 0) {
-                bgSum += inImg_pixels[i];
-                bgCount++;
-            }
-        }
-
-        // Fallback if no foreground was found (bootstrap)
-        if (fgCount == 0) {
-            for (int i = 0; i < size; ++i) {
-                if (mask_data[i] == 1) {
-                    fgSum += inImg_pixels[i];
-                    fgCount++;
-                }
-            }
-        }
-
-        if (fgCount == 0 || bgCount == 0)
-            break;  // Not enough info to proceed
-
-        uint8_t fgMean = fgSum / fgCount;
-        uint8_t bgMean = bgSum / bgCount;
-
-        // Debug
-        // printf("Iter %d: fgMean=%d, bgMean=%d\n", iter, fgMean, bgMean);
-
-        return EMBEDDIP_OK;
-        // Step 2: Update probable region
-        for (int i = 0; i < size; ++i) {
-            if (mask_data[i] == 1) {
-                int distFg = abs((int)inImg_pixels[i] - (int)fgMean);
-                int distBg = abs((int)inImg_pixels[i] - (int)bgMean);
-
-                // Reclassify as closer to fg or bg
-                if (distFg < distBg)
-                    mask_data[i] = 2;  // Becomes foreground
-                else
-                    mask_data[i] = 0;  // Becomes background
-            }
-        }
-    }
-    return EMBEDDIP_OK;
-}
-
 /**
  * @brief Performs a simplified GrabCut-inspired segmentation on a grayscale image using a
  * rectangular ROI.
@@ -1147,300 +1032,378 @@ embeddip_status_t grabCutLite(const Image *src, Image *mask, Rectangle roi, int 
     return EMBEDDIP_OK;
 }
 
-embeddip_status_t
-grabCutGrayscaleRealistic(const Image *src, Image *mask, Rectangle roi, int max_iter)
-{
-    if (!src || !mask || !src->pixels || src->format != IMAGE_FORMAT_GRAYSCALE)
-        return EMBEDDIP_ERROR_NULL_PTR;
-
-    int width = src->width;
-    int height = src->height;
-    int size = width * height;
-    const uint8_t *src_data = (const uint8_t *)src->pixels;
-    uint8_t *mask_data = (uint8_t *)mask->pixels;
-
-    // Allocate component responsibilities
-    uint8_t *labels = (uint8_t *)memory_alloc(size * sizeof(uint8_t));  // 0=BG, 1=FG
-    float(*fg_resp)[GMM_COMPONENTS] =
-        (float(*)[GMM_COMPONENTS])memory_alloc(size * GMM_COMPONENTS * sizeof(float));
-    float(*bg_resp)[GMM_COMPONENTS] =
-        (float(*)[GMM_COMPONENTS])memory_alloc(size * GMM_COMPONENTS * sizeof(float));
-
-    GMMComponent fg_gmm[GMM_COMPONENTS];
-    GMMComponent bg_gmm[GMM_COMPONENTS];
-
-    // Step 1: Initialize mask from ROI
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            int idx = y * width + x;
-            if (x >= roi.x && x < roi.x + roi.width && y >= roi.y && y < roi.y + roi.height) {
-                mask_data[idx] = FOREGROUND;
-                labels[idx] = 1;
-            } else {
-                mask_data[idx] = BACKGROUND;
-                labels[idx] = 0;
-            }
-        }
-    }
-
-    // Step 2: Initialize GMMs with 2 components
-    for (int i = 0; i < GMM_COMPONENTS; ++i) {
-        fg_gmm[i].mean = 50.0f + 100 * i;
-        fg_gmm[i].variance = 500.0f;
-        fg_gmm[i].weight = 0.5f;
-
-        bg_gmm[i].mean = 50.0f + 100 * i;
-        bg_gmm[i].variance = 500.0f;
-        bg_gmm[i].weight = 0.5f;
-    }
-
-    // Step 3: EM Iterations
-    for (int iter = 0; iter < max_iter; ++iter) {
-        // E-Step: compute responsibilities
-        for (int i = 0; i < size; ++i) {
-            float x = (float)src_data[i];
-            float total_fg = 0.0f, total_bg = 0.0f;
-
-            // Foreground responsibilities
-            for (int c = 0; c < GMM_COMPONENTS; ++c) {
-                fg_resp[i][c] =
-                    fg_gmm[c].weight * gaussian_prob(x, fg_gmm[c].mean, fg_gmm[c].variance);
-                total_fg += fg_resp[i][c];
-            }
-            for (int c = 0; c < GMM_COMPONENTS; ++c)
-                fg_resp[i][c] /= (total_fg + 1e-6f);
-
-            // Background responsibilities
-            for (int c = 0; c < GMM_COMPONENTS; ++c) {
-                bg_resp[i][c] =
-                    bg_gmm[c].weight * gaussian_prob(x, bg_gmm[c].mean, bg_gmm[c].variance);
-                total_bg += bg_resp[i][c];
-            }
-            for (int c = 0; c < GMM_COMPONENTS; ++c)
-                bg_resp[i][c] /= (total_bg + 1e-6f);
-        }
-
-        // M-Step: update GMM parameters
-        for (int c = 0; c < GMM_COMPONENTS; ++c) {
-            // FG
-            float w_sum = 0.0f, x_sum = 0.0f, x2_sum = 0.0f;
-            for (int i = 0; i < size; ++i) {
-                if (labels[i] == 1) {
-                    float r = fg_resp[i][c];
-                    float x = (float)src_data[i];
-                    w_sum += r;
-                    x_sum += r * x;
-                    x2_sum += r * x * x;
-                }
-            }
-            if (w_sum > 1e-6f) {
-                fg_gmm[c].weight = w_sum;
-                fg_gmm[c].mean = x_sum / w_sum;
-                fg_gmm[c].variance =
-                    fmaxf((x2_sum / w_sum) - fg_gmm[c].mean * fg_gmm[c].mean, 10.0f);
-            }
-
-            // BG
-            w_sum = x_sum = x2_sum = 0.0f;
-            for (int i = 0; i < size; ++i) {
-                if (labels[i] == 0) {
-                    float r = bg_resp[i][c];
-                    float x = (float)src_data[i];
-                    w_sum += r;
-                    x_sum += r * x;
-                    x2_sum += r * x * x;
-                }
-            }
-            if (w_sum > 1e-6f) {
-                bg_gmm[c].weight = w_sum;
-                bg_gmm[c].mean = x_sum / w_sum;
-                bg_gmm[c].variance =
-                    fmaxf((x2_sum / w_sum) - bg_gmm[c].mean * bg_gmm[c].mean, 10.0f);
-            }
-        }
-
-        // Normalize GMM weights
-        float fg_total = 0.0f, bg_total = 0.0f;
-        for (int c = 0; c < GMM_COMPONENTS; ++c) {
-            fg_total += fg_gmm[c].weight;
-            bg_total += bg_gmm[c].weight;
-        }
-        for (int c = 0; c < GMM_COMPONENTS; ++c) {
-            fg_gmm[c].weight /= fg_total;
-            bg_gmm[c].weight /= bg_total;
-        }
-
-        // Reassign labels
-        for (int i = 0; i < size; ++i) {
-            float x = (float)src_data[i];
-            float p_fg = 0.0f, p_bg = 0.0f;
-            for (int c = 0; c < GMM_COMPONENTS; ++c) {
-                p_fg += fg_gmm[c].weight * gaussian_prob(x, fg_gmm[c].mean, fg_gmm[c].variance);
-                p_bg += bg_gmm[c].weight * gaussian_prob(x, bg_gmm[c].mean, bg_gmm[c].variance);
-            }
-            labels[i] = (p_fg > p_bg) ? 1 : 0;
-            mask_data[i] = labels[i] ? FOREGROUND : BACKGROUND;
-        }
-    }
-
-    memory_free(labels);
-    memory_free(fg_resp);
-    memory_free(bg_resp);
-    return EMBEDDIP_OK;
-}
+typedef struct {
+    int to;
+    int next;
+    float cap;
+} gc_edge_t;
 
 typedef struct {
-    float weight;
-    float mean[3];      // [R, G, B]
-    float variance[3];  // diagonal covariance
-} GMMComponentRGB;
+    int n;
+    int source;
+    int sink;
+    int *head;
+    gc_edge_t *edges;
+    int edge_count;
+    int edge_cap;
+    int *level;
+    int *it;
+    int *queue;
+    uint8_t *seen;
+} gc_graph_t;
 
-float gaussian_prob_rgb(const uint8_t *pixel, const GMMComponentRGB *comp)
+static int gc_init(gc_graph_t *g, int n, int edge_cap)
 {
-    float prob = 1.0f;
-    for (int i = 0; i < 3; ++i) {
-        float diff = (float)pixel[i] - comp->mean[i];
-        float var = comp->variance[i];
-        prob *= (1.0f / sqrtf(2.0f * M_PI * var)) * expf(-diff * diff / (2.0f * var));
+    g->n = n;
+    g->source = n - 2;
+    g->sink = n - 1;
+    g->edge_count = 0;
+    g->edge_cap = edge_cap;
+    g->head = (int *)memory_alloc((size_t)n * sizeof(int));
+    g->edges = (gc_edge_t *)memory_alloc((size_t)edge_cap * sizeof(gc_edge_t));
+    g->level = (int *)memory_alloc((size_t)n * sizeof(int));
+    g->it = (int *)memory_alloc((size_t)n * sizeof(int));
+    g->queue = (int *)memory_alloc((size_t)n * sizeof(int));
+    g->seen = (uint8_t *)memory_alloc((size_t)n);
+    if (!g->head || !g->edges || !g->level || !g->it || !g->queue || !g->seen) {
+        return -1;
     }
-    return prob;
+    for (int i = 0; i < n; ++i)
+        g->head[i] = -1;
+    return 0;
 }
 
-embeddip_status_t grabCutRGB(const Image *src, Image *mask, Rectangle roi, int max_iter)
+static void gc_free(gc_graph_t *g)
 {
-    if (!src || !mask || !src->pixels || src->format != IMAGE_FORMAT_RGB888)
-        return EMBEDDIP_ERROR_NULL_PTR;
+    if (g->head)
+        memory_free(g->head);
+    if (g->edges)
+        memory_free(g->edges);
+    if (g->level)
+        memory_free(g->level);
+    if (g->it)
+        memory_free(g->it);
+    if (g->queue)
+        memory_free(g->queue);
+    if (g->seen)
+        memory_free(g->seen);
+    memset(g, 0, sizeof(*g));
+}
 
-    int width = src->width;
-    int height = src->height;
-    int size = width * height;
+static int gc_add_edge(gc_graph_t *g, int u, int v, float cap)
+{
+    if (g->edge_count + 2 > g->edge_cap)
+        return -1;
+    g->edges[g->edge_count] = (gc_edge_t){.to = v, .next = g->head[u], .cap = cap};
+    g->head[u] = g->edge_count++;
+    g->edges[g->edge_count] = (gc_edge_t){.to = u, .next = g->head[v], .cap = 0.0f};
+    g->head[v] = g->edge_count++;
+    return 0;
+}
+
+static int gc_add_undirected(gc_graph_t *g, int u, int v, float cap)
+{
+    if (gc_add_edge(g, u, v, cap) != 0)
+        return -1;
+    if (gc_add_edge(g, v, u, cap) != 0)
+        return -1;
+    return 0;
+}
+
+static int gc_bfs(gc_graph_t *g)
+{
+    for (int i = 0; i < g->n; ++i)
+        g->level[i] = -1;
+    int qh = 0, qt = 0;
+    g->level[g->source] = 0;
+    g->queue[qt++] = g->source;
+    while (qh < qt) {
+        int u = g->queue[qh++];
+        for (int ei = g->head[u]; ei != -1; ei = g->edges[ei].next) {
+            gc_edge_t *e = &g->edges[ei];
+            if (e->cap > 1e-6f && g->level[e->to] < 0) {
+                g->level[e->to] = g->level[u] + 1;
+                g->queue[qt++] = e->to;
+            }
+        }
+    }
+    return g->level[g->sink] >= 0;
+}
+
+static float gc_dfs(gc_graph_t *g, int u, float f)
+{
+    if (u == g->sink)
+        return f;
+    for (int *pei = &g->it[u]; *pei != -1; *pei = g->edges[*pei].next) {
+        int ei = *pei;
+        gc_edge_t *e = &g->edges[ei];
+        if (e->cap <= 1e-6f || g->level[e->to] != g->level[u] + 1)
+            continue;
+        float pushed = gc_dfs(g, e->to, fminf(f, e->cap));
+        if (pushed > 1e-6f) {
+            e->cap -= pushed;
+            g->edges[ei ^ 1].cap += pushed;
+            return pushed;
+        }
+    }
+    return 0.0f;
+}
+
+static float gc_maxflow(gc_graph_t *g)
+{
+    float flow = 0.0f;
+    while (gc_bfs(g)) {
+        for (int i = 0; i < g->n; ++i)
+            g->it[i] = g->head[i];
+        while (1) {
+            float pushed = gc_dfs(g, g->source, 1e20f);
+            if (pushed <= 1e-6f)
+                break;
+            flow += pushed;
+        }
+    }
+    return flow;
+}
+
+static void gc_mark_source_side(gc_graph_t *g)
+{
+    memset(g->seen, 0, (size_t)g->n);
+    int qh = 0, qt = 0;
+    g->seen[g->source] = 1;
+    g->queue[qt++] = g->source;
+    while (qh < qt) {
+        int u = g->queue[qh++];
+        for (int ei = g->head[u]; ei != -1; ei = g->edges[ei].next) {
+            gc_edge_t *e = &g->edges[ei];
+            if (e->cap > 1e-6f && !g->seen[e->to]) {
+                g->seen[e->to] = 1;
+                g->queue[qt++] = e->to;
+            }
+        }
+    }
+}
+
+embeddip_status_t grabCut(const Image *src, Image *mask, Rectangle roi, int max_iter)
+{
+    if (!src || !mask || !src->pixels || !mask->pixels)
+        return EMBEDDIP_ERROR_NULL_PTR;
+    if (src->format != IMAGE_FORMAT_GRAYSCALE)
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    if (mask->format != IMAGE_FORMAT_MASK && mask->format != IMAGE_FORMAT_GRAYSCALE)
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    if (src->width != mask->width || src->height != mask->height)
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    if (max_iter <= 0)
+        max_iter = MAX_ITER_GRABCUT;
+
+    const int width = (int)src->width;
+    const int height = (int)src->height;
     const uint8_t *src_data = (const uint8_t *)src->pixels;
     uint8_t *mask_data = (uint8_t *)mask->pixels;
+    memset(mask_data, BACKGROUND, (size_t)width * (size_t)height);
 
-    // Allocate label buffer (0 = BG, 1 = FG)
-    uint8_t *labels = (uint8_t *)memory_alloc(size * sizeof(uint8_t));
-    float(*fg_resp)[GMM_COMPONENTS] =
-        (float(*)[GMM_COMPONENTS])memory_alloc(size * GMM_COMPONENTS * sizeof(float));
-    float(*bg_resp)[GMM_COMPONENTS] =
-        (float(*)[GMM_COMPONENTS])memory_alloc(size * GMM_COMPONENTS * sizeof(float));
+    int x0 = roi.x < 0 ? 0 : roi.x;
+    int y0 = roi.y < 0 ? 0 : roi.y;
+    int x1 = roi.x + roi.width;
+    int y1 = roi.y + roi.height;
+    if (x1 > width)
+        x1 = width;
+    if (y1 > height)
+        y1 = height;
+    if (x0 >= x1 || y0 >= y1)
+        return EMBEDDIP_ERROR_INVALID_ARG;
 
-    GMMComponentRGB fg_gmm[GMM_COMPONENTS];
-    GMMComponentRGB bg_gmm[GMM_COMPONENTS];
+    // Downsample ROI for embedded memory/perf while still using graph-cut.
+    int ds = 2;
+    const int target_max_nodes = 7000;
+    int sw = (x1 - x0 + ds - 1) / ds;
+    int sh = (y1 - y0 + ds - 1) / ds;
+    while (sw * sh > target_max_nodes && ds < 16) {
+        ds *= 2;
+        sw = (x1 - x0 + ds - 1) / ds;
+        sh = (y1 - y0 + ds - 1) / ds;
+    }
+    const int sn = sw * sh;
+    uint8_t *labels = (uint8_t *)memory_alloc((size_t)sn);  // 0=BG, 1=FG
+    uint8_t *small = (uint8_t *)memory_alloc((size_t)sn);
+    if (!labels || !small) {
+        if (labels)
+            memory_free(labels);
+        if (small)
+            memory_free(small);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
 
-    // Step 1: Initial Labeling from ROI
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            int idx = y * width + x;
-            if (x >= roi.x && x < roi.x + roi.width && y >= roi.y && y < roi.y + roi.height) {
-                mask_data[idx] = FOREGROUND;
-                labels[idx] = 1;
-            } else {
-                mask_data[idx] = BACKGROUND;
-                labels[idx] = 0;
-            }
+    for (int sy = 0; sy < sh; ++sy) {
+        for (int sx = 0; sx < sw; ++sx) {
+            int xx = x0 + sx * ds;
+            int yy = y0 + sy * ds;
+            if (xx >= width)
+                xx = width - 1;
+            if (yy >= height)
+                yy = height - 1;
+            small[sy * sw + sx] = src_data[yy * width + xx];
         }
     }
 
-    // Step 2: Init GMMs
-    for (int c = 0; c < GMM_COMPONENTS; ++c) {
-        for (int ch = 0; ch < 3; ++ch) {
-            fg_gmm[c].mean[ch] = 100.0f + 50 * c;
-            fg_gmm[c].variance[ch] = 1000.0f;
-            bg_gmm[c].mean[ch] = 50.0f + 100 * c;
-            bg_gmm[c].variance[ch] = 1000.0f;
+    int border = ((sw < sh) ? sw : sh) / 10;
+    if (border < 2)
+        border = 2;
+    for (int sy = 0; sy < sh; ++sy) {
+        for (int sx = 0; sx < sw; ++sx) {
+            int near_left = sx < border;
+            int near_right = (sw - 1 - sx) < border;
+            int near_top = sy < border;
+            int near_bottom = (sh - 1 - sy) < border;
+            labels[sy * sw + sx] = (near_left || near_right || near_top || near_bottom) ? 0u : 1u;
         }
-        fg_gmm[c].weight = 0.5f;
-        bg_gmm[c].weight = 0.5f;
     }
 
-    // Step 3: EM Iterations
+    const float lambda = 25.0f;
+    const float hard_cap = 1e6f;
+
     for (int iter = 0; iter < max_iter; ++iter) {
-        // E-Step: compute responsibilities
-        for (int i = 0; i < size; ++i) {
-            const uint8_t *px = &src_data[i * 3];
-            float total_fg = 0.0f, total_bg = 0.0f;
-
-            for (int c = 0; c < GMM_COMPONENTS; ++c) {
-                fg_resp[i][c] = fg_gmm[c].weight * gaussian_prob_rgb(px, &fg_gmm[c]);
-                bg_resp[i][c] = bg_gmm[c].weight * gaussian_prob_rgb(px, &bg_gmm[c]);
-                total_fg += fg_resp[i][c];
-                total_bg += bg_resp[i][c];
-            }
-            for (int c = 0; c < GMM_COMPONENTS; ++c) {
-                fg_resp[i][c] /= (total_fg + 1e-6f);
-                bg_resp[i][c] /= (total_bg + 1e-6f);
+        float fg_sum = 0.0f, fg_sqsum = 0.0f, fg_cnt = 0.0f;
+        float bg_sum = 0.0f, bg_sqsum = 0.0f, bg_cnt = 0.0f;
+        for (int i = 0; i < sn; ++i) {
+            float v = (float)small[i];
+            if (labels[i]) {
+                fg_sum += v;
+                fg_sqsum += v * v;
+                fg_cnt += 1.0f;
+            } else {
+                bg_sum += v;
+                bg_sqsum += v * v;
+                bg_cnt += 1.0f;
             }
         }
+        if (fg_cnt < 1.0f || bg_cnt < 1.0f)
+            break;
 
-        // M-Step: update GMM parameters
-        for (int c = 0; c < GMM_COMPONENTS; ++c) {
-            float fg_wsum = 0.0f, bg_wsum = 0.0f;
-            float fg_sum[3] = {0}, fg_sqsum[3] = {0};
-            float bg_sum[3] = {0}, bg_sqsum[3] = {0};
+        float mu_fg = fg_sum / fg_cnt;
+        float mu_bg = bg_sum / bg_cnt;
+        float var_fg = fmaxf((fg_sqsum / fg_cnt) - mu_fg * mu_fg, 25.0f);
+        float var_bg = fmaxf((bg_sqsum / bg_cnt) - mu_bg * mu_bg, 25.0f);
 
-            for (int i = 0; i < size; ++i) {
-                const uint8_t *px = &src_data[i * 3];
-                if (labels[i] == 1) {
-                    float r = fg_resp[i][c];
-                    fg_wsum += r;
-                    for (int ch = 0; ch < 3; ++ch) {
-                        fg_sum[ch] += r * px[ch];
-                        fg_sqsum[ch] += r * px[ch] * px[ch];
+        float d2_sum = 0.0f;
+        int d2_cnt = 0;
+        for (int y = 0; y < sh; ++y) {
+            for (int x = 0; x < sw; ++x) {
+                int i = y * sw + x;
+                if (x + 1 < sw) {
+                    float d = (float)small[i] - (float)small[i + 1];
+                    d2_sum += d * d;
+                    d2_cnt++;
+                }
+                if (y + 1 < sh) {
+                    float d = (float)small[i] - (float)small[i + sw];
+                    d2_sum += d * d;
+                    d2_cnt++;
+                }
+            }
+        }
+        float beta = 1.0f / (2.0f * (d2_sum / (float)(d2_cnt + 1)) + 1e-6f);
+
+        gc_graph_t g = {0};
+        int node_n = sn + 2;
+        // Terminal edges: ~4*sn, n-links: ~4*((sw-1)*sh + sw*(sh-1)), plus border t-links.
+        // Worst-case storage bound with current representation:
+        // - terminal links: 2 add_edge/pixel => 4*sn edges
+        // - smoothness links: 4 edges per right/down neighbor pair
+        //   pairs = (sw-1)*sh + sw*(sh-1) = 2*sn - sw - sh
+        //   => 4*(2*sn - sw - sh) edges
+        // - hard-ring t-links: up to 1 add_edge/pixel in worst case => 2*sn edges
+        // Total <= 14*sn - 4*(sw+sh), add safety margin.
+        int edge_cap = 14 * sn + 512;
+        if (gc_init(&g, node_n, edge_cap) != 0) {
+            gc_free(&g);
+            memory_free(labels);
+            memory_free(small);
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
+
+        for (int y = 0; y < sh; ++y) {
+            for (int x = 0; x < sw; ++x) {
+                int p = y * sw + x;
+                float pix = (float)small[p];
+                float dbg = 0.5f * logf(var_bg) + ((pix - mu_bg) * (pix - mu_bg)) / (2.0f * var_bg);
+                float dfg = 0.5f * logf(var_fg) + ((pix - mu_fg) * (pix - mu_fg)) / (2.0f * var_fg);
+                if (dbg < 0.0f)
+                    dbg = 0.0f;
+                if (dfg < 0.0f)
+                    dfg = 0.0f;
+
+                if (gc_add_edge(&g, g.source, p, dbg + 1e-3f) != 0 ||
+                    gc_add_edge(&g, p, g.sink, dfg + 1e-3f) != 0) {
+                    gc_free(&g);
+                    memory_free(labels);
+                    memory_free(small);
+                    return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+                }
+
+                int near_left = x < border;
+                int near_right = (sw - 1 - x) < border;
+                int near_top = y < border;
+                int near_bottom = (sh - 1 - y) < border;
+                int is_ring = near_left || near_right || near_top || near_bottom;
+                if (is_ring) {
+                    if (gc_add_edge(&g, p, g.sink, hard_cap) != 0) {
+                        gc_free(&g);
+                        memory_free(labels);
+                        memory_free(small);
+                        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
                     }
-                } else {
-                    float r = bg_resp[i][c];
-                    bg_wsum += r;
-                    for (int ch = 0; ch < 3; ++ch) {
-                        bg_sum[ch] += r * px[ch];
-                        bg_sqsum[ch] += r * px[ch] * px[ch];
+                }
+
+                if (x + 1 < sw) {
+                    int q = p + 1;
+                    float d = (float)small[p] - (float)small[q];
+                    float w = lambda * expf(-beta * d * d) + 1e-3f;
+                    if (gc_add_undirected(&g, p, q, w) != 0) {
+                        gc_free(&g);
+                        memory_free(labels);
+                        memory_free(small);
+                        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+                    }
+                }
+                if (y + 1 < sh) {
+                    int q = p + sw;
+                    float d = (float)small[p] - (float)small[q];
+                    float w = lambda * expf(-beta * d * d) + 1e-3f;
+                    if (gc_add_undirected(&g, p, q, w) != 0) {
+                        gc_free(&g);
+                        memory_free(labels);
+                        memory_free(small);
+                        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
                     }
                 }
             }
-
-            for (int ch = 0; ch < 3; ++ch) {
-                if (fg_wsum > 1e-6f) {
-                    fg_gmm[c].mean[ch] = fg_sum[ch] / fg_wsum;
-                    float var = (fg_sqsum[ch] / fg_wsum) - fg_gmm[c].mean[ch] * fg_gmm[c].mean[ch];
-                    fg_gmm[c].variance[ch] = fmaxf(var, 10.0f);
-                }
-
-                if (bg_wsum > 1e-6f) {
-                    bg_gmm[c].mean[ch] = bg_sum[ch] / bg_wsum;
-                    float var = (bg_sqsum[ch] / bg_wsum) - bg_gmm[c].mean[ch] * bg_gmm[c].mean[ch];
-                    bg_gmm[c].variance[ch] = fmaxf(var, 10.0f);
-                }
-            }
-
-            fg_gmm[c].weight = fg_wsum;
-            bg_gmm[c].weight = bg_wsum;
         }
 
-        // Normalize weights
-        float fg_total = 0.0f, bg_total = 0.0f;
-        for (int c = 0; c < GMM_COMPONENTS; ++c) {
-            fg_total += fg_gmm[c].weight;
-            bg_total += bg_gmm[c].weight;
+        gc_maxflow(&g);
+        gc_mark_source_side(&g);
+        for (int i = 0; i < sn; ++i) {
+            labels[i] = g.seen[i] ? 1u : 0u;
         }
-        for (int c = 0; c < GMM_COMPONENTS; ++c) {
-            fg_gmm[c].weight /= (fg_total + 1e-6f);
-            bg_gmm[c].weight /= (bg_total + 1e-6f);
-        }
+        gc_free(&g);
+    }
 
-        // Reassign labels and update mask
-        for (int i = 0; i < size; ++i) {
-            const uint8_t *px = &src_data[i * 3];
-            float p_fg = 0.0f, p_bg = 0.0f;
-            for (int c = 0; c < GMM_COMPONENTS; ++c) {
-                p_fg += fg_gmm[c].weight * gaussian_prob_rgb(px, &fg_gmm[c]);
-                p_bg += bg_gmm[c].weight * gaussian_prob_rgb(px, &bg_gmm[c]);
-            }
-            labels[i] = (p_fg > p_bg) ? 1 : 0;
-            mask_data[i] = labels[i] ? FOREGROUND : BACKGROUND;
+    memset(mask_data, BACKGROUND, (size_t)width * (size_t)height);
+    for (int y = y0; y < y1; ++y) {
+        for (int x = x0; x < x1; ++x) {
+            int sx = (x - x0) / ds;
+            int sy = (y - y0) / ds;
+            if (sx >= sw)
+                sx = sw - 1;
+            if (sy >= sh)
+                sy = sh - 1;
+            int si = sy * sw + sx;
+            mask_data[y * width + x] = labels[si] ? FOREGROUND : BACKGROUND;
         }
     }
+    mask->log = IMAGE_DATA_PIXELS;
 
     memory_free(labels);
-    memory_free(fg_resp);
-    memory_free(bg_resp);
+    memory_free(small);
     return EMBEDDIP_OK;
 }

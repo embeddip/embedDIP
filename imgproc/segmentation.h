@@ -83,39 +83,6 @@ embeddip_status_t colorRegionGrowing(const Image *inImg,
                                      float tolerance);
 
 /**
- * @brief GrabCut segmentation (working version).
- *
- * @param[in]  src        Pointer to input grayscale image.
- * @param[out] mask       Pointer to output mask image.
- * @param[in]  roi        Region of interest.
- * @param[in]  iterations Number of iterations.
- * @return EMBEDDIP_OK on success, error code otherwise.
- */
-embeddip_status_t grabCutLite_working(const Image *src, Image *mask, Rectangle roi, int iterations);
-
-/**
- * @brief GrabCut segmentation (sd version).
- *
- * @param[in]  src        Pointer to input grayscale image.
- * @param[out] mask       Pointer to output mask image.
- * @param[in]  roi        Region of interest.
- * @param[in]  iterations Number of iterations.
- * @return EMBEDDIP_OK on success, error code otherwise.
- */
-embeddip_status_t grabCutLitesd(const Image *src, Image *mask, Rectangle roi, int iterations);
-
-/**
- * @brief GrabCut segmentation (main version).
- *
- * @param[in]  src        Pointer to input image.
- * @param[out] mask       Pointer to output mask image.
- * @param[in]  roi        Region of interest.
- * @param[in]  iterations Number of iterations.
- * @return EMBEDDIP_OK on success, error code otherwise.
- */
-embeddip_status_t grabCutLite(const Image *src, Image *mask, Rectangle roi, int iterations);
-
-/**
  * @brief GrabCut segmentation (grayscale realistic).
  *
  * @param[in]  src        Pointer to input grayscale image.
@@ -124,19 +91,18 @@ embeddip_status_t grabCutLite(const Image *src, Image *mask, Rectangle roi, int 
  * @param[in]  iterations Number of iterations.
  * @return EMBEDDIP_OK on success, error code otherwise.
  */
-embeddip_status_t
-grabCutGrayscaleRealistic(const Image *src, Image *mask, Rectangle roi, int iterations);
+embeddip_status_t grabCut(const Image *src, Image *mask, Rectangle roi, int iterations);
 
 /**
- * @brief GrabCut segmentation (RGB version).
+ * @brief GrabCut segmentation (lightweight version).
  *
- * @param[in]  src        Pointer to input RGB image.
+ * @param[in]  src        Pointer to input image.
  * @param[out] mask       Pointer to output mask image.
  * @param[in]  roi        Region of interest.
  * @param[in]  iterations Number of iterations.
  * @return EMBEDDIP_OK on success, error code otherwise.
  */
-embeddip_status_t grabCutRGB(const Image *src, Image *mask, Rectangle roi, int iterations);
+embeddip_status_t grabCutLite(const Image *src, Image *mask, Rectangle roi, int iterations);
 
 #ifdef __cplusplus
 }

@@ -798,12 +798,13 @@ class Image
     void bitwiseNot(Image &out) const;
 
     /**
-     * @brief Runs simplified GrabCut and returns mask output.
-     * @param[out] maskImg Output segmentation mask
-     * @param[in] iterations Number of refinement iterations
-     * @see ::grabCutLitesd For underlying C implementation
+     * @brief Runs grayscale graph-cut GrabCut in ROI.
+     * @param[out] maskImg Output segmentation mask.
+     * @param[in] roi Region of interest.
+     * @param[in] iterations Number of refinement iterations.
+     * @return C-layer status code.
      */
-    void grabCutLitesd(Image &maskImg, int iterations) const;
+    embeddip_status_t grabCut(Image &maskImg, Rectangle roi, int iterations) const;
 
     /**
      * @brief Runs simplified GrabCut in a rectangular ROI.
@@ -812,22 +813,6 @@ class Image
      * @param iterations Number of refinement iterations.
      */
     void grabCutLite(Image &outImg, Rectangle roi, int iterations) const;
-
-    /**
-     * @brief Runs simplified GrabCut for RGB888 images.
-     * @param outImg Output segmentation image/mask.
-     * @param roi Region of interest.
-     * @param iterations Number of refinement iterations.
-     */
-    void grabCutLite888(Image &outImg, Rectangle roi, int iterations) const;
-
-    /**
-     * @brief Runs RGB graph-cut segmentation in ROI.
-     * @param outMask Output binary mask.
-     * @param roi Region of interest.
-     * @param max_iter Maximum iteration count.
-     */
-    void grabCutRGB(Image &outMask, Rectangle roi, int max_iter) const;
 
     /**
      * @brief Thresholds image by hue range.
