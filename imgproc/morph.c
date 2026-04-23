@@ -88,6 +88,7 @@ embeddip_status_t erode(const Image *src, Image *dst, const Kernel *kernel, uint
         return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
 
+    // First iteration must start from source image content.
     memcpy(ping, src->pixels, src->size);
 
     for (uint8_t it = 0; it < iterations; ++it) {
@@ -164,6 +165,7 @@ embeddip_status_t dilate(const Image *src, Image *dst, const Kernel *kernel, uin
         return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
 
+    // First iteration must start from source image content.
     memcpy(ping, src->pixels, src->size);
 
     for (uint8_t it = 0; it < iterations; ++it) {
