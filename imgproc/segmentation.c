@@ -581,6 +581,13 @@ embeddip_status_t grayscaleRegionGrowing(const Image *inImg,
         return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
 
+    int top = 0;
+    int dx[4] = {0, -1, 1, 0};
+    int dy[4] = {-1, 0, 0, 1};
+    float regionMean = 0.0f;
+    int regionCount = 0;
+
+    // Global multi-seed initialization (single visited map and single adaptive model).
     for (int s = 0; s < numSeeds; ++s) {
         int seedX = seeds[s].x;
         int seedY = seeds[s].y;
@@ -591,43 +598,49 @@ embeddip_status_t grayscaleRegionGrowing(const Image *inImg,
         if (visited[seedIndex])
             continue;
 
-        // Run the same region growing as single-seed
-        int top = 0;
+        if (top >= STACK_SIZE) {
+            memory_free(visited);
+            memory_free(stack);
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
+
         stack[top++] = seeds[s];
         visited[seedIndex] = true;
         dst[seedIndex] = 255;
 
-        long sum = src[seedIndex];
-        int count = 1;
+        regionCount++;
+        regionMean += ((float)src[seedIndex] - regionMean) / (float)regionCount;
+    }
 
-        int dx[4] = {0, -1, 1, 0};
-        int dy[4] = {-1, 0, 0, 1};
+    if (regionCount == 0) {
+        memory_free(visited);
+        memory_free(stack);
+        return EMBEDDIP_ERROR_INVALID_ARG;
+    }
 
-        while (top > 0) {
-            Point p = stack[--top];
-            uint8_t regionMean = (uint8_t)(sum / count);
+    while (top > 0) {
+        Point p = stack[--top];
 
-            for (int i = 0; i < 4; ++i) {
-                int nx = p.x + dx[i];
-                int ny = p.y + dy[i];
-                int nidx = ny * width + nx;
+        for (int i = 0; i < 4; ++i) {
+            int nx = p.x + dx[i];
+            int ny = p.y + dy[i];
+            int nidx = ny * width + nx;
 
-                if (nx >= 0 && nx < width && ny >= 0 && ny < height && !visited[nidx]) {
-                    uint8_t neighborValue = src[nidx];
-                    if (abs((int)neighborValue - (int)regionMean) <= tolerance) {
-                        visited[nidx] = true;
-                        dst[nidx] = 255;
-                        stack[top++] = (Point){nx, ny};
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height && !visited[nidx]) {
+                uint8_t neighborValue = src[nidx];
+                if (abs((int)neighborValue - (int)regionMean) <= tolerance) {
+                    visited[nidx] = true;
+                    dst[nidx] = 255;
 
-                        sum += neighborValue;
-                        count++;
+                    regionCount++;
+                    regionMean += ((float)neighborValue - regionMean) / (float)regionCount;
 
-                        if (top >= STACK_SIZE) {
-                            memory_free(visited);
-                            memory_free(stack);
-                            return EMBEDDIP_ERROR_OUT_OF_MEMORY;  // Stack overflow
-                        }
+                    if (top >= STACK_SIZE) {
+                        memory_free(visited);
+                        memory_free(stack);
+                        return EMBEDDIP_ERROR_OUT_OF_MEMORY;  // Stack overflow
                     }
+                    stack[top++] = (Point){nx, ny};
                 }
             }
         }
@@ -694,9 +707,9 @@ colorRegionGrowing_single(const Image *inImg, Image *outImg, int seedX, int seed
     int top = 0;
 
     int seedIndex = seedY * width + seedX;
-    float h0 = src[seedIndex * 3] / 255.0f;
-    float s0 = src[seedIndex * 3 + 1] / 255.0f;
-    float i0 = src[seedIndex * 3 + 2] / 255.0f;
+    float regionMean[3];
+    read_vec3_norm(inImg, seedIndex, regionMean);
+    int regionCount = 1;
 
     stack[top++] = (Point){seedX, seedY};
     visited[seedIndex] = true;
@@ -718,16 +731,9 @@ colorRegionGrowing_single(const Image *inImg, Image *outImg, int seedX, int seed
             int nidx = ny * width + nx;
 
             if (nx >= 0 && nx < width && ny >= 0 && ny < height && !visited[nidx]) {
-                float h = src[nidx * 3] / 255.0f;
-                float s = src[nidx * 3 + 1] / 255.0f;
-                float ii = src[nidx * 3 + 2] / 255.0f;
-
-                // Hue distance with wraparound
-                float dh = fminf(fabsf(h - h0), 1.0f - fabsf(h - h0));
-                float ds = s - s0;
-                float di = ii - i0;
-
-                float dist = sqrtf(dh * dh + ds * ds + di * di);
+                float v[3];
+                read_vec3_norm(inImg, nidx, v);
+                float dist = color_distance(v, regionMean, inImg->format);
 
                 if (dist <= tolerance) {
                     visited[nidx] = true;
@@ -736,6 +742,12 @@ colorRegionGrowing_single(const Image *inImg, Image *outImg, int seedX, int seed
                     dst[nidx * 3] = src[nidx * 3];
                     dst[nidx * 3 + 1] = src[nidx * 3 + 1];
                     dst[nidx * 3 + 2] = src[nidx * 3 + 2];
+
+                    // Update running region mean (adaptive region growing).
+                    regionCount++;
+                    regionMean[0] += (v[0] - regionMean[0]) / (float)regionCount;
+                    regionMean[1] += (v[1] - regionMean[1]) / (float)regionCount;
+                    regionMean[2] += (v[2] - regionMean[2]) / (float)regionCount;
 
                     stack[top++] = (Point){nx, ny};
 
@@ -822,66 +834,93 @@ embeddip_status_t colorRegionGrowing(const Image *inImg,
     const int dx[4] = {0, -1, 1, 0};
     const int dy[4] = {-1, 0, 0, 1};
 
+    memset(visited, 0, (size_t)inImg->size * sizeof(bool));
+
+    // Global multi-seed region: one visited map and one adaptive region model.
+    int top = 0;
+    float regionMean[3] = {0.0f, 0.0f, 0.0f};
+    int regionCount = 0;
+
     for (int s = 0; s < numSeeds; ++s) {
         int seedX = seeds[s].x;
         int seedY = seeds[s].y;
-
         if ((unsigned)seedX >= (unsigned)width || (unsigned)seedY >= (unsigned)height)
             continue;
 
-        const int seedIndex = seedY * width + seedX;
+        int seedIndex = seedY * width + seedX;
+        if (visited[seedIndex])
+            continue;
 
-        memset(visited, 0, (size_t)inImg->size * sizeof(bool));
-
-        float seedVec[3];
-        read_vec3_norm(inImg, seedIndex, seedVec);
-
-        int top = 0;
+        if (top >= STACK_SIZE) {
+            memory_free(visited);
+            memory_free(stack);
+            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        }
         stack[top++] = (Point){seedX, seedY};
         visited[seedIndex] = true;
+
+        float v[3];
+        read_vec3_norm(inImg, seedIndex, v);
+        regionCount++;
+        regionMean[0] += (v[0] - regionMean[0]) / (float)regionCount;
+        regionMean[1] += (v[1] - regionMean[1]) / (float)regionCount;
+        regionMean[2] += (v[2] - regionMean[2]) / (float)regionCount;
+
         if (outputColorful) {
-            for (int c = 0; c < 3; ++c) {
-                outData[seedIndex * 3 + c] = inData[seedIndex * inDepth + c];
-            }
+            outData[seedIndex * 3 + 0] = (uint8_t)CLAMP((int)lrintf(v[0] * 255.0f), 0, 255);
+            outData[seedIndex * 3 + 1] = (uint8_t)CLAMP((int)lrintf(v[1] * 255.0f), 0, 255);
+            outData[seedIndex * 3 + 2] = (uint8_t)CLAMP((int)lrintf(v[2] * 255.0f), 0, 255);
         } else {
             outData[seedIndex] = 255;
         }
+    }
 
-        while (top > 0) {
-            Point p = stack[--top];
+    if (regionCount == 0) {
+        memory_free(visited);
+        memory_free(stack);
+        return EMBEDDIP_ERROR_INVALID_ARG;
+    }
 
-            for (int d = 0; d < 4; ++d) {
-                int nx = p.x + dx[d];
-                int ny = p.y + dy[d];
+    while (top > 0) {
+        Point p = stack[--top];
 
-                if ((unsigned)nx >= (unsigned)width || (unsigned)ny >= (unsigned)height)
-                    continue;
+        for (int d = 0; d < 4; ++d) {
+            int nx = p.x + dx[d];
+            int ny = p.y + dy[d];
 
-                int nidx = ny * width + nx;
-                if (visited[nidx])
-                    continue;
+            if ((unsigned)nx >= (unsigned)width || (unsigned)ny >= (unsigned)height)
+                continue;
 
-                float v[3];
-                read_vec3_norm(inImg, nidx, v);
+            int nidx = ny * width + nx;
+            if (visited[nidx])
+                continue;
 
-                float dist = color_distance(v, seedVec, inImg->format);
-                if (dist <= tolerance) {
-                    visited[nidx] = true;
-                    if (outputColorful) {
-                        for (int c = 0; c < 3; ++c) {
-                            outData[nidx * 3 + c] = inData[nidx * inDepth + c];
-                        }
-                    } else {
-                        outData[nidx] = 255;
-                    }
+            float v[3];
+            read_vec3_norm(inImg, nidx, v);
 
-                    if (top >= STACK_SIZE) {
-                        memory_free(visited);
-                        memory_free(stack);
-                        return EMBEDDIP_ERROR_OUT_OF_MEMORY;  // Stack overflow
-                    }
-                    stack[top++] = (Point){nx, ny};
+            float dist = color_distance(v, regionMean, inImg->format);
+            if (dist <= tolerance) {
+                visited[nidx] = true;
+
+                if (outputColorful) {
+                    outData[nidx * 3 + 0] = (uint8_t)CLAMP((int)lrintf(v[0] * 255.0f), 0, 255);
+                    outData[nidx * 3 + 1] = (uint8_t)CLAMP((int)lrintf(v[1] * 255.0f), 0, 255);
+                    outData[nidx * 3 + 2] = (uint8_t)CLAMP((int)lrintf(v[2] * 255.0f), 0, 255);
+                } else {
+                    outData[nidx] = 255;
                 }
+
+                regionCount++;
+                regionMean[0] += (v[0] - regionMean[0]) / (float)regionCount;
+                regionMean[1] += (v[1] - regionMean[1]) / (float)regionCount;
+                regionMean[2] += (v[2] - regionMean[2]) / (float)regionCount;
+
+                if (top >= STACK_SIZE) {
+                    memory_free(visited);
+                    memory_free(stack);
+                    return EMBEDDIP_ERROR_OUT_OF_MEMORY;  // Stack overflow
+                }
+                stack[top++] = (Point){nx, ny};
             }
         }
     }
