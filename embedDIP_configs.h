@@ -36,6 +36,46 @@
 /* #define EMBED_DIP_CPU_LX6       1 */
 /* #define EMBED_DIP_CPU_LX7       1 */
 
+/* -------------------------------------------------------------------------- */
+/* Arduino auto-detection (Library Manager friendly defaults)                 */
+/* -------------------------------------------------------------------------- */
+/*
+ * If the build system does not provide explicit EMBED_DIP_* target macros,
+ * infer them from Arduino core/platform macros so sketches can compile
+ * without extra CLI flags.
+ */
+#if !defined(EMBED_DIP_BOARD_STM32F7) && !defined(EMBED_DIP_BOARD_ESP32)
+    #if defined(ARDUINO_ARCH_ESP32)
+        #define EMBED_DIP_BOARD_ESP32 1
+    #elif defined(STM32F7xx)
+        #define EMBED_DIP_BOARD_STM32F7 1
+    #endif
+#endif
+
+#if !defined(EMBED_DIP_ARCH_ARM) && !defined(EMBED_DIP_ARCH_XTENSA)
+    #if defined(EMBED_DIP_BOARD_ESP32)
+        #define EMBED_DIP_ARCH_XTENSA 1
+    #elif defined(EMBED_DIP_BOARD_STM32F7)
+        #define EMBED_DIP_ARCH_ARM 1
+    #endif
+#endif
+
+#if !defined(EMBED_DIP_CPU_CORTEX_M7) && !defined(EMBED_DIP_CPU_LX6) && !defined(EMBED_DIP_CPU_LX7)
+    #if defined(EMBED_DIP_BOARD_ESP32)
+        /*
+         * ESP32/ESP32-S2/ESP32-S3 families are LX6/LX7. Prefer explicit IDF
+         * target hints when available; default to LX6 for classic ESP32.
+         */
+        #if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
+            #define EMBED_DIP_CPU_LX7 1
+        #else
+            #define EMBED_DIP_CPU_LX6 1
+        #endif
+    #elif defined(EMBED_DIP_BOARD_STM32F7)
+        #define EMBED_DIP_CPU_CORTEX_M7 1
+    #endif
+#endif
+
 /* Sanity check: exactly one board. */
 #if ((defined(EMBED_DIP_BOARD_STM32F7) ? 1 : 0) + (defined(EMBED_DIP_BOARD_ESP32) ? 1 : 0)) == 0
     #error                                                                                         \
