@@ -182,7 +182,10 @@ int camera_init(ImageResolution resolution, ImageFormat format)
     config.pixel_format =
         (format == IMAGE_FORMAT_GRAYSCALE) ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565;
     config.grab_mode = CAMERA_GRAB_LATEST;
-    config.fb_location = CAMERA_FB_IN_PSRAM;
+    // RGB/YUV capture to PSRAM can produce corrupted frames on ESP32.
+    // Keep raw formats in DRAM for integrity; JPEG can stay in PSRAM.
+    config.fb_location = (config.pixel_format == PIXFORMAT_JPEG) ? CAMERA_FB_IN_PSRAM
+                                                                  : CAMERA_FB_IN_DRAM;
     config.fb_count = 1;
 
     #if defined(CAMERA_MODEL_ESP_EYE)
@@ -201,12 +204,24 @@ int camera_init(ImageResolution resolution, ImageFormat format)
     pixformat_t pix_fmt =
         (format == IMAGE_FORMAT_GRAYSCALE) ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565;
     if (s->set_pixformat) {
-        s->set_pixformat(s, pix_fmt);
+        if (s->set_pixformat(s, pix_fmt) != 0) {
+            return -1;
+        }
     }
 
     // Explicitly set frame size on sensor
     if (s->set_framesize) {
-        s->set_framesize(s, map_resolution(resolution));
+        if (s->set_framesize(s, map_resolution(resolution)) != 0) {
+            return -1;
+        }
+    }
+
+    // OV2640 reference driver reapplies pixel format after window/framesize updates.
+    // Keep the same behavior so resolution programming does not override RGB565 setup.
+    if (s->set_pixformat) {
+        if (s->set_pixformat(s, pix_fmt) != 0) {
+            return -1;
+        }
     }
 
     if (s->id.PID == OV3660_PID) {
@@ -229,6 +244,7 @@ int camera_init(ImageResolution resolution, ImageFormat format)
 
 int camera_capture(captureMode mode, Image *inImg)
 {
+    (void)mode;
     if (inImg == NULL || inImg->pixels == NULL) {
         return -2;
     }
@@ -255,25 +271,18 @@ int camera_capture(captureMode mode, Image *inImg)
         //  Continue anyway - might still work
     }
 
+    if (inImg->format == IMAGE_FORMAT_RGB565 && fb->format != PIXFORMAT_RGB565) {
+        esp_camera_fb_return(fb);
+        return -3;
+    }
+    if (inImg->format == IMAGE_FORMAT_GRAYSCALE && fb->format != PIXFORMAT_GRAYSCALE) {
+        esp_camera_fb_return(fb);
+        return -3;
+    }
+
     // Copy frame buffer data to image buffer
     size_t copy_size = (fb->len < expected_size) ? fb->len : expected_size;
     memcpy(inImg->pixels, fb->buf, copy_size);
-
-    // Convert RGB565 to BGR565 (swap red and blue channels)
-    if (inImg->format == IMAGE_FORMAT_RGB565 && inImg->depth == 2) {
-        uint16_t *pixels = (uint16_t *)inImg->pixels;
-        size_t num_pixels = inImg->width * inImg->height;
-
-        for (size_t i = 0; i < num_pixels; i++) {
-            uint16_t rgb = pixels[i];
-            // Extract R, G, B components
-            uint16_t r = (rgb >> 11) & 0x1F;  // Red: bits 11-15
-            uint16_t g = (rgb >> 5) & 0x3F;   // Green: bits 5-10
-            uint16_t b = (rgb >> 0) & 0x1F;   // Blue: bits 0-4
-            // Repack as BGR565
-            pixels[i] = (b << 11) | (g << 5) | r;
-        }
-    }
 
     esp_camera_fb_return(fb);
 
