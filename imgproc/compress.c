@@ -4,6 +4,13 @@
 #include "imgproc/compress.h"
 
 #include <stdlib.h>
+#include <string.h>
+
+#if !defined(EMBEDDIP_HAVE_LIBJPEG) && defined(ARDUINO_ARCH_ESP32) && defined(__has_include)
+    #if __has_include("img_converters.h")
+        #define EMBEDDIP_HAVE_ESP32_FMT2JPG 1
+    #endif
+#endif
 
 #if defined(EMBEDDIP_HAVE_LIBJPEG)
 
@@ -170,6 +177,83 @@ int compress(Image *src, Image *dst, int format, int quality)
 
     dst->size = (uint32_t)(dst_capacity - dest->pub.free_in_buffer);
     jpeg_destroy_compress(&cinfo);
+    return 0;
+}
+
+#elif defined(EMBEDDIP_HAVE_ESP32_FMT2JPG)
+
+    #include "img_converters.h"
+
+int compress(Image *src, Image *dst, int format, int quality)
+{
+    if (!src || !dst || !src->pixels || !dst->pixels) {
+        return -1;
+    }
+
+    if (format != IMAGE_COMP_JPEG) {
+        return -1;
+    }
+
+    if (src->width == 0 || src->height == 0 || src->width > 0xFFFFu || src->height > 0xFFFFu) {
+        return -1;
+    }
+
+    pixformat_t src_format;
+    switch (src->format) {
+    case IMAGE_FORMAT_RGB565:
+        src_format = PIXFORMAT_RGB565;
+        break;
+    case IMAGE_FORMAT_RGB888:
+        src_format = PIXFORMAT_RGB888;
+        break;
+    case IMAGE_FORMAT_GRAYSCALE:
+    case IMAGE_FORMAT_MASK:
+        src_format = PIXFORMAT_GRAYSCALE;
+        break;
+    default:
+        return -1;
+    }
+
+    uint8_t jpeg_quality;
+    if (quality < 1) {
+        jpeg_quality = 1;
+    } else if (quality > 100) {
+        jpeg_quality = 100;
+    } else {
+        jpeg_quality = (uint8_t)quality;
+    }
+
+    uint32_t src_len = src->width * src->height * src->depth;
+    uint32_t dst_capacity = dst->width * dst->height * dst->depth;
+    if (src_len == 0 || dst_capacity == 0) {
+        return -1;
+    }
+
+    uint8_t *encoded = NULL;
+    size_t encoded_len = 0;
+    bool ok = fmt2jpg((uint8_t *)src->pixels,
+                      (size_t)src_len,
+                      (uint16_t)src->width,
+                      (uint16_t)src->height,
+                      src_format,
+                      jpeg_quality,
+                      &encoded,
+                      &encoded_len);
+    if (!ok || !encoded || encoded_len == 0) {
+        if (encoded) {
+            free(encoded);
+        }
+        return -1;
+    }
+
+    if (encoded_len > dst_capacity) {
+        free(encoded);
+        return -1;
+    }
+
+    memcpy(dst->pixels, encoded, encoded_len);
+    dst->size = (uint32_t)encoded_len;
+    free(encoded);
     return 0;
 }
 
