@@ -137,6 +137,26 @@ int serial_send(const Image *img)
 
 int serial_send_jpeg(const Image *img)
 {
+    if (!img || !img->pixels) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+
+    const uint8_t header[3] = {'S', 'T', 'J'};
+    Serial.write(header, sizeof(header));
+
+    uint32_t jpeg_size = img->size;
+    Serial.write((uint8_t *)&jpeg_size, sizeof(jpeg_size));
+
+    const uint8_t *ptr = (const uint8_t *)img->pixels;
+    uint32_t remaining = jpeg_size;
+
+    while (remaining > 0) {
+        uint16_t chunk = (remaining > UART_BUF_SIZE) ? UART_BUF_SIZE : remaining;
+        Serial.write(ptr, chunk);
+        ptr += chunk;
+        remaining -= chunk;
+    }
+
     return EMBEDDIP_OK;
 }
 
