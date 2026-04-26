@@ -10,98 +10,52 @@
     #include <string.h>
 
     #include "Arduino.h"
+    #include "driver/gpio.h"
     #include "esp32-hal-ledc.h"
     #include "esp_camera.h"
-    #include <esp_log.h>
+    #include "esp_log.h"
     #include <esp_system.h>
     #include <nvs_flash.h>
     #include <sys/param.h>
 
-    // Select your camera module - uncomment ONE of these
-    // #define CAMERA_MODEL_AI_THINKER  // Most common ESP32-CAM
-    #define CAMERA_MODEL_ESP_EYE
-
-    #ifdef CAMERA_MODEL_AI_THINKER
-        #define PWDN_GPIO_NUM 32
-        #define RESET_GPIO_NUM -1
-        #define XCLK_GPIO_NUM 0
-        #define SIOD_GPIO_NUM 26
-        #define SIOC_GPIO_NUM 27
-        #define Y9_GPIO_NUM 35
-        #define Y8_GPIO_NUM 34
-        #define Y7_GPIO_NUM 39
-        #define Y6_GPIO_NUM 36
-        #define Y5_GPIO_NUM 21
-        #define Y4_GPIO_NUM 19
-        #define Y3_GPIO_NUM 18
-        #define Y2_GPIO_NUM 5
-        #define VSYNC_GPIO_NUM 25
-        #define HREF_GPIO_NUM 23
-        #define PCLK_GPIO_NUM 22
-    #elif defined(CAMERA_MODEL_ESP_EYE)
-        #define PWDN_GPIO_NUM -1
-        #define RESET_GPIO_NUM -1
-        #define XCLK_GPIO_NUM 4
-        #define SIOD_GPIO_NUM 18
-        #define SIOC_GPIO_NUM 23
-        #define Y9_GPIO_NUM 36
-        #define Y8_GPIO_NUM 37
-        #define Y7_GPIO_NUM 38
-        #define Y6_GPIO_NUM 39
-        #define Y5_GPIO_NUM 35
-        #define Y4_GPIO_NUM 14
-        #define Y3_GPIO_NUM 13
-        #define Y2_GPIO_NUM 34
-        #define VSYNC_GPIO_NUM 5
-        #define HREF_GPIO_NUM 27
-        #define PCLK_GPIO_NUM 25
-    #endif
-
-    /*
-
-    typedef enum {
-        FRAMESIZE_96X96,    // 96x96
-        FRAMESIZE_QQVGA,    // 160x120
-        FRAMESIZE_128X128,    // 128x128
-        FRAMESIZE_QCIF,     // 176x144
-        FRAMESIZE_HQVGA,    // 240x176
-        FRAMESIZE_240X240,  // 240x240
-        FRAMESIZE_QVGA,     // 320x240
-        FRAMESIZE_320X320,  // 320x320
-        FRAMESIZE_CIF,      // 400x296
-        FRAMESIZE_HVGA,     // 480x320
-        FRAMESIZE_VGA,      // 640x480
-        FRAMESIZE_SVGA,     // 800x600
-        FRAMESIZE_XGA,      // 1024x768
-        FRAMESIZE_HD,       // 1280x720
-        FRAMESIZE_SXGA,     // 1280x1024
-        FRAMESIZE_UXGA,     // 1600x1200
-        // 3MP Sensors
-        FRAMESIZE_FHD,      // 1920x1080
-        FRAMESIZE_P_HD,     //  720x1280
-        FRAMESIZE_P_3MP,    //  864x1536
-        FRAMESIZE_QXGA,     // 2048x1536
-        // 5MP Sensors
-        FRAMESIZE_QHD,      // 2560x1440
-        FRAMESIZE_WQXGA,    // 2560x1600
-        FRAMESIZE_P_FHD,    // 1080x1920
-        FRAMESIZE_QSXGA,    // 2560x1920
-        FRAMESIZE_5MP,      // 2592x1944
-        FRAMESIZE_INVALID
-    } framesize_t;
-
-    */
+    #define XCLK_GPIO_NUM 4
+    #define SIOD_GPIO_NUM 18
+    #define SIOC_GPIO_NUM 23
+    #define Y9_GPIO_NUM 36
+    #define Y8_GPIO_NUM 37
+    #define Y7_GPIO_NUM 38
+    #define Y6_GPIO_NUM 39
+    #define Y5_GPIO_NUM 35
+    #define Y4_GPIO_NUM 14
+    #define Y3_GPIO_NUM 13
+    #define Y2_GPIO_NUM 34
+    #define VSYNC_GPIO_NUM 5
+    #define HREF_GPIO_NUM 27
+    #define PCLK_GPIO_NUM 25
     #define LED_GPIO_NUM 22
-void setupLedFlash()
+
+static bool g_camera_initialized = false;
+static ImageResolution g_current_resolution = IMAGE_RES_QVGA;
+static ImageFormat g_current_format = IMAGE_FORMAT_RGB565;
+
+static int camera_deinit_internal(void)
 {
-    #if defined(LED_GPIO_NUM)
-        // ledcAttach(LED_GPIO_NUM, 5000, 8);
-    #else
-    log_i("LED flash is disabled -> LED_GPIO_NUM undefined");
-    #endif
+    if (!g_camera_initialized) {
+        return 0;
+    }
+
+    esp_err_t err = esp_camera_deinit();
+    if (err != ESP_OK) {
+        return -1;
+    }
+
+    // Prevent "GPIO isr service already installed" on subsequent init calls.
+    (void)gpio_uninstall_isr_service();
+
+    g_camera_initialized = false;
+    return 0;
 }
 
-// Map embedDIP ImageResolution to esp32-camera framesize_t
 framesize_t map_resolution(ImageResolution resolution)
 {
     switch (resolution) {
@@ -150,7 +104,8 @@ framesize_t map_resolution(ImageResolution resolution)
     case IMAGE_RES_QSXGA:
         return FRAMESIZE_QSXGA;
     case IMAGE_RES_WQVGA:
-        return FRAMESIZE_QVGA;  // 480x272 -> use 320x240 as closest
+        // esp32-camera has no native 480x272. Use HVGA (480x320) and crop in capture.
+        return FRAMESIZE_HVGA;
     default:
         return FRAMESIZE_QVGA;
     }
@@ -158,7 +113,18 @@ framesize_t map_resolution(ImageResolution resolution)
 
 int camera_init(ImageResolution resolution, ImageFormat format)
 {
-    camera_config_t config;
+    if (g_camera_initialized) {
+        if (camera_deinit_internal() != 0) {
+            return -1;
+        }
+    }
+
+    // Keep UART binary protocol clean from ESP-IDF logs.
+    esp_log_level_set("camera", ESP_LOG_NONE);
+    esp_log_level_set("cam_hal", ESP_LOG_NONE);
+    esp_log_level_set("gpio", ESP_LOG_NONE);
+
+    camera_config_t config = {0};
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
     config.pin_d0 = Y2_GPIO_NUM;
@@ -175,23 +141,33 @@ int camera_init(ImageResolution resolution, ImageFormat format)
     config.pin_href = HREF_GPIO_NUM;
     config.pin_sccb_sda = SIOD_GPIO_NUM;
     config.pin_sccb_scl = SIOC_GPIO_NUM;
-    config.pin_pwdn = PWDN_GPIO_NUM;
-    config.pin_reset = RESET_GPIO_NUM;
+    config.pin_pwdn = -1;
+    config.pin_reset = -1;
     config.xclk_freq_hz = 20000000;
     config.frame_size = map_resolution(resolution);
-    config.pixel_format =
-        (format == IMAGE_FORMAT_GRAYSCALE) ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565;
-    config.grab_mode = CAMERA_GRAB_LATEST;
-    // RGB/YUV capture to PSRAM can produce corrupted frames on ESP32.
-    // Keep raw formats in DRAM for integrity; JPEG can stay in PSRAM.
-    config.fb_location = (config.pixel_format == PIXFORMAT_JPEG) ? CAMERA_FB_IN_PSRAM
-                                                                  : CAMERA_FB_IN_DRAM;
+    config.pixel_format = (format == IMAGE_FORMAT_GRAYSCALE) ? PIXFORMAT_YUV422 : PIXFORMAT_RGB565;
+    config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+    config.fb_location = CAMERA_FB_IN_PSRAM;
+    config.jpeg_quality = 12;
     config.fb_count = 1;
 
-    #if defined(CAMERA_MODEL_ESP_EYE)
+    #if CONFIG_IDF_TARGET_ESP32
+    /* Use PSRAM for larger frame sizes. */
+    if (config.pixel_format != PIXFORMAT_JPEG) {
+        // Raw paths are more stable at lower XCLK on classic ESP32.
+        config.xclk_freq_hz = 10000000;
+        if (config.frame_size <= FRAMESIZE_QQVGA) {
+            config.fb_location = CAMERA_FB_IN_DRAM;
+        } else {
+            config.fb_location = CAMERA_FB_IN_PSRAM;
+            config.fb_count = 2;
+            config.grab_mode = CAMERA_GRAB_LATEST;
+        }
+    }
+    #endif
+
     pinMode(13, INPUT_PULLUP);
     pinMode(14, INPUT_PULLUP);
-    #endif
 
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
@@ -200,45 +176,31 @@ int camera_init(ImageResolution resolution, ImageFormat format)
 
     sensor_t *s = esp_camera_sensor_get();
 
-    // Explicitly set pixel format on sensor
-    pixformat_t pix_fmt =
-        (format == IMAGE_FORMAT_GRAYSCALE) ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565;
-    if (s->set_pixformat) {
-        if (s->set_pixformat(s, pix_fmt) != 0) {
-            return -1;
-        }
-    }
+    // TODO: We need to explicitly set pixel format on sensor.
+    pixformat_t pix_fmt = (format == IMAGE_FORMAT_GRAYSCALE) ? PIXFORMAT_YUV422 : PIXFORMAT_RGB565;
+    // if (s->set_pixformat) {
+    //     if (s->set_pixformat(s, pix_fmt) != 0) {
+    //         return -1;
+    //     }
+    // }
 
-    // Explicitly set frame size on sensor
     if (s->set_framesize) {
         if (s->set_framesize(s, map_resolution(resolution)) != 0) {
             return -1;
         }
     }
 
-    // OV2640 reference driver reapplies pixel format after window/framesize updates.
-    // Keep the same behavior so resolution programming does not override RGB565 setup.
-    if (s->set_pixformat) {
-        if (s->set_pixformat(s, pix_fmt) != 0) {
-            return -1;
-        }
-    }
+    // if (s->set_pixformat) {
+    //     if (s->set_pixformat(s, pix_fmt) != 0) {
+    //         return -1;
+    //     }
+    // }
 
-    if (s->id.PID == OV3660_PID) {
-        s->set_vflip(s, 1);
-        s->set_brightness(s, 1);
-        s->set_saturation(s, -2);
-    }
-
-    #if defined(CAMERA_MODEL_M5STACK_WIDE) || defined(CAMERA_MODEL_M5STACK_ESP32CAM)
     s->set_vflip(s, 1);
-    s->set_hmirror(s, 1);
-    #endif
 
-    #if defined(CAMERA_MODEL_ESP32S3_EYE) || defined(CAMERA_MODEL_ESP_EYE)
-    s->set_vflip(s, 1);
-    #endif
-
+    g_camera_initialized = true;
+    g_current_resolution = resolution;
+    g_current_format = format;
     return 0;
 }
 
@@ -249,40 +211,100 @@ int camera_capture(captureMode mode, Image *inImg)
         return -2;
     }
 
-    camera_fb_t *fb = esp_camera_fb_get();
+    camera_fb_t *fb = NULL;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        fb = esp_camera_fb_get();
+        if (fb && fb->len > 0) {
+            break;
+        }
+        if (fb) {
+            esp_camera_fb_return(fb);
+            fb = NULL;
+        }
+        delay(5);
+    }
     if (!fb) {
         return -1;
     }
 
-    // Serial.printf("[INFO] Frame captured. Resolution: %dx%d, Format: %d, Size: %d bytes\n",
-    // fb->width, fb->height, fb->format, fb->len);
+    const size_t expected_size =
+        (size_t)inImg->width * (size_t)inImg->height * (size_t)inImg->depth;
+    const bool is_wqvga_target = (inImg->width == 480u && inImg->height == 272u);
+    const bool can_crop_hvga_to_wqvga =
+        is_wqvga_target && (fb->width == 480u) && (fb->height == 320u);
 
-    if (inImg == NULL || inImg->pixels == NULL) {
-        // Serial.println("[ERROR] Output image buffer is NULL.");
-        esp_camera_fb_return(fb);
-        return -2;
-    }
+    if (inImg->format == IMAGE_FORMAT_RGB565) {
+        if (fb->format != PIXFORMAT_RGB565) {
+            esp_camera_fb_return(fb);
+            return -3;
+        }
 
-    // Check if image size matches (allow some flexibility for data size)
-    size_t expected_size = inImg->width * inImg->height * inImg->depth;
-    if (fb->len != expected_size) {
-        // Serial.printf("[WARN] Size mismatch! Expected: %u bytes, Got: %u bytes\n", expected_size,
-        // fb->len);
-        //  Continue anyway - might still work
-    }
+        if (can_crop_hvga_to_wqvga) {
+            const size_t src_row_bytes = (size_t)fb->width * 2u;
+            const size_t dst_row_bytes = (size_t)inImg->width * 2u;
+            const size_t start_y = ((size_t)fb->height - (size_t)inImg->height) / 2u;
+            const size_t needed = src_row_bytes * (size_t)fb->height;
+            if (fb->len < needed) {
+                esp_camera_fb_return(fb);
+                return -3;
+            }
 
-    if (inImg->format == IMAGE_FORMAT_RGB565 && fb->format != PIXFORMAT_RGB565) {
+            uint8_t *dst = (uint8_t *)inImg->pixels;
+            const uint8_t *src = fb->buf + (start_y * src_row_bytes);
+            for (size_t y = 0; y < inImg->height; ++y) {
+                memcpy(dst + (y * dst_row_bytes), src + (y * src_row_bytes), dst_row_bytes);
+            }
+        } else {
+            if (fb->width != inImg->width || fb->height != inImg->height ||
+                fb->len < expected_size) {
+                esp_camera_fb_return(fb);
+                return -3;
+            }
+            memcpy(inImg->pixels, fb->buf, expected_size);
+        }
+    } else if (inImg->format == IMAGE_FORMAT_GRAYSCALE) {
+        if (fb->format == PIXFORMAT_GRAYSCALE) {
+            if (can_crop_hvga_to_wqvga) {
+                const size_t src_row_bytes = (size_t)fb->width;
+                const size_t dst_row_bytes = (size_t)inImg->width;
+                const size_t start_y = ((size_t)fb->height - (size_t)inImg->height) / 2u;
+                const size_t needed = src_row_bytes * (size_t)fb->height;
+                if (fb->len < needed) {
+                    esp_camera_fb_return(fb);
+                    return -3;
+                }
+
+                uint8_t *dst = (uint8_t *)inImg->pixels;
+                const uint8_t *src = fb->buf + (start_y * src_row_bytes);
+                for (size_t y = 0; y < inImg->height; ++y) {
+                    memcpy(dst + (y * dst_row_bytes), src + (y * src_row_bytes), dst_row_bytes);
+                }
+            } else {
+                if (fb->width != inImg->width || fb->height != inImg->height ||
+                    fb->len < expected_size) {
+                    esp_camera_fb_return(fb);
+                    return -3;
+                }
+                memcpy(inImg->pixels, fb->buf, expected_size);
+            }
+        } else if (fb->format == PIXFORMAT_YUV422) {
+            const size_t src_row_bytes = (size_t)fb->width * 2u;
+            const size_t start_y =
+                can_crop_hvga_to_wqvga ? (((size_t)fb->height - (size_t)inImg->height) / 2u) : 0u;
+            if ((!can_crop_hvga_to_wqvga &&
+                 (fb->width != inImg->width || fb->height != inImg->height)) ||
+                fb->len < (src_row_bytes * (size_t)fb->height)) {
+                esp_camera_fb_return(fb);
+                return -3;
+            }
+        } else {
+            esp_camera_fb_return(fb);
+            return -3;
+        }
+    } else {
         esp_camera_fb_return(fb);
         return -3;
     }
-    if (inImg->format == IMAGE_FORMAT_GRAYSCALE && fb->format != PIXFORMAT_GRAYSCALE) {
-        esp_camera_fb_return(fb);
-        return -3;
-    }
-
-    // Copy frame buffer data to image buffer
-    size_t copy_size = (fb->len < expected_size) ? fb->len : expected_size;
-    memcpy(inImg->pixels, fb->buf, copy_size);
 
     esp_camera_fb_return(fb);
 
@@ -291,17 +313,21 @@ int camera_capture(captureMode mode, Image *inImg)
 
 int camera_stop(void)
 {
-    return 0;
+    return camera_deinit_internal();
 }
 int camera_setRes(ImageResolution resolution)
 {
-    sensor_t *s = esp_camera_sensor_get();
-    if (!s)
-        return -1;
+    if (g_camera_initialized && resolution == g_current_resolution) {
+        return 0;
+    }
 
-    s->set_framesize(s, (framesize_t)resolution);
+    if (g_camera_initialized) {
+        if (camera_deinit_internal() != 0) {
+            return -1;
+        }
+    }
 
-    return 0;
+    return camera_init(resolution, g_current_format);
 }
 
 camera_t esp32_ov2640 = {.init = camera_init,
