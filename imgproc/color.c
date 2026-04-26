@@ -79,7 +79,8 @@ static embeddip_status_t rgb888_to_grayscale(const Image *inImg, Image *outImg)
     const uint8_t *in = (const uint8_t *)inImg->pixels;
     uint8_t *out = (uint8_t *)outImg->pixels;
 
-    for (uint32_t i = 0; i < inImg->size; ++i) {
+    uint32_t pixel_count = inImg->width * inImg->height;
+    for (uint32_t i = 0; i < pixel_count; ++i) {
         uint8_t r = in[i * 3];
         uint8_t g = in[i * 3 + 1];
         uint8_t b = in[i * 3 + 2];
