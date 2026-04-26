@@ -123,12 +123,34 @@ int serial_send(const Image *img)
     Serial.flush();
     delay_ms(2);
 
-    for (uint32_t i = 0; i < block_count; i++) {
-        Serial.write(((uint8_t *)img->pixels) + (i * block_size), block_size);
-    }
+    if (img->format == IMAGE_FORMAT_RGB565) {
+        // Keep wire format stable for host decoders expecting RGB565 byte order.
+        static uint8_t tx_swap_buf[1024];
+        const uint8_t *src = (const uint8_t *)img->pixels;
+        uint32_t remaining = len;
 
-    if (last_block_size) {
-        Serial.write(((uint8_t *)img->pixels) + (block_count * block_size), last_block_size);
+        while (remaining > 0) {
+            uint16_t chunk = (remaining > sizeof(tx_swap_buf)) ? sizeof(tx_swap_buf) : remaining;
+            if (chunk & 1u) {
+                chunk--;
+            }
+
+            for (uint16_t j = 0; j < chunk; j += 2) {
+                tx_swap_buf[j] = src[j + 1];
+                tx_swap_buf[j + 1] = src[j];
+            }
+            Serial.write(tx_swap_buf, chunk);
+            src += chunk;
+            remaining -= chunk;
+        }
+    } else {
+        for (uint32_t i = 0; i < block_count; i++) {
+            Serial.write(((uint8_t *)img->pixels) + (i * block_size), block_size);
+        }
+
+        if (last_block_size) {
+            Serial.write(((uint8_t *)img->pixels) + (block_count * block_size), last_block_size);
+        }
     }
 
     delay_ms(2);
