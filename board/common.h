@@ -90,7 +90,7 @@ bool isChalsEmpty(const Image *inImg);
  * width × height × 2 floats, supporting complex data if needed.
  *
  * @param[in,out] inImg    Pointer to the Image structure.
- * @param[in]     numChals Number of channels to allocate (max 3).
+ * @param[in]     numChals Number of channels to allocate (1..6).
  *
  * @return EMBEDDIP_OK on success, error code on failure.
  */
@@ -103,7 +103,7 @@ embeddip_status_t createChals(Image *inImg, uint8_t numChals);
  * Used by FFT operations: width × height × 2 × sizeof(float) per channel.
  *
  * @param[in,out] inImg    Target image to allocate complex channels for.
- * @param[in]     numChals Number of complex channels to allocate (max 3).
+ * @param[in]     numChals Number of complex channels to allocate (1..6).
  *
  * @return EMBEDDIP_OK on success, error code on failure.
  */

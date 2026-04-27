@@ -4,6 +4,7 @@
 #include "core/error.h"
 #include "core/image.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,6 +17,11 @@ embeddip_status_t createImage(ImageResolution resolution, ImageFormat format, Im
         return EMBEDDIP_ERROR_NULL_PTR;
     }
 
+    if ((int)resolution < 0 || (int)resolution >= IMAGE_RES_COUNT ||
+        resolution == IMAGE_RES_INVALID || resolution == IMAGE_RES_CUSTOM) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+
     // Allocate Image structure
     Image *image = (Image *)memory_alloc(sizeof(Image));
     if (image == NULL) {
@@ -25,7 +31,7 @@ embeddip_status_t createImage(ImageResolution resolution, ImageFormat format, Im
     // Determine the resolution (width and height) based on the provided size argument
     image->width = RES_WIDTH_LOOKUP[resolution];
     image->height = RES_HEIGHT_LOOKUP[resolution];
-    image->size = image->width * image->height;
+    image->size = (uint32_t)((size_t)image->width * (size_t)image->height);
     image->log = IMAGE_DATA_PIXELS;
     image->format = format;
 
@@ -92,10 +98,16 @@ embeddip_status_t createImageWH(int width, int height, ImageFormat format, Image
         return EMBEDDIP_ERROR_OUT_OF_MEMORY;
     }
 
+    size_t pixel_count = (size_t)width * (size_t)height;
+    if (pixel_count > UINT32_MAX) {
+        memory_free(image);
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+
     // Determine the resolution (width and height) based on the provided size argument
     image->width = width;
     image->height = height;
-    image->size = width * height;
+    image->size = (uint32_t)pixel_count;
     image->format = format;
     image->log = IMAGE_DATA_PIXELS;
 
@@ -160,7 +172,7 @@ void deleteImage(Image *image)
 
     // Free channel buffers if present
     if (image->is_chals && image->chals != NULL) {
-        for (uint8_t i = 0; i < 3; i++) {
+        for (uint8_t i = 0; i < 6; i++) {
             if (image->chals->ch[i] != NULL) {
                 memory_free(image->chals->ch[i]);
                 image->chals->ch[i] = NULL;
@@ -188,9 +200,15 @@ embeddip_status_t createChals(Image *inImg, uint8_t numChals)
         return EMBEDDIP_ERROR_NULL_PTR;
     }
 
-    if (numChals == 0 || numChals > 3) {
+    if (numChals == 0 || numChals > 6) {
         return EMBEDDIP_ERROR_INVALID_ARG;
     }
+
+    // RGB-like data uses ch[1], ch[2], ch[3], so requesting 3 channels
+    // must allocate indices 0..3.
+    uint8_t channels_to_alloc = (numChals == 3) ? 4 : numChals;
+    bool created_chals_struct = false;
+    uint8_t allocated_in_call[6] = {0};
 
     if (inImg->chals == NULL) {
         inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
@@ -198,9 +216,10 @@ embeddip_status_t createChals(Image *inImg, uint8_t numChals)
             return EMBEDDIP_ERROR_OUT_OF_MEMORY;
         }
         memset(inImg->chals, 0, sizeof(channels_t));
+        created_chals_struct = true;
     }
 
-    for (uint8_t i = 0; i < numChals; i++) {
+    for (uint8_t i = 0; i < channels_to_alloc; i++) {
         if (inImg->chals->ch[i] == NULL) {
             // NOTE: Removed "* 2U" multiplier - was allocating double the required memory
             // Correct size: width × height × sizeof(float) for a single channel
@@ -208,17 +227,20 @@ embeddip_status_t createChals(Image *inImg, uint8_t numChals)
             size_t bufSize = (size_t)inImg->width * (size_t)inImg->height * sizeof(float);
             inImg->chals->ch[i] = (float *)memory_alloc(bufSize);
             if (inImg->chals->ch[i] == NULL) {
-                // Roll back allocations for already-created channels
-                for (uint8_t j = 0; j < i; j++) {
-                    if (inImg->chals->ch[j] != NULL) {
+                // Roll back only channels allocated in this call.
+                for (uint8_t j = 0; j < channels_to_alloc; j++) {
+                    if (allocated_in_call[j] && inImg->chals->ch[j] != NULL) {
                         memory_free(inImg->chals->ch[j]);
                         inImg->chals->ch[j] = NULL;
                     }
                 }
-                memory_free(inImg->chals);
-                inImg->chals = NULL;
+                if (created_chals_struct) {
+                    memory_free(inImg->chals);
+                    inImg->chals = NULL;
+                }
                 return EMBEDDIP_ERROR_OUT_OF_MEMORY;
             }
+            allocated_in_call[i] = 1;
         }
     }
 
@@ -242,9 +264,12 @@ embeddip_status_t createChalsComplex(Image *inImg, uint8_t numChals)
         return EMBEDDIP_ERROR_NULL_PTR;
     }
 
-    if (numChals == 0 || numChals > 3) {
+    if (numChals == 0 || numChals > 6) {
         return EMBEDDIP_ERROR_INVALID_ARG;
     }
+
+    bool created_chals_struct = false;
+    uint8_t allocated_in_call[6] = {0};
 
     if (inImg->chals == NULL) {
         inImg->chals = (channels_t *)memory_alloc(sizeof(channels_t));
@@ -252,6 +277,7 @@ embeddip_status_t createChalsComplex(Image *inImg, uint8_t numChals)
             return EMBEDDIP_ERROR_OUT_OF_MEMORY;
         }
         memset(inImg->chals, 0, sizeof(channels_t));
+        created_chals_struct = true;
     }
 
     for (uint8_t i = 0; i < numChals; i++) {
@@ -262,17 +288,20 @@ embeddip_status_t createChalsComplex(Image *inImg, uint8_t numChals)
             size_t bufSize = (size_t)inImg->width * (size_t)inImg->height * 2U * sizeof(float);
             inImg->chals->ch[i] = (float *)memory_alloc(bufSize);
             if (inImg->chals->ch[i] == NULL) {
-                // Roll back allocations for already-created channels
-                for (uint8_t j = 0; j < i; j++) {
-                    if (inImg->chals->ch[j] != NULL) {
+                // Roll back only channels allocated in this call.
+                for (uint8_t j = 0; j < numChals; j++) {
+                    if (allocated_in_call[j] && inImg->chals->ch[j] != NULL) {
                         memory_free(inImg->chals->ch[j]);
                         inImg->chals->ch[j] = NULL;
                     }
                 }
-                memory_free(inImg->chals);
-                inImg->chals = NULL;
+                if (created_chals_struct) {
+                    memory_free(inImg->chals);
+                    inImg->chals = NULL;
+                }
                 return EMBEDDIP_ERROR_OUT_OF_MEMORY;
             }
+            allocated_in_call[i] = 1;
         }
     }
 
