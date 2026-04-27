@@ -80,10 +80,14 @@ static int serial_capture(Image *img)
     huart1.gState = HAL_UART_STATE_READY;
 
     // Calculate block parameters
-    uint16_t blockSize = ((img->size * img->depth) < UART_BLOCK_SIZE_MAX) ? (img->size * img->depth)
-                                                                          : UART_BLOCK_SIZE_MAX;
-    uint32_t blockCount = (img->size * img->depth) / blockSize;
-    uint16_t lastBlockSize = (img->size * img->depth) % blockSize;
+    uint32_t totalBytes = img->size * img->depth;
+    if (totalBytes == 0U) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+    uint16_t blockSize =
+        (totalBytes < UART_BLOCK_SIZE_MAX) ? (uint16_t)totalBytes : UART_BLOCK_SIZE_MAX;
+    uint32_t blockCount = totalBytes / blockSize;
+    uint16_t lastBlockSize = (uint16_t)(totalBytes % blockSize);
 
     // Send capture request header
     HAL_UART_Transmit(&huart1, request_start_sequence, 3, 5000);
@@ -131,10 +135,14 @@ static int serial_send(const Image *img)
     CHECK_NULL_INT(img->pixels);
     uint8_t request_start_sequence[3] = "STW";
     // Calculate block transmission parameters
-    uint16_t blockSize = ((img->size * img->depth) < UART_BLOCK_SIZE_MAX) ? (img->size * img->depth)
-                                                                          : UART_BLOCK_SIZE_MAX;
-    uint32_t blockCount = (img->size * img->depth) / blockSize;
-    uint16_t lastBlockSize = (img->size * img->depth) % blockSize;
+    uint32_t totalBytes = img->size * img->depth;
+    if (totalBytes == 0U) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+    uint16_t blockSize =
+        (totalBytes < UART_BLOCK_SIZE_MAX) ? (uint16_t)totalBytes : UART_BLOCK_SIZE_MAX;
+    uint32_t blockCount = totalBytes / blockSize;
+    uint16_t lastBlockSize = (uint16_t)(totalBytes % blockSize);
 
     // Step 1: Send command header
     HAL_UART_Transmit(&huart1, request_start_sequence, 3, HAL_MAX_DELAY);

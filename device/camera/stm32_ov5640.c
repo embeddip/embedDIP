@@ -540,6 +540,13 @@ static int camera_init(ImageResolution resolution, ImageFormat format)
  */
 static int camera_capture(captureMode mode, Image *inImg)
 {
+    if (inImg == NULL || inImg->pixels == NULL) {
+        return -1;
+    }
+    if (inImg->size == 0U || inImg->depth == 0U) {
+        return -1;
+    }
+
     // Clear the frame completion flag
     frame_capture_complete = 0;
 
@@ -551,10 +558,14 @@ static int camera_capture(captureMode mode, Image *inImg)
     uint32_t dma_size_words = total_bytes / 4;
 
     // Start DMA transfer
-    HAL_DCMI_Start_DMA(&hdcmi,
-                       mode == CONTINUOUS ? DCMI_MODE_CONTINUOUS : DCMI_MODE_SNAPSHOT,
-                       (uint32_t)inImg->pixels,
-                       dma_size_words);
+    HAL_StatusTypeDef hal_status =
+        HAL_DCMI_Start_DMA(&hdcmi,
+                           mode == CONTINUOUS ? DCMI_MODE_CONTINUOUS : DCMI_MODE_SNAPSHOT,
+                           (uint32_t)inImg->pixels,
+                           dma_size_words);
+    if (hal_status != HAL_OK) {
+        return -1;
+    }
 
     // For SINGLE mode, wait for frame completion
     if (mode == SINGLE) {
