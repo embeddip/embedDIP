@@ -6,7 +6,6 @@
 #ifdef EMBED_DIP_BOARD_ESP32
 
     #include <stdlib.h>
-    #include <string.h>
 
     #include "esp_heap_caps.h"  // Required for ps_malloc
     #include <Arduino.h>        // For Serial
@@ -61,11 +60,14 @@ void *memory_realloc(void *ptr, size_t new_size)
         return memory_alloc(new_size);
     }
 
-    void *new_ptr = ps_malloc(new_size);
-    if (new_ptr) {
-        memcpy(new_ptr, ptr, new_size);  // WARNING: if old size is unknown, this can overread
-        free(ptr);
-    } else {
+    if (new_size == 0) {
+        memory_free(ptr);
+        return NULL;
+    }
+
+    // Use realloc so the runtime copies only the old allocation size.
+    void *new_ptr = realloc(ptr, new_size);
+    if (!new_ptr) {
         Serial.printf("[memory_realloc] Failed to reallocate %u bytes from %p\n",
                       (unsigned int)new_size,
                       ptr);
