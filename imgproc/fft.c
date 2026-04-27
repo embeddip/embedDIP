@@ -356,13 +356,15 @@ embeddip_status_t multiply(const Image *img1, const Image *img2, Image *outImg)
 
     float *in1 = NULL;
     float *in2 = NULL;
+    const uint8_t *pix1 = NULL;
+    const uint8_t *pix2 = NULL;
 
     if (img1->log == IMAGE_DATA_CH0) {
         in1 = img1->chals ? img1->chals->ch[0] : NULL;
     } else if (img1->log == IMAGE_DATA_COMPLEX) {
         in1 = img1->chals ? img1->chals->ch[1] : NULL;
     } else if (img1->log == IMAGE_DATA_PIXELS) {
-        in1 = (float *)img1->pixels;
+        pix1 = (const uint8_t *)img1->pixels;
     } else {
         return EMBEDDIP_ERROR_INVALID_ARG;
     }
@@ -372,18 +374,20 @@ embeddip_status_t multiply(const Image *img1, const Image *img2, Image *outImg)
     } else if (img2->log == IMAGE_DATA_COMPLEX) {
         in2 = img2->chals ? img2->chals->ch[1] : NULL;
     } else if (img2->log == IMAGE_DATA_PIXELS) {
-        in2 = (float *)img2->pixels;
+        pix2 = (const uint8_t *)img2->pixels;
     } else {
         return EMBEDDIP_ERROR_INVALID_ARG;
     }
 
-    if (!in1 || !in2 || !outImg->chals || !outImg->chals->ch[0])
+    if ((!in1 && !pix1) || (!in2 && !pix2) || !outImg->chals || !outImg->chals->ch[0])
         return EMBEDDIP_ERROR_NULL_PTR;
 
     float *out = outImg->chals->ch[0];
     int size = img1->width * img1->height;
     for (int i = 0; i < size; ++i) {
-        out[i] = in1[i] * in2[i];
+        float v1 = in1 ? in1[i] : (float)pix1[i];
+        float v2 = in2 ? in2[i] : (float)pix2[i];
+        out[i] = v1 * v2;
     }
 
     outImg->log = IMAGE_DATA_CH0;

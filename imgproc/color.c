@@ -613,7 +613,13 @@ embeddip_status_t cvtColor(const Image *src, Image *dst, ColorConversionCode cod
         if (src->format != dst->format) {
             return EMBEDDIP_ERROR_INVALID_FORMAT;
         }
-        memcpy(dst->pixels, src->pixels, src->size * src->depth);
+        if (src->width != dst->width || src->height != dst->height) {
+            return EMBEDDIP_ERROR_INVALID_SIZE;
+        }
+        if ((size_t)dst->size * (size_t)dst->depth < (size_t)src->size * (size_t)src->depth) {
+            return EMBEDDIP_ERROR_INVALID_SIZE;
+        }
+        memcpy(dst->pixels, src->pixels, (size_t)src->size * (size_t)src->depth);
         break;
 
     default:

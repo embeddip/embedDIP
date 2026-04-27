@@ -17,10 +17,10 @@ embeddip_status_t resize(Image *src, Image *dst, int width, int height)
 
     // Allocate channels if missing
     if (isChalsEmpty(dst)) {
-        if (!createChals(dst, 1)) {  // only 1 channel for grayscale
-            return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+        embeddip_status_t status = createChals(dst, 1);  // only 1 channel for grayscale
+        if (status != EMBEDDIP_OK) {
+            return status;
         }
-        dst->is_chals = 1;
     }
 
     float width_ratio = (float)src->width / (float)width;
