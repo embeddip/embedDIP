@@ -137,6 +137,9 @@ void Image::grayscaleThreshold(Image &out, uint8_t threshold) const noexcept
  */
 uint8_t Image::OtsuThreshold() const noexcept
 {
+    if (!raw() || !raw()->pixels) {
+        return 0;
+    }
     return ::OtsuThreshold((const uint8_t *)raw()->pixels, raw()->size);
 }
 
@@ -180,6 +183,10 @@ void Image::grayscaleRegionGrowing(Image &out,
                                    int numSeeds,
                                    uint8_t tolerance) const noexcept
 {
+    if (!raw() || !out.raw() || !seeds || numSeeds <= 0) {
+        return;
+    }
+
     // Convert to C Point array
     std::vector<::Point> cSeeds(numSeeds);
     for (int i = 0; i < numSeeds; ++i) {
@@ -198,6 +205,10 @@ void Image::colorRegionGrowing(Image &out,
                                int numSeeds,
                                float tolerance) const noexcept
 {
+    if (!raw() || !out.raw() || !seeds || numSeeds <= 0) {
+        return;
+    }
+
     // Convert to C Point array
     std::vector<::Point> cSeeds(numSeeds);
     for (int i = 0; i < numSeeds; ++i) {
@@ -214,6 +225,10 @@ void Image::colorRegionGrowing(Image &out,
 std::vector<std::vector<int>>
 Image::houghAccumulator(int numRho, int numTheta, float rhoRes, float thetaRes) const
 {
+    if (!raw() || numRho <= 0 || numTheta <= 0) {
+        return {};
+    }
+
     std::vector<std::vector<int>> acc(numRho, std::vector<int>(numTheta));
     std::vector<int *> rows(numRho);
     for (int i = 0; i < numRho; ++i)
@@ -233,6 +248,11 @@ int Image::extractHoughLines(const std::vector<std::vector<int>> &acc,
                              std::vector<HoughLine> &lines,
                              int maxLines) const
 {
+    if (!raw() || maxLines <= 0 || acc.empty() || acc[0].empty()) {
+        lines.clear();
+        return 0;
+    }
+
     int numRho = static_cast<int>(acc.size());
     int numTheta = numRho ? static_cast<int>(acc[0].size()) : 0;
     std::vector<int *> rows(numRho);
@@ -249,6 +269,15 @@ int Image::extractHoughLines(const std::vector<std::vector<int>> &acc,
                                rhoMax,
                                reinterpret_cast<::Line *>(tmp.data()),
                                maxLines);
+    if (count <= 0) {
+        lines.clear();
+        return 0;
+    }
+
+    if (count > maxLines) {
+        count = maxLines;
+    }
+
     lines.assign(tmp.begin(), tmp.begin() + count);
     return count;
 }

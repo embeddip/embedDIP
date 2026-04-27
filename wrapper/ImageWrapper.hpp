@@ -52,7 +52,7 @@ class Kernel
     /**
      * @brief Creates an empty kernel wrapper.
      */
-    Kernel() noexcept : kernel_(static_cast<::Kernel *>(std::malloc(sizeof(::Kernel))))
+    Kernel() noexcept : kernel_(static_cast<::Kernel *>(memory_alloc(sizeof(::Kernel))))
     {
         if (kernel_) {
             kernel_->data = nullptr;
@@ -79,8 +79,8 @@ class Kernel
     ~Kernel()
     {
         if (kernel_) {
-            std::free(kernel_->data);
-            std::free(kernel_);
+            memory_free(kernel_->data);
+            memory_free(kernel_);
         }
     }
 
@@ -105,8 +105,8 @@ class Kernel
     {
         if (this != &other) {
             if (kernel_) {
-                std::free(kernel_->data);
-                std::free(kernel_);
+                memory_free(kernel_->data);
+                memory_free(kernel_);
             }
             kernel_ = other.kernel_;
             other.kernel_ = nullptr;
@@ -165,7 +165,7 @@ class Kernel
             return *this;
 
         // If C helper allocates, free old buffer to avoid leaks
-        std::free(kernel_->data);
+        memory_free(kernel_->data);
         kernel_->data = nullptr;
         kernel_->size = 0;
         kernel_->anchor = 0;
@@ -240,42 +240,42 @@ class Image
      */
     inline void *pixels() const noexcept
     {
-        return image_->pixels;
+        return image_ ? image_->pixels : nullptr;
     }
     /**
      * @brief Returns total pixel-buffer size in bytes.
      */
     inline uint32_t size() const noexcept
     {
-        return image_->size;
+        return image_ ? image_->size : 0;
     }
     /**
      * @brief Returns image width in pixels.
      */
     inline uint32_t width() const noexcept
     {
-        return image_->width;
+        return image_ ? image_->width : 0;
     }
     /**
      * @brief Returns image height in pixels.
      */
     inline uint32_t height() const noexcept
     {
-        return image_->height;
+        return image_ ? image_->height : 0;
     }
     /**
      * @brief Returns image format.
      */
     inline ImageFormat format() const noexcept
     {
-        return image_->format;
+        return image_ ? image_->format : IMAGE_FORMAT_GRAYSCALE;
     }
     /**
      * @brief Returns image channel depth metadata.
      */
     inline ImageDepth depth() const noexcept
     {
-        return image_->depth;
+        return image_ ? image_->depth : IMAGE_DEPTH_U8;
     }
 
     // Channel operations
