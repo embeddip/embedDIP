@@ -120,7 +120,7 @@ static void I2C_MspInit(void)
     gpio_init.Pin = GPIO_PIN_8;
     gpio_init.Mode = GPIO_MODE_AF_OD;
     gpio_init.Pull = GPIO_NOPULL;
-    gpio_init.Speed = GPIO_SPEED_FAST;
+    gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
     gpio_init.Alternate = GPIO_AF4_I2C1;
     HAL_GPIO_Init(GPIOB, &gpio_init);
 
@@ -410,7 +410,7 @@ static void CAMERA_PwrUp(void)
     gpio_init_structure.Pin = GPIO_PIN_13;
     gpio_init_structure.Mode = GPIO_MODE_OUTPUT_PP;
     gpio_init_structure.Pull = GPIO_NOPULL;
-    gpio_init_structure.Speed = GPIO_SPEED_HIGH;
+    gpio_init_structure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     HAL_GPIO_Init(GPIOH, &gpio_init_structure);
 
     /* De-assert the camera POWER_DOWN pin (active high) */
@@ -435,7 +435,7 @@ static void CAMERA_PwrDown(void)
     gpio_init_structure.Pin = GPIO_PIN_13;
     gpio_init_structure.Mode = GPIO_MODE_OUTPUT_PP;
     gpio_init_structure.Pull = GPIO_NOPULL;
-    gpio_init_structure.Speed = GPIO_SPEED_HIGH;
+    gpio_init_structure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     HAL_GPIO_Init(GPIOH, &gpio_init_structure);
 
     /* Assert the camera POWER_DOWN pin (active high) */
