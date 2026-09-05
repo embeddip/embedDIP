@@ -339,61 +339,6 @@ embeddip_status_t polarToCart(const Image *mag_img, const Image *phase_img, Imag
     return EMBEDDIP_OK;
 }
 
-embeddip_status_t multiply(const Image *img1, const Image *img2, Image *outImg)
-{
-    if (!img1 || !img2 || !outImg)
-        return EMBEDDIP_ERROR_NULL_PTR;
-
-    if (img1->width != img2->width || img1->height != img2->height)
-        return EMBEDDIP_ERROR_INVALID_SIZE;
-
-    if (isChalsEmpty(outImg)) {
-        embeddip_status_t status = createChals(outImg, 1);
-        if (status != EMBEDDIP_OK)
-            return status;
-        outImg->is_chals = 1;
-    }
-
-    float *in1 = NULL;
-    float *in2 = NULL;
-    const uint8_t *pix1 = NULL;
-    const uint8_t *pix2 = NULL;
-
-    if (img1->log == IMAGE_DATA_CH0) {
-        in1 = img1->chals ? img1->chals->ch[0] : NULL;
-    } else if (img1->log == IMAGE_DATA_COMPLEX) {
-        in1 = img1->chals ? img1->chals->ch[1] : NULL;
-    } else if (img1->log == IMAGE_DATA_PIXELS) {
-        pix1 = (const uint8_t *)img1->pixels;
-    } else {
-        return EMBEDDIP_ERROR_INVALID_ARG;
-    }
-
-    if (img2->log == IMAGE_DATA_CH0) {
-        in2 = img2->chals ? img2->chals->ch[0] : NULL;
-    } else if (img2->log == IMAGE_DATA_COMPLEX) {
-        in2 = img2->chals ? img2->chals->ch[1] : NULL;
-    } else if (img2->log == IMAGE_DATA_PIXELS) {
-        pix2 = (const uint8_t *)img2->pixels;
-    } else {
-        return EMBEDDIP_ERROR_INVALID_ARG;
-    }
-
-    if ((!in1 && !pix1) || (!in2 && !pix2) || !outImg->chals || !outImg->chals->ch[0])
-        return EMBEDDIP_ERROR_NULL_PTR;
-
-    float *out = outImg->chals->ch[0];
-    int size = img1->width * img1->height;
-    for (int i = 0; i < size; ++i) {
-        float v1 = in1 ? in1[i] : (float)pix1[i];
-        float v2 = in2 ? in2[i] : (float)pix2[i];
-        out[i] = v1 * v2;
-    }
-
-    outImg->log = IMAGE_DATA_CH0;
-    return EMBEDDIP_OK;
-}
-
 embeddip_status_t difference(const Image *src1, const Image *src2, Image *dst)
 {
     if (!src1 || !src2 || !dst)

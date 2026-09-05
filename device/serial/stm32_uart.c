@@ -42,21 +42,15 @@ static int serial_flush(void)
 }
 
     #define UART_BLOCK_SIZE_MAX 65535
-    #define UART_CMD_CAPTURE "STR"
-    #define UART_CMD_SEND "STW"
-
-volatile bool tx_flag, rx_flag = false;
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
     (void)huart;
-    tx_flag = true;
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     (void)huart;
-    rx_flag = true;
 }
 
 static int serial_capture(Image *img)
