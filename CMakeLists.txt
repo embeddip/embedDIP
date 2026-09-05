@@ -15,29 +15,32 @@ project(embedDIP
     DESCRIPTION "Portable embedded digital image processing library"
 )
 
-set(EMBEDDIP_TARGET_BOARD "" CACHE STRING "Target board (required): STM32F7 or ESP32")
-set_property(CACHE EMBEDDIP_TARGET_BOARD PROPERTY STRINGS "STM32F7" "ESP32")
+set(EMBEDDIP_TARGET_BOARD "" CACHE STRING "Target board (required): STM32F7, STM32H7S, ESP32, or HOST")
+set_property(CACHE EMBEDDIP_TARGET_BOARD PROPERTY STRINGS "STM32F7" "STM32H7S" "ESP32" "HOST")
 
-set(EMBEDDIP_ARCH "" CACHE STRING "Architecture family (required): ARM or XTENSA")
-set_property(CACHE EMBEDDIP_ARCH PROPERTY STRINGS "ARM" "XTENSA")
+set(EMBEDDIP_ARCH "" CACHE STRING "Architecture family (required): ARM, XTENSA, or HOST")
+set_property(CACHE EMBEDDIP_ARCH PROPERTY STRINGS "ARM" "XTENSA" "HOST")
 
-set(EMBEDDIP_CPU "" CACHE STRING "CPU variant (required): CORTEX_M7, LX6, LX7")
-set_property(CACHE EMBEDDIP_CPU PROPERTY STRINGS "CORTEX_M7" "LX6" "LX7")
+set(EMBEDDIP_CPU "" CACHE STRING "CPU variant (required): CORTEX_M7, LX6, LX7, NATIVE")
+set_property(CACHE EMBEDDIP_CPU PROPERTY STRINGS "CORTEX_M7" "LX6" "LX7" "NATIVE")
+
+set(EMBEDDIP_STM32CUBE_H7RS_ROOT "" CACHE PATH "Path to the STM32CubeH7RS SDK root")
 
 option(EMBEDDIP_ENABLE_IMAGE_PROCESSING "Enable image processing modules" ON)
 option(EMBEDDIP_ENABLE_CAMERA_INPUT "Enable camera input interfaces" ON)
 option(EMBEDDIP_ENABLE_DISPLAY_OUTPUT "Enable display output interfaces" ON)
+option(EMBEDDIP_BUILD_TESTS "Build CTest safety-net tests" OFF)
 
 if(EMBEDDIP_TARGET_BOARD STREQUAL "")
-    message(FATAL_ERROR "EMBEDDIP_TARGET_BOARD is required. Supported values: STM32F7, ESP32")
+    message(FATAL_ERROR "EMBEDDIP_TARGET_BOARD is required. Supported values: STM32F7, STM32H7S, ESP32, HOST")
 endif()
 
 if(EMBEDDIP_ARCH STREQUAL "")
-    message(FATAL_ERROR "EMBEDDIP_ARCH is required. Supported values: ARM, XTENSA")
+    message(FATAL_ERROR "EMBEDDIP_ARCH is required. Supported values: ARM, XTENSA, HOST")
 endif()
 
 if(EMBEDDIP_CPU STREQUAL "")
-    message(FATAL_ERROR "EMBEDDIP_CPU is required. Supported values: CORTEX_M7, LX6, LX7")
+    message(FATAL_ERROR "EMBEDDIP_CPU is required. Supported values: CORTEX_M7, LX6, LX7, NATIVE")
 endif()
 
 # Explicit compatibility matrix between board, architecture family and CPU
@@ -46,8 +49,16 @@ if(EMBEDDIP_TARGET_BOARD STREQUAL "STM32F7")
     if(EMBEDDIP_ARCH STREQUAL "ARM" AND EMBEDDIP_CPU STREQUAL "CORTEX_M7")
         set(_embeddip_pair_valid TRUE)
     endif()
+elseif(EMBEDDIP_TARGET_BOARD STREQUAL "STM32H7S")
+    if(EMBEDDIP_ARCH STREQUAL "ARM" AND EMBEDDIP_CPU STREQUAL "CORTEX_M7")
+        set(_embeddip_pair_valid TRUE)
+    endif()
 elseif(EMBEDDIP_TARGET_BOARD STREQUAL "ESP32")
     if(EMBEDDIP_ARCH STREQUAL "XTENSA" AND (EMBEDDIP_CPU STREQUAL "LX6" OR EMBEDDIP_CPU STREQUAL "LX7"))
+        set(_embeddip_pair_valid TRUE)
+    endif()
+elseif(EMBEDDIP_TARGET_BOARD STREQUAL "HOST")
+    if(EMBEDDIP_ARCH STREQUAL "HOST" AND EMBEDDIP_CPU STREQUAL "NATIVE")
         set(_embeddip_pair_valid TRUE)
     endif()
 endif()
@@ -55,7 +66,7 @@ endif()
 if(NOT _embeddip_pair_valid)
     message(FATAL_ERROR
         "Invalid board/arch/cpu combination: ${EMBEDDIP_TARGET_BOARD} + ${EMBEDDIP_ARCH} + ${EMBEDDIP_CPU}. "
-        "Supported: STM32F7+ARM+CORTEX_M7, ESP32+XTENSA+LX6, ESP32+XTENSA+LX7"
+        "Supported: STM32F7+ARM+CORTEX_M7, STM32H7S+ARM+CORTEX_M7, ESP32+XTENSA+LX6, ESP32+XTENSA+LX7, HOST+HOST+NATIVE"
     )
 endif()
 
@@ -68,6 +79,7 @@ set(CORE_SOURCES
     core/error.c
     core/error.h
     core/memory_manager.h
+    core/memory_regions.c
     core/image.h
 )
 
@@ -256,6 +268,11 @@ endif()
 
 # === Link Libraries ===
 target_link_libraries(embedDIP PUBLIC m)
+
+if(EMBEDDIP_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # === Install Targets ===
 include(GNUInstallDirs)
