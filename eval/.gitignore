@@ -1,0 +1,6 @@
+# Benchmark data is fetched reproducibly by fetch_data.sh, never committed.
+data/
+corner_ref
+kp_match_ref
+knn_ref
+*.u8
