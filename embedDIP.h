@@ -70,6 +70,13 @@ extern "C" {
 #include "core/error.h"                  /**< Error handling and status codes. */
 #include "core/image.h"                  /**< Image type and utilities. */
 #include "core/memory_manager.h"         /**< Allocators and memory helpers. */
+#include "cv/image_gray.h"               /**< Portable grayscale image-view helpers. */
+#include "cv/integral.h"                 /**< Bounded integral image helpers. */
+#include "cv/haar.h"                      /**< Upright Haar / Viola-Jones evaluation. */
+#include "cv/hog.h"                       /**< Deterministic HOG descriptor extraction. */
+#include "cv/linear_classifier.h"         /**< Linear one-vs-rest classifier scoring. */
+#include "cv/detect.h"                    /**< Sliding-window detection and NMS. */
+#include "cv/nn.h"                        /**< Neural-network pre/post-processing bridge. */
 #include "device/serial/serial.h"        /**< Serial I/O abstraction. */
 #include "imgproc/color.h"               /**< Color conversions and helpers. */
 #include "imgproc/compress.h"            /**< JPEG compression helper. */
