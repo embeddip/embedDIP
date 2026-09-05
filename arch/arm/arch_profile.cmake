@@ -1,8 +1,8 @@
 # Architecture profile: ARM family
 
 set(EMBEDDIP_ARCH_SOURCES
-    arch/arm/cm7_common.c
-    arch/arm/cm7_fft.c
+    arch/arm/dwt_timer.c
+    arch/arm/cmsis_fft.c
 )
 
 set(EMBEDDIP_ARCH_DEFINES

@@ -45,6 +45,10 @@ extern serial_t stm32_uart;
 extern serial_t esp32_uart;
 #endif
 
+#ifdef EMBED_DIP_BOARD_STM32H7S
+extern serial_t stm32h7s_uart;
+#endif
+
 #ifdef __cplusplus
 }
 #endif
