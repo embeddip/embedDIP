@@ -1,0 +1,9 @@
+{
+  "model": {"id": "unit_classifier", "onnx_file": "unit.onnx", "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+  "generated": {"artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "weights_blob": "generated/unit.xSPI2.bin"},
+  "deployment": {"inference_location": "host", "stedgeai_version": "4.0.0", "cube_n6_version": "1.0.0"},
+  "legal": {"license": "MIT", "label_map_id": "unit-labels", "dataset_license": "CC0-1.0"},
+  "provenance": {"training_recipe": "unit-train-v1", "quantization_recipe": "unit-int8-v1"},
+  "io": {"input": {"width": 2, "height": 2, "channels": 3, "type": "u8", "layout": "hwc", "scale": 1.0, "zero_point": 0}, "output": {"width": 1, "height": 1, "channels": 1, "type": "f32", "layout": "hwc", "scale": 1.0, "zero_point": 0}},
+  "memory": {"weights_bytes": 64, "activations_bytes": 128, "weights_region": "external_flash", "activations_region": "fast_sram"}
+}
