@@ -6,6 +6,47 @@ add_executable(embeddip_test_image_view test_image_view.c)
 target_link_libraries(embeddip_test_image_view PRIVATE embedDIP)
 add_test(NAME embeddip.image_view COMMAND embeddip_test_image_view)
 
+add_executable(embeddip_test_cv_image_gray test_cv_image_gray.c)
+target_link_libraries(embeddip_test_cv_image_gray PRIVATE embedDIP)
+add_test(NAME embeddip.cv_image_gray COMMAND embeddip_test_cv_image_gray)
+
+add_executable(embeddip_test_cv_integral test_cv_integral.c)
+target_link_libraries(embeddip_test_cv_integral PRIVATE embedDIP)
+add_test(NAME embeddip.cv_integral COMMAND embeddip_test_cv_integral)
+
+
+
+
+
+
+add_executable(embeddip_test_cv_haar test_cv_haar.c)
+target_link_libraries(embeddip_test_cv_haar PRIVATE embedDIP)
+add_test(NAME embeddip.cv_haar COMMAND embeddip_test_cv_haar)
+
+add_executable(embeddip_test_cv_hog test_cv_hog.c)
+target_link_libraries(embeddip_test_cv_hog PRIVATE embedDIP)
+add_test(NAME embeddip.cv_hog COMMAND embeddip_test_cv_hog)
+
+add_executable(embeddip_test_cv_linear_classifier test_cv_linear_classifier.c)
+target_link_libraries(embeddip_test_cv_linear_classifier PRIVATE embedDIP)
+add_test(NAME embeddip.cv_linear_classifier COMMAND embeddip_test_cv_linear_classifier)
+
+
+add_executable(embeddip_test_cv_detect test_cv_detect.c)
+target_link_libraries(embeddip_test_cv_detect PRIVATE embedDIP)
+add_test(NAME embeddip.cv_detect COMMAND embeddip_test_cv_detect)
+
+add_executable(embeddip_test_cv_nn test_cv_nn.c)
+target_link_libraries(embeddip_test_cv_nn PRIVATE embedDIP)
+add_test(NAME embeddip.cv_nn COMMAND embeddip_test_cv_nn)
+
+
+
+
+
+
+
+
 add_executable(embeddip_test_runtime test_runtime.c)
 target_link_libraries(embeddip_test_runtime PRIVATE embedDIP)
 add_test(NAME embeddip.runtime COMMAND embeddip_test_runtime)

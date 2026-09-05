@@ -88,6 +88,23 @@ set(CORE_SOURCES
     core/image.h
 )
 
+set(CV_SOURCES
+    cv/image_gray.c
+    cv/image_gray.h
+    cv/integral.c
+    cv/integral.h
+    cv/haar.c
+    cv/haar.h
+    cv/hog.c
+    cv/hog.h
+    cv/linear_classifier.c
+    cv/linear_classifier.h
+    cv/detect.c
+    cv/detect.h
+    cv/nn.c
+    cv/nn.h
+)
+
 set(RUNTIME_SOURCES
     runtime/runtime.c
     runtime/runtime.h
@@ -112,6 +129,8 @@ set(IMGPROC_SOURCES
     # Filtering
     imgproc/filter.c
     imgproc/filter.h
+
+    # Corner / primitive extraction
 
     # Histogram operations
     imgproc/histogram.c
@@ -163,6 +182,7 @@ set(DEVICE_COMMON_SOURCES
 set(WRAPPER_SOURCES
     wrapper/CameraWrapper.cpp
     wrapper/CameraWrapper.hpp
+    wrapper/CvFeatureWrapper.hpp
     wrapper/DisplayWrapper.cpp
     wrapper/DisplayWrapper.hpp
     wrapper/ImageWrapper.cpp
@@ -198,6 +218,7 @@ include("${EMBEDDIP_ARCH_PROFILE_FILE}")
 # === Create Library Target ===
 add_library(embedDIP STATIC
     ${CORE_SOURCES}
+    ${CV_SOURCES}
     ${RUNTIME_SOURCES}
     ${IMGPROC_SOURCES}
     ${EMBEDDIP_BOARD_SOURCES}
@@ -228,6 +249,7 @@ endif()
 target_include_directories(embedDIP PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/core>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cv>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/imgproc>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/board>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/device/camera>
@@ -310,6 +332,7 @@ install(FILES
 
 install(DIRECTORY
     core/
+    cv/
     runtime/
     imgproc/
     device/
