@@ -1,0 +1,32 @@
+# Board profile: STM32H7S78-DK
+
+if(NOT IS_DIRECTORY "${EMBEDDIP_STM32CUBE_H7RS_ROOT}")
+    message(FATAL_ERROR
+        "EMBEDDIP_STM32CUBE_H7RS_ROOT must name an existing STM32CubeH7RS SDK directory: "
+        "'${EMBEDDIP_STM32CUBE_H7RS_ROOT}'")
+endif()
+
+set(EMBEDDIP_BOARD_SOURCES
+    ${BOARD_COMMON_SOURCES}
+    board/stm32h7s/board_stm32h7s_memory.c
+)
+
+set(EMBEDDIP_DEVICE_SOURCES
+    ${DEVICE_COMMON_SOURCES}
+    device/display/stm32h7s_rk050hr18.c
+    device/serial/stm32h7s_uart.c
+)
+
+set(EMBEDDIP_BOARD_DEFINES
+    EMBED_DIP_BOARD_STM32H7S=1
+    STM32H7S7xx
+    USE_HAL_DRIVER
+)
+
+set(EMBEDDIP_BOARD_INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}/board/stm32h7s
+    ${EMBEDDIP_STM32CUBE_H7RS_ROOT}/Drivers/CMSIS/Device/ST/STM32H7RSxx/Include
+    ${EMBEDDIP_STM32CUBE_H7RS_ROOT}/Drivers/CMSIS/Core/Include
+    ${EMBEDDIP_STM32CUBE_H7RS_ROOT}/Drivers/CMSIS/DSP/Include
+    ${EMBEDDIP_STM32CUBE_H7RS_ROOT}/Drivers/STM32H7RSxx_HAL_Driver/Inc
+)

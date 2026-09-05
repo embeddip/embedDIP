@@ -4,6 +4,8 @@
 #ifndef IMAGE_H
 #define IMAGE_H
 
+#include "core/memory_manager.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -377,6 +379,43 @@ static inline uint8_t image_pixel_size_bytes(ImageFormat fmt, ImageDepth depth)
         return 0u;
     }
 }
+
+/**
+ * @brief Non-owning description of a potentially padded pixel buffer.
+ */
+typedef struct {
+    uint8_t *pixels;
+    uint32_t width;
+    uint32_t height;
+    uint32_t row_stride_bytes;
+    ImageFormat format;
+    ImageDepth depth;
+    embeddip_memory_region_t region;
+    uint32_t flags;
+} ImageView;
+
+/**
+ * @brief Construct a non-owning image view over a pixel buffer.
+ */
+embeddip_status_t image_view_from_buffer(uint8_t *pixels,
+                                         uint32_t width,
+                                         uint32_t height,
+                                         uint32_t row_stride_bytes,
+                                         ImageFormat format,
+                                         ImageDepth depth,
+                                         embeddip_memory_region_t region,
+                                         uint32_t flags,
+                                         ImageView *out_view);
+
+/**
+ * @brief Construct a tightly packed, CPU-owned view of an existing Image.
+ */
+embeddip_status_t image_view_from_image(const Image *image, ImageView *out_view);
+
+/**
+ * @brief Get the first byte of row @p y in an image view.
+ */
+uint8_t *image_view_row(const ImageView *view, uint32_t y);
 
 #ifdef __cplusplus
 }

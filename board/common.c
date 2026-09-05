@@ -309,6 +309,97 @@ embeddip_status_t createChalsComplex(Image *inImg, uint8_t numChals)
     return EMBEDDIP_OK;
 }
 
+static int image_view_format_depth_is_valid(ImageFormat format, ImageDepth depth)
+{
+    switch (format) {
+    case IMAGE_FORMAT_GRAYSCALE:
+    case IMAGE_FORMAT_MASK:
+        return depth == IMAGE_DEPTH_U8;
+    case IMAGE_FORMAT_RGB565:
+        return depth == IMAGE_DEPTH_U16;
+    case IMAGE_FORMAT_RGB888:
+    case IMAGE_FORMAT_YUV:
+    case IMAGE_FORMAT_HSI:
+        return depth == IMAGE_DEPTH_U24;
+    default:
+        return 0;
+    }
+}
+
+embeddip_status_t image_view_from_buffer(uint8_t *pixels,
+                                         uint32_t width,
+                                         uint32_t height,
+                                         uint32_t row_stride_bytes,
+                                         ImageFormat format,
+                                         ImageDepth depth,
+                                         embeddip_memory_region_t region,
+                                         uint32_t flags,
+                                         ImageView *out_view)
+{
+    const uint8_t bytes_per_pixel = image_pixel_size_bytes(format, depth);
+    uint32_t minimum_row_stride;
+
+    if (out_view == NULL || pixels == NULL) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (width == 0u || height == 0u) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+    if (!image_view_format_depth_is_valid(format, depth) || bytes_per_pixel == 0u) {
+        return EMBEDDIP_ERROR_INVALID_FORMAT;
+    }
+    if (width > UINT32_MAX / bytes_per_pixel) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+
+    minimum_row_stride = width * bytes_per_pixel;
+    if (row_stride_bytes < minimum_row_stride) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+
+    out_view->pixels = pixels;
+    out_view->width = width;
+    out_view->height = height;
+    out_view->row_stride_bytes = row_stride_bytes;
+    out_view->format = format;
+    out_view->depth = depth;
+    out_view->region = region;
+    out_view->flags = flags;
+    return EMBEDDIP_OK;
+}
+
+embeddip_status_t image_view_from_image(const Image *image, ImageView *out_view)
+{
+    const uint8_t bytes_per_pixel =
+        image == NULL ? 0u : image_pixel_size_bytes(image->format, image->depth);
+
+    if (image == NULL || out_view == NULL) {
+        return EMBEDDIP_ERROR_NULL_PTR;
+    }
+    if (bytes_per_pixel != 0u && image->width > UINT32_MAX / bytes_per_pixel) {
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    }
+
+    return image_view_from_buffer((uint8_t *)image->pixels,
+                                  image->width,
+                                  image->height,
+                                  image->width * bytes_per_pixel,
+                                  image->format,
+                                  image->depth,
+                                  EMBEDDIP_MEMORY_REGION_DEFAULT,
+                                  EMBEDDIP_BUFFER_CPU_READ | EMBEDDIP_BUFFER_CPU_WRITE,
+                                  out_view);
+}
+
+uint8_t *image_view_row(const ImageView *view, uint32_t y)
+{
+    if (view == NULL || y >= view->height) {
+        return NULL;
+    }
+
+    return view->pixels + ((size_t)y * view->row_stride_bytes);
+}
+
 /* ============================================================================
  * Legacy/Deprecated Wrappers (for backward compatibility)
  * ========================================================================== */
