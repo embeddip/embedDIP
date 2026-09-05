@@ -1,0 +1,38 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  host-tests:
+    name: Host build + CTest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Build Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake build-essential python3
+
+      - name: Configure (HOST target, tests enabled)
+        run: |
+          cmake -S . -B build \
+            -DEMBEDDIP_TARGET_BOARD=HOST \
+            -DEMBEDDIP_ARCH=HOST \
+            -DEMBEDDIP_CPU=NATIVE \
+            -DEMBEDDIP_BUILD_TESTS=ON \
+            -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run CTest
+        run: ctest --test-dir build --output-on-failure
