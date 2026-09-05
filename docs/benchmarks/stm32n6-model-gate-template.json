@@ -1,0 +1,32 @@
+{
+  "candidate_name": "replace_with_candidate_name",
+  "chapter": 1,
+  "compile_result": "not_measured",
+  "cpu_fallback_operators": null,
+  "npu_operator_count": null,
+  "weights_bytes": 1,
+  "activations_bytes": 1,
+  "inference_location": "mcu",
+  "camera_frames": 0,
+  "accuracy_metric": null,
+  "npu_cycles_median": null,
+  "npu_cycles_p95": null,
+  "frame_cycles_median": null,
+  "frame_cycles_p95": null,
+  "fps": null,
+  "local_display": false,
+  "decision": "rejected",
+  "blockers": [
+    "replace_with_a_concrete_hardware_or_provenance_blocker"
+  ],
+  "manifest_path": "models/replace_with_candidate_name/manifest.json",
+  "source_sha256": "replace_with_64_hex_source_sha256",
+  "generated_sha256": null,
+  "expected_generated_sha256": "replace_with_64_hex_expected_generated_sha256",
+  "board_revision": null,
+  "stedgeai_version": null,
+  "cube_n6_version": null,
+  "evidence_refs": [
+    "replace_with_a_committed_evidence_reference"
+  ]
+}
