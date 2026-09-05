@@ -97,6 +97,8 @@ set(CV_SOURCES
     cv/haar.h
     cv/hog.c
     cv/hog.h
+    cv/keypoint.c
+    cv/keypoint.h
     cv/linear_classifier.c
     cv/linear_classifier.h
     cv/detect.c
