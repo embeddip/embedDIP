@@ -10,6 +10,7 @@
  */
 
 #include "wrapper/CameraWrapper.hpp"
+#include "wrapper/CvFeatureWrapper.hpp"
 #include "wrapper/DisplayWrapper.hpp"
 #include "wrapper/ImageWrapper.hpp"
 #include "wrapper/MemoryManager.hpp"
