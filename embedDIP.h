@@ -77,6 +77,7 @@ extern "C" {
 #include "cv/linear_classifier.h"         /**< Linear one-vs-rest classifier scoring. */
 #include "cv/detect.h"                    /**< Sliding-window detection and NMS. */
 #include "cv/nn.h"                        /**< Neural-network pre/post-processing bridge. */
+#include "cv/knn.h"                      /**< k-NN feature classifier. */
 #include "cv/keypoint.h"                 /**< FAST + BRIEF + ORB keypoints. */
 #include "imgproc/corner.h"           /**< Harris / Shi-Tomasi corner extraction. */
 #include "device/serial/serial.h"        /**< Serial I/O abstraction. */

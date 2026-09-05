@@ -99,6 +99,8 @@ set(CV_SOURCES
     cv/hog.h
     cv/keypoint.c
     cv/keypoint.h
+    cv/knn.c
+    cv/knn.h
     cv/linear_classifier.c
     cv/linear_classifier.h
     cv/detect.c

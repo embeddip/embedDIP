@@ -124,3 +124,7 @@ add_test(NAME embeddip.imgproc_corner COMMAND embeddip_test_imgproc_corner)
 add_executable(embeddip_test_cv_keypoint test_cv_keypoint.c)
 target_link_libraries(embeddip_test_cv_keypoint PRIVATE embedDIP)
 add_test(NAME embeddip.cv_keypoint COMMAND embeddip_test_cv_keypoint)
+
+add_executable(embeddip_test_cv_knn test_cv_knn.c)
+target_link_libraries(embeddip_test_cv_knn PRIVATE embedDIP)
+add_test(NAME embeddip.cv_knn COMMAND embeddip_test_cv_knn)
