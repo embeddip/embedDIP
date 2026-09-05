@@ -415,7 +415,7 @@ class Image
      * @param[in] color Line color value
      * @see ::drawLine For underlying C implementation
      */
-    void drawLine(int x0, int y0, int x1, int y1, uint8_t color) const noexcept;
+    void drawLine(int x0, int y0, int x1, int y1, uint8_t color) noexcept;
     /**
      * @brief Draws an infinite line defined by Hough parameters.
      * @param[in] rho Distance from origin
@@ -423,7 +423,7 @@ class Image
      * @param[in] color Line color value
      * @see ::drawLineOnImage For underlying C implementation
      */
-    void drawHoughLine(float rho, float theta, uint8_t color) const noexcept;
+    void drawHoughLine(float rho, float theta, uint8_t color) noexcept;
 
     // Morphology
     /**
@@ -674,14 +674,14 @@ class Image
      * @brief Applies natural logarithm in place.
      * @see ::_log_ For underlying C implementation
      */
-    void _log_() const;
+    void _log_();
 
     /**
      * @brief Adds scalar value to image in place.
      * @param[in] value Scalar offset to add to all pixels
      * @see ::_add_ For underlying C implementation
      */
-    void _add_(float value) const;
+    void _add_(float value);
 
     /**
      * @brief Computes inverse Fourier transform.
@@ -696,7 +696,7 @@ class Image
      * @param[in] phase Phase image in radians
      * @see ::polarToCart For underlying C implementation
      */
-    void polarToCart(const Image &magnitude, Image &phase) const;
+    void polarToCart(const Image &magnitude, const Image &phase);
 
     /**
      * @brief Multiplies two images element-wise.

@@ -285,7 +285,7 @@ int Image::extractHoughLines(const std::vector<std::vector<int>> &acc,
 /**
  * @brief Draws line segment between two points.
  */
-void Image::drawLine(int x0, int y0, int x1, int y1, uint8_t color) const noexcept
+void Image::drawLine(int x0, int y0, int x1, int y1, uint8_t color) noexcept
 {
     ::drawLine(raw(), x0, y0, x1, y1, color);
 }
@@ -293,7 +293,7 @@ void Image::drawLine(int x0, int y0, int x1, int y1, uint8_t color) const noexce
 /**
  * @brief Draws line represented in Hough space.
  */
-void Image::drawHoughLine(float rho, float theta, uint8_t color) const noexcept
+void Image::drawHoughLine(float rho, float theta, uint8_t color) noexcept
 {
     ::drawLineOnImage(raw(), rho, theta, color);
 }
@@ -648,7 +648,7 @@ void Image::_phase_(Image &out) const
 /**
  * @brief Applies logarithm transform in place.
  */
-void Image::_log_() const
+void Image::_log_()
 {
     ::_log_(raw());
 }
@@ -656,7 +656,7 @@ void Image::_log_() const
 /**
  * @brief Adds scalar value in place.
  */
-void Image::_add_(float value) const
+void Image::_add_(float value)
 {
     ::_add_(raw(), value);
 }
@@ -688,7 +688,7 @@ void Image::ifft(Image &out) const
 /**
  * @brief Converts polar components to complex/cartesian form.
  */
-void Image::polarToCart(const Image &magnitude, Image &phase) const
+void Image::polarToCart(const Image &magnitude, const Image &phase)
 {
     ::polarToCart(magnitude.raw(), phase.raw(), raw());
 }
