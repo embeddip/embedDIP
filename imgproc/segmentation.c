@@ -934,20 +934,7 @@ embeddip_status_t colorRegionGrowing(const Image *inImg,
 
 #define FOREGROUND 255
 #define BACKGROUND 0
-#define GMM_COMPONENTS 2
 #define MAX_ITER_GRABCUT 5
-
-typedef struct {
-    float weight;
-    float mean;
-    float variance;
-} GMMComponent;
-
-static float gaussian_prob(float x, float mean, float var)
-{
-    float diff = x - mean;
-    return (1.0f / sqrtf(2.0f * M_PI * var)) * expf(-(diff * diff) / (2.0f * var));
-}
 
 /**
  * @brief Performs a simplified GrabCut-inspired segmentation on a grayscale image using a

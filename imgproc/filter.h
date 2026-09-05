@@ -26,19 +26,6 @@ typedef struct {
 } Filter2DContext;
 
 /**
- * @brief Context for separable 2D convolution.
- *
- * Stores independent horizontal and vertical 1D kernels.
- */
-typedef struct {
-    int sizeX;             ///< Horizontal kernel size
-    const float *kernelX;  ///< Horizontal kernel coefficients
-    int sizeY;             ///< Vertical kernel size
-    const float *kernelY;  ///< Vertical kernel coefficients
-    float delta;           ///< Offset added after convolution
-} SepFilter2DContext;
-
-/**
  * @brief Applies 2D filter to a single channel (internal helper function).
  * @param src Pointer to the input image
  * @param dst Pointer to the output image

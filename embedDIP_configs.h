@@ -129,9 +129,6 @@
         #define STM32F7xx 1
     #endif
 
-    #ifndef ENABLE_UART_LOGGING
-        #define ENABLE_UART_LOGGING 1
-    #endif
     #ifndef ENABLE_IMAGE_PROCESSING
         #define ENABLE_IMAGE_PROCESSING 1
     #endif
@@ -158,9 +155,6 @@
         #define ARDUINO_ARCH_ESP32 1
     #endif
 
-    #ifndef ENABLE_UART_LOGGING
-        #define ENABLE_UART_LOGGING 1
-    #endif
     #ifndef ENABLE_IMAGE_PROCESSING
         #define ENABLE_IMAGE_PROCESSING 1
     #endif
@@ -186,17 +180,6 @@
  * @brief Non-user-editable convenience macros computed from the config.
  * @{
  */
-#if (ENABLE_CAMERA_INPUT)
-    #define EMBED_DIP_HAS_CAMERA 1
-#else
-    #define EMBED_DIP_HAS_CAMERA 0
-#endif
-
-#if (ENABLE_DISPLAY_OUTPUT)
-    #define EMBED_DIP_HAS_DISPLAY 1
-#else
-    #define EMBED_DIP_HAS_DISPLAY 0
-#endif
 /** @} */ /* end of embedDIP_cfg_derived */
 
 #endif /* EMBED_DIP_CONFIGS_H */

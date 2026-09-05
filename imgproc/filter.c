@@ -317,47 +317,6 @@ embeddip_status_t sepfilter2D(Image *src,
     return EMBEDDIP_OK;
 }
 
-/*
-void wrapper(ImageOpFunc func, Image *src, Image *dst, void *context)
-{
-    assert(func && src && dst);
-    assert(src->format == dst->format);
-
-    // Ensure channels are allocated for input
-    if (!src->is_chals)
-    {
-        src->chals = (channels_t *)memory_alloc(sizeof(channels_t));
-        src->is_chals = true;
-        for (int i = 0; i < 4; ++i)
-            src->chals->ch[i] = NULL;
-    }
-
-    // Ensure channels are allocated for output
-    if (!dst->is_chals)
-    {
-        dst->chals = (channels_t *)memory_alloc(sizeof(channels_t)F);
-        dst->is_chals = true;
-        for (int i = 0; i < 4; ++i)
-            dst->chals->ch[i] = NULL;
-    }
-
-    // Dispatch per format
-    if (src->format == IMAGE_FORMAT_GRAYSCALE)
-    {
-        func(src, dst, 0, context); // l channel
-    }
-    else if (src->format == IMAGE_FORMAT_RGB888)
-    {
-        for (int ch = 1; ch <= 3; ++ch) // r=1, g=2, b=3
-            func(src, dst, ch, context);
-    }
-    else
-    {
-        assert(false && "Unsupported format in wrapper");
-    }
-}
-    */
-
 /**
  * @brief Applies a min filter (non-linear) to the image using a square window.
  *
@@ -1099,9 +1058,6 @@ void nonMaximumSuppression(const Image *magImg, const Image *phaseImg, Image *ds
 
     dst->log = IMAGE_DATA_CH0;
 }
-
-#define STRONG 255
-#define WEAK 50
 
 /**
  * @brief Apply double thresholding to classify strong/weak edges.

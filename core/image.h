@@ -262,16 +262,6 @@ typedef enum {
 } MorphShape;
 
 /**
- * @struct GMMStats
- * @brief Simple Gaussian mixture model statistics (per channel).
- */
-typedef struct {
-    float mean[3]; /**< Per-channel mean (RGB) */
-    float var[3];  /**< Per-channel variance (diagonal covariance) */
-    int count;     /**< Number of samples accumulated */
-} GMMStats;
-
-/**
  * @struct channels_t
  * @brief Floating-point image channel storage (up to 6 channels).
  */
