@@ -128,3 +128,11 @@ add_test(NAME embeddip.cv_keypoint COMMAND embeddip_test_cv_keypoint)
 add_executable(embeddip_test_cv_knn test_cv_knn.c)
 target_link_libraries(embeddip_test_cv_knn PRIVATE embedDIP)
 add_test(NAME embeddip.cv_knn COMMAND embeddip_test_cv_knn)
+
+add_executable(embeddip_test_cv_detect_fomo test_cv_detect_fomo.c)
+target_link_libraries(embeddip_test_cv_detect_fomo PRIVATE embedDIP)
+add_test(NAME embeddip.cv_detect_fomo COMMAND embeddip_test_cv_detect_fomo)
+
+add_executable(embeddip_test_cv_detect_heads test_cv_detect_heads.c)
+target_link_libraries(embeddip_test_cv_detect_heads PRIVATE embedDIP)
+add_test(NAME embeddip.cv_detect_heads COMMAND embeddip_test_cv_detect_heads)

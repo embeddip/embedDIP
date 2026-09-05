@@ -3,6 +3,9 @@
 
 #include "cv/detect.h"
 
+#include "core/memory_manager.h"
+
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -157,5 +160,261 @@ embeddip_status_t cv_detect_nms(CvDetection *detections, size_t count,
     }
 
     *out_kept = kept;
+    return EMBEDDIP_OK;
+}
+
+/* Round a non-negative float to int. */
+static int32_t round_i(float v)
+{
+    return (int32_t)(v + 0.5f);
+}
+
+embeddip_status_t cv_detect_fomo_decode(const float *grid, int grid_w, int grid_h,
+                                        int num_classes, int bg_class, float threshold,
+                                        int in_width, int in_height, CvNnDetection *out,
+                                        size_t out_capacity, size_t *out_count)
+{
+    if (grid == NULL || out == NULL || out_count == NULL)
+        return EMBEDDIP_ERROR_NULL_PTR;
+    if (grid_w <= 0 || grid_h <= 0 || in_width <= 0 || in_height <= 0)
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    if (num_classes <= 1 || out_capacity == 0)
+        return EMBEDDIP_ERROR_INVALID_ARG;
+
+    *out_count = 0;
+    const int G = grid_w * grid_h;
+
+    int *cls = (int *)memory_alloc((size_t)G * sizeof(int));
+    float *sc = (float *)memory_alloc((size_t)G * sizeof(float));
+    int *stack = (int *)memory_alloc((size_t)G * sizeof(int));
+    if (!cls || !sc || !stack) {
+        memory_free(cls);
+        memory_free(sc);
+        memory_free(stack);
+        return EMBEDDIP_ERROR_OUT_OF_MEMORY;
+    }
+
+    /* Per-cell arg-max; mark inactive cells with class -1. */
+    for (int i = 0; i < G; ++i) {
+        const float *p = grid + (size_t)i * num_classes;
+        int best = 0;
+        for (int c = 1; c < num_classes; ++c)
+            if (p[c] > p[best])
+                best = c;
+        if (best == bg_class || p[best] <= threshold) {
+            cls[i] = -1;
+        } else {
+            cls[i] = best;
+            sc[i] = p[best];
+        }
+    }
+
+    const float cw = (float)in_width / (float)grid_w;
+    const float ch = (float)in_height / (float)grid_h;
+
+    /* Flood-fill 8-connected same-class active cells into detections. */
+    for (int start = 0; start < G; ++start) {
+        if (cls[start] < 0)
+            continue;
+        int group_cls = cls[start];
+        int top = 0;
+        stack[top++] = start;
+        cls[start] = -1 - group_cls - 1; /* mark visited (encode class negatively) */
+
+        int minx = grid_w, miny = grid_h, maxx = -1, maxy = -1;
+        float best_score = 0.0f;
+        while (top > 0) {
+            int idx = stack[--top];
+            int gx = idx % grid_w, gy = idx / grid_w;
+            if (gx < minx) minx = gx;
+            if (gy < miny) miny = gy;
+            if (gx > maxx) maxx = gx;
+            if (gy > maxy) maxy = gy;
+            if (sc[idx] > best_score)
+                best_score = sc[idx];
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0)
+                        continue;
+                    int nx = gx + dx, ny = gy + dy;
+                    if (nx < 0 || ny < 0 || nx >= grid_w || ny >= grid_h)
+                        continue;
+                    int nidx = ny * grid_w + nx;
+                    if (cls[nidx] == group_cls) {
+                        cls[nidx] = -1 - group_cls - 1;
+                        stack[top++] = nidx;
+                    }
+                }
+        }
+
+        CvNnDetection d;
+        d.cls = group_cls;
+        d.score = best_score;
+        d.box.x = round_i((float)minx * cw);
+        d.box.y = round_i((float)miny * ch);
+        d.box.width = round_i((float)(maxx + 1) * cw) - d.box.x;
+        d.box.height = round_i((float)(maxy + 1) * ch) - d.box.y;
+
+        if (*out_count < out_capacity) {
+            out[(*out_count)++] = d;
+        } else {
+            size_t mini = 0;
+            for (size_t i = 1; i < out_capacity; ++i)
+                if (out[i].score < out[mini].score)
+                    mini = i;
+            if (d.score > out[mini].score)
+                out[mini] = d;
+        }
+    }
+
+    /* Sort detections by descending score. */
+    for (size_t i = 0; i < *out_count; ++i) {
+        size_t best = i;
+        for (size_t j = i + 1; j < *out_count; ++j)
+            if (out[j].score > out[best].score)
+                best = j;
+        if (best != i) {
+            CvNnDetection t = out[i];
+            out[i] = out[best];
+            out[best] = t;
+        }
+    }
+
+    memory_free(cls);
+    memory_free(sc);
+    memory_free(stack);
+    return EMBEDDIP_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* NN detection-head decoders (YOLO, SSD)                                     */
+/* -------------------------------------------------------------------------- */
+
+static float nn_sigmoid(float x) { return 1.0f / (1.0f + expf(-x)); }
+
+/* Insert keeping the top-scoring out_capacity detections. */
+static void nn_insert(CvNnDetection *out, size_t *cnt, size_t cap, CvNnDetection d)
+{
+    if (*cnt < cap) {
+        out[(*cnt)++] = d;
+        return;
+    }
+    size_t mini = 0;
+    for (size_t i = 1; i < cap; ++i)
+        if (out[i].score < out[mini].score)
+            mini = i;
+    if (d.score > out[mini].score)
+        out[mini] = d;
+}
+
+/* Greedy class-aware NMS in place: sort by descending score, keep a box unless
+ * it overlaps an already-kept box of the SAME class by more than iou. */
+static void nn_nms(CvNnDetection *d, size_t *n, float iou)
+{
+    for (size_t i = 0; i + 1 < *n; ++i) {
+        size_t best = i;
+        for (size_t j = i + 1; j < *n; ++j)
+            if (d[j].score > d[best].score)
+                best = j;
+        if (best != i) {
+            CvNnDetection t = d[i];
+            d[i] = d[best];
+            d[best] = t;
+        }
+    }
+    size_t kept = 0;
+    for (size_t i = 0; i < *n; ++i) {
+        int suppressed = 0;
+        for (size_t s = 0; s < kept; ++s)
+            if (d[s].cls == d[i].cls && detect_iou(&d[i].box, &d[s].box) > iou) {
+                suppressed = 1;
+                break;
+            }
+        if (!suppressed)
+            d[kept++] = d[i];
+    }
+    *n = kept;
+}
+
+embeddip_status_t cv_detect_yolo_decode(const float *pred, const CvYoloConfig *cfg,
+                                        CvNnDetection *out, size_t out_capacity,
+                                        size_t *out_count)
+{
+    if (pred == NULL || cfg == NULL || cfg->anchors == NULL || out == NULL || out_count == NULL)
+        return EMBEDDIP_ERROR_NULL_PTR;
+    if (cfg->grid_w <= 0 || cfg->grid_h <= 0 || cfg->in_width <= 0 || cfg->in_height <= 0)
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    if (cfg->num_anchors <= 0 || cfg->num_classes <= 0 || out_capacity == 0)
+        return EMBEDDIP_ERROR_INVALID_ARG;
+
+    *out_count = 0;
+    const int gw = cfg->grid_w, gh = cfg->grid_h, na = cfg->num_anchors, nc = cfg->num_classes;
+    const int stride = 5 + nc;
+
+    for (int r = 0; r < gh; ++r)
+        for (int c = 0; c < gw; ++c)
+            for (int a = 0; a < na; ++a) {
+                const float *p = pred + ((size_t)(r * gw + c) * na + a) * stride;
+                float obj = nn_sigmoid(p[4]);
+                int best = 0;
+                for (int k = 1; k < nc; ++k)
+                    if (p[5 + k] > p[5 + best])
+                        best = k;
+                float conf = obj * nn_sigmoid(p[5 + best]);
+                if (conf <= cfg->conf_threshold)
+                    continue;
+                float bx = ((float)c + nn_sigmoid(p[0])) / gw * cfg->in_width;
+                float by = ((float)r + nn_sigmoid(p[1])) / gh * cfg->in_height;
+                float bw = cfg->anchors[2 * a] * expf(p[2]) / gw * cfg->in_width;
+                float bh = cfg->anchors[2 * a + 1] * expf(p[3]) / gh * cfg->in_height;
+                CvNnDetection d = {.cls = best, .score = conf};
+                d.box.x = round_i(bx - bw / 2.0f);
+                d.box.y = round_i(by - bh / 2.0f);
+                d.box.width = round_i(bw);
+                d.box.height = round_i(bh);
+                nn_insert(out, out_count, out_capacity, d);
+            }
+    nn_nms(out, out_count, cfg->iou_threshold);
+    return EMBEDDIP_OK;
+}
+
+embeddip_status_t cv_detect_ssd_decode(const float *loc, const float *conf,
+                                       const CvSsdConfig *cfg, CvNnDetection *out,
+                                       size_t out_capacity, size_t *out_count)
+{
+    if (loc == NULL || conf == NULL || cfg == NULL || cfg->priors == NULL || out == NULL ||
+        out_count == NULL)
+        return EMBEDDIP_ERROR_NULL_PTR;
+    if (cfg->in_width <= 0 || cfg->in_height <= 0 || cfg->num_priors <= 0)
+        return EMBEDDIP_ERROR_INVALID_SIZE;
+    if (cfg->num_classes <= 1 || out_capacity == 0)
+        return EMBEDDIP_ERROR_INVALID_ARG;
+
+    *out_count = 0;
+    const int nc = cfg->num_classes;
+
+    for (int i = 0; i < cfg->num_priors; ++i) {
+        const float *cf = conf + (size_t)i * nc;
+        int best = 1; /* skip background at index 0 */
+        for (int k = 2; k < nc; ++k)
+            if (cf[k] > cf[best])
+                best = k;
+        float score = cf[best];
+        if (score <= cfg->conf_threshold)
+            continue;
+        const float *pr = cfg->priors + (size_t)i * 4;
+        const float *lc = loc + (size_t)i * 4;
+        float cx = pr[0] + lc[0] * cfg->var_xy * pr[2];
+        float cy = pr[1] + lc[1] * cfg->var_xy * pr[3];
+        float w = pr[2] * expf(lc[2] * cfg->var_wh);
+        float h = pr[3] * expf(lc[3] * cfg->var_wh);
+        CvNnDetection d = {.cls = best, .score = score};
+        d.box.x = round_i((cx - w / 2.0f) * cfg->in_width);
+        d.box.y = round_i((cy - h / 2.0f) * cfg->in_height);
+        d.box.width = round_i(w * cfg->in_width);
+        d.box.height = round_i(h * cfg->in_height);
+        nn_insert(out, out_count, out_capacity, d);
+    }
+    nn_nms(out, out_count, cfg->iou_threshold);
     return EMBEDDIP_OK;
 }

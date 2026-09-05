@@ -75,6 +75,105 @@ embeddip_status_t cv_detect_scan(const CvIntegralU32 *table,
 embeddip_status_t cv_detect_nms(CvDetection *detections, size_t count,
                                 float iou_threshold, size_t *out_kept);
 
+/**
+ * @brief A neural-network detection: box (in input-image pixels), class, score.
+ */
+typedef struct {
+    Rectangle box;  /**< Bounding box in input-image pixels. */
+    int32_t cls;    /**< Predicted class index. */
+    float score;    /**< Confidence (max activating cell in the blob). */
+} CvNnDetection;
+
+/**
+ * @brief Decode a FOMO-style class grid into object detections.
+ *
+ * FOMO ("Faster Objects, More Objects") outputs a coarse @p grid_w x @p grid_h
+ * grid of per-cell class scores. This takes each cell's arg-max class; cells
+ * whose winning class is not @p bg_class and whose score exceeds @p threshold
+ * are "active". 8-connected active cells of the same class are grouped into one
+ * detection whose box is the group's cell-bounding-box scaled to the input
+ * resolution and whose score is the strongest cell in the group.
+ *
+ * @param[in] grid Per-cell scores, row-major with class fastest:
+ *            grid[(y*grid_w + x)*num_classes + c].
+ * @param[in] grid_w Grid width in cells (> 0).
+ * @param[in] grid_h Grid height in cells (> 0).
+ * @param[in] num_classes Number of classes including background (> 1).
+ * @param[in] bg_class Background class index to ignore.
+ * @param[in] threshold Minimum winning-class score for a cell to be active.
+ * @param[in] in_width Input image width in pixels (for box scaling).
+ * @param[in] in_height Input image height in pixels.
+ * @param[out] out Caller-owned detection buffer, filled by descending score.
+ * @param[in] out_capacity Capacity of @p out.
+ * @param[out] out_count Number of detections written (<= out_capacity).
+ * @return EMBEDDIP_OK on success, error code otherwise.
+ */
+embeddip_status_t cv_detect_fomo_decode(const float *grid, int grid_w, int grid_h,
+                                        int num_classes, int bg_class, float threshold,
+                                        int in_width, int in_height, CvNnDetection *out,
+                                        size_t out_capacity, size_t *out_count);
+
+/**
+ * @brief YOLO (v2/v3-tiny style) detection-head configuration.
+ */
+typedef struct {
+    int grid_w;         /**< Output grid width in cells. */
+    int grid_h;         /**< Output grid height in cells. */
+    int num_anchors;    /**< Anchor boxes per cell. */
+    int num_classes;    /**< Object classes. */
+    const float *anchors; /**< num_anchors*2 (w,h) in grid-cell units. */
+    int in_width;       /**< Network input width (pixels). */
+    int in_height;      /**< Network input height (pixels). */
+    float conf_threshold; /**< Keep boxes with objectness*class_prob above this. */
+    float iou_threshold;  /**< Class-aware NMS IoU threshold. */
+} CvYoloConfig;
+
+/**
+ * @brief Decode a YOLO detection head into boxes (+ class-aware NMS).
+ *
+ * @p pred is laid out per cell then per anchor:
+ * pred[((r*grid_w + c)*num_anchors + a)*(5 + num_classes) + k], with k =
+ * 0..3 = tx,ty,tw,th, 4 = objectness logit, 5.. = per-class logits. Applies the
+ * YOLO box transform (sigmoid centre + anchor*exp size), confidence =
+ * sigmoid(obj)*sigmoid(best class), thresholds, then greedy per-class NMS.
+ * Boxes are in input-image pixels.
+ *
+ * @return EMBEDDIP_OK on success, error code otherwise.
+ */
+embeddip_status_t cv_detect_yolo_decode(const float *pred, const CvYoloConfig *cfg,
+                                        CvNnDetection *out, size_t out_capacity,
+                                        size_t *out_count);
+
+/**
+ * @brief SSD (MobileNet-SSD style) detection-head configuration.
+ */
+typedef struct {
+    int num_priors;   /**< Number of prior/anchor boxes. */
+    int num_classes;  /**< Classes including background at index 0. */
+    const float *priors; /**< num_priors*4 (cx,cy,w,h), normalized [0,1]. */
+    float var_xy;     /**< Centre variance (typ. 0.1). */
+    float var_wh;     /**< Size variance (typ. 0.2). */
+    int in_width;     /**< Input width (pixels). */
+    int in_height;    /**< Input height (pixels). */
+    float conf_threshold; /**< Minimum class probability. */
+    float iou_threshold;  /**< Class-aware NMS IoU threshold. */
+} CvSsdConfig;
+
+/**
+ * @brief Decode an SSD detection head into boxes (+ class-aware NMS).
+ *
+ * @p loc is num_priors*4 box offsets (dcx,dcy,dw,dh); @p conf is
+ * num_priors*num_classes class probabilities (softmax already applied).
+ * Applies the standard SSD decode (centre += offset*var*prior_size, size *=
+ * exp(offset*var)) against @p priors, drops background (class 0), thresholds,
+ * then greedy per-class NMS. Boxes are in input-image pixels.
+ *
+ * @return EMBEDDIP_OK on success, error code otherwise.
+ */
+embeddip_status_t cv_detect_ssd_decode(const float *loc, const float *conf,
+                                       const CvSsdConfig *cfg, CvNnDetection *out,
+                                       size_t out_capacity, size_t *out_count);
+
 #ifdef __cplusplus
 }
 #endif
