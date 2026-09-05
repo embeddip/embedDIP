@@ -131,6 +131,10 @@ set(IMGPROC_SOURCES
     imgproc/filter.h
 
     # Corner / primitive extraction
+    imgproc/corner.c
+    imgproc/corner.h
+
+    # Corner / primitive extraction
 
     # Histogram operations
     imgproc/histogram.c

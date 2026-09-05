@@ -116,3 +116,7 @@ if(IS_DIRECTORY "${EMBEDDIP_STM32CUBE_H7RS_ROOT}")
             "-DEMBEDDIP_STM32CUBE_H7RS_ROOT=${EMBEDDIP_STM32CUBE_H7RS_ROOT}"
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_stm32h7s_profile.cmake)
 endif()
+
+add_executable(embeddip_test_imgproc_corner test_imgproc_corner.c)
+target_link_libraries(embeddip_test_imgproc_corner PRIVATE embedDIP)
+add_test(NAME embeddip.imgproc_corner COMMAND embeddip_test_imgproc_corner)
