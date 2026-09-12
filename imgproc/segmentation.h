@@ -21,15 +21,6 @@ extern "C" {
 embeddip_status_t grayscaleKMeans(const Image *src, Image *dst, int k);
 
 /**
- * @brief Segments an HSI image using K-means clustering.
- *
- * @param[in]  inImg   Pointer to input HSI image.
- * @param[out] outImg  Pointer to output segmented HSI image.
- * @param[in]  k       Number of clusters.
- */
-embeddip_status_t colorKMeans_old(const Image *inImg, Image *outImg, int k);
-
-/**
  * @brief Segments an image using K-means in its native color space.
  *
  * @param[in]  inImg   Input image
