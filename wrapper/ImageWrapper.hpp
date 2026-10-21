@@ -236,6 +236,17 @@ class Image
     }
 
     /**
+     * @brief Fills a non-owning ImageView describing this image.
+     * @param[out] out_view Destination view; unchanged on error.
+     * @return Status from ::image_view_from_image.
+     * @see ::image_view_from_image For underlying C implementation
+     */
+    inline embeddip_status_t view(ImageView *out_view) const noexcept
+    {
+        return image_view_from_image(image_, out_view);
+    }
+
+    /**
      * @brief Returns pixel buffer pointer.
      */
     inline void *pixels() const noexcept
