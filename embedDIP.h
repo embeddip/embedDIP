@@ -71,13 +71,17 @@ extern "C" {
 #include "core/image.h"                  /**< Image type and utilities. */
 #include "core/memory_manager.h"         /**< Allocators and memory helpers. */
 #include "device/serial/serial.h"        /**< Serial I/O abstraction. */
+#include "imgproc/cascade.h"             /**< Integral image and Haar-lite cascade detection. */
 #include "imgproc/color.h"               /**< Color conversions and helpers. */
 #include "imgproc/compress.h"            /**< JPEG compression helper. */
 #include "imgproc/connectedcomponents.h" /**< Connected components labeling. */
+#include "imgproc/detect.h"              /**< NN detection post-processing (grid decode, NMS). */
 #include "imgproc/drawing.h"             /**< Drawing primitives and shapes. */
+#include "imgproc/features.h"            /**< Keypoint detection and descriptor matching. */
 #include "imgproc/fft.h"                 /**< Frequency-domain processing. */
 #include "imgproc/filter.h"              /**< Spatial filtering and kernels. */
 #include "imgproc/histogram.h"           /**< Histogram ops and equalization. */
+#include "imgproc/hog.h"                 /**< HOG-lite descriptor and k-NN classification. */
 #include "imgproc/hough.h"               /**< Hough transform for line/circle detection. */
 #include "imgproc/imgwarp.h"             /**< Geometric transformations (warp, rotate, scale). */
 #include "imgproc/misc.h"                /**< Miscellaneous image utilities. */

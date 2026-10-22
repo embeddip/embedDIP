@@ -125,6 +125,22 @@ set(IMGPROC_SOURCES
     imgproc/morph.c
     imgproc/morph.h
 
+    # Keypoint detection and descriptor matching
+    imgproc/features.c
+    imgproc/features.h
+
+    # HOG-lite descriptor and k-NN classification
+    imgproc/hog.c
+    imgproc/hog.h
+
+    # Integral image and Haar-lite cascade detection
+    imgproc/cascade.c
+    imgproc/cascade.h
+
+    # Neural-network detection post-processing (grid decode, NMS)
+    imgproc/detect.c
+    imgproc/detect.h
+
     # Segmentation algorithms
     imgproc/segmentation.c
     imgproc/segmentation.h

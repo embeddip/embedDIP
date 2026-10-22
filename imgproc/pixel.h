@@ -21,12 +21,16 @@ extern "C" {
 // Include all imgproc sub-modules (OpenCV-style organization)
 // ============================================================================
 
+#include "cascade.h"              // Integral image and Haar-lite cascade detection
 #include "color.h"                // Color space conversions
 #include "connectedcomponents.h"  // Connected component analysis
+#include "detect.h"               // NN detection post-processing (grid decode, NMS)
 #include "drawing.h"              // Drawing primitives
+#include "features.h"             // Keypoint detection and descriptor matching
 #include "fft.h"                  // FFT operations
 #include "filter.h"               // Filtering operations
 #include "histogram.h"            // Histogram operations
+#include "hog.h"                  // HOG-lite descriptor and k-NN classification
 #include "hough.h"                // Hough transform
 #include "imgwarp.h"              // Geometric transformations
 #include "misc.h"                 // Arithmetic and logical operations
